@@ -17,12 +17,18 @@ const App = () => {
   const [patternScale, setPatternScale] = useState(1);
   const [isTiled, setIsTiled] = useState(false);
   const [tileSpacing, setTileSpacing] = useState(10);
-  const [patternMargin, setPatternMargin] = useState(0);
+  const [patternMargin, setPatternMargin] = useState(3);
   const [patternColor, setPatternColor] = useState(DEFAULT_PATTERN_COLOR);
-  const [clipToOutline, setClipToOutline] = useState(false);
-  const [tilingDistribution, setTilingDistribution] = useState<'grid' | 'offset' | 'random'>('grid');
-  const [tilingRotation, setTilingRotation] = useState<'none' | 'alternate' | 'random'>('none');
+  const [clipToOutline, setClipToOutline] = useState(true);
+  const [tilingDistribution, setTilingDistribution] = useState<'grid' | 'offset' | 'random'>('offset');
+  const [tilingRotation, setTilingRotation] = useState<'none' | 'alternate' | 'random'>('random');
+
   const [debugMode, setDebugMode] = useState(false);
+
+  // Base Pattern (Inlay) State
+  const [basePatternShapes, setBasePatternShapes] = useState<any[] | null>(null);
+  const [basePatternDepth, setBasePatternDepth] = useState(0.6);
+  const [basePatternScale, setBasePatternScale] = useState(1);
 
   const meshRef = useRef<THREE.Group>(null);
 
@@ -60,9 +66,10 @@ const App = () => {
                   patternMargin={patternMargin}
                   tilingDistribution={tilingDistribution}
                   tilingRotation={tilingRotation}
-                  patternType={patternType}
-                  debugMode={debugMode}
                   clipToOutline={clipToOutline}
+                  basePatternShapes={basePatternShapes}
+                  basePatternDepth={basePatternDepth}
+                  basePatternScale={basePatternScale}
                 />
             </div>
         </div>
@@ -102,7 +109,14 @@ const App = () => {
               setTilingDistribution={setTilingDistribution}
               tilingRotation={tilingRotation}
               setTilingRotation={setTilingRotation}
+
               debugMode={debugMode}
+              basePatternShapes={basePatternShapes}
+              setBasePatternShapes={setBasePatternShapes}
+              basePatternDepth={basePatternDepth}
+              setBasePatternDepth={setBasePatternDepth}
+              basePatternScale={basePatternScale}
+              setBasePatternScale={setBasePatternScale}
             />
             <div>
                <OutputPanel meshRef={meshRef} debugMode={debugMode} />

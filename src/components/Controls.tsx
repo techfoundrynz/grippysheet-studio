@@ -37,10 +37,17 @@ interface ControlsProps {
   tilingRotation: 'none' | 'alternate' | 'random';
   setTilingRotation: (v: 'none' | 'alternate' | 'random') => void;
   debugMode?: boolean;
+  basePatternShapes: any[] | null;
+  setBasePatternShapes: (shapes: any[]) => void;
+  basePatternDepth: number;
+  setBasePatternDepth: (depth: number) => void;
+  basePatternScale: number;
+  setBasePatternScale: (scale: number) => void;
 }
 
 import { COLORS } from '../constants/colors';
 import { Grid3x3, MousePointer2, Maximize, Scissors } from 'lucide-react';
+import { DebouncedInput } from './DebouncedInput';
 
 
 const Controls: React.FC<ControlsProps> = ({
@@ -66,7 +73,14 @@ const Controls: React.FC<ControlsProps> = ({
   setTilingDistribution,
   tilingRotation,
   setTilingRotation,
-  debugMode = false
+
+  debugMode = false,
+  basePatternShapes,
+  setBasePatternShapes,
+  basePatternDepth,
+  setBasePatternDepth,
+  basePatternScale,
+  setBasePatternScale
 }) => {
 
   // ... handlePatternLoaded ... (omitted for brevity, assume keeps existing)
@@ -118,16 +132,16 @@ const Controls: React.FC<ControlsProps> = ({
         {/* Base Settings */}
         <section className="space-y-4">
           <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-2">
-            Base Model
+            Base
           </h2>
           
           {!cutoutShapes && (
             <div className="space-y-2">
               <label className="text-sm font-medium text-gray-300">Size (mm)</label>
-              <input
+              <DebouncedInput
                 type="number"
                 value={size}
-                onChange={(e) => setSize(Number(e.target.value))}
+                onChange={(val) => setSize(Number(val))}
                 className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none"
               />
             </div>
@@ -135,10 +149,10 @@ const Controls: React.FC<ControlsProps> = ({
 
           <div className="space-y-2">
             <label className="text-sm font-medium text-gray-300">Thickness (mm)</label>
-            <input
+            <DebouncedInput
               type="number"
               value={thickness}
-              onChange={(e) => setThickness(Number(e.target.value))}
+              onChange={(val) => setThickness(Number(val))}
               className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none"
             />
           </div>
@@ -168,6 +182,84 @@ const Controls: React.FC<ControlsProps> = ({
           </div>
           
 
+        </section>
+
+
+        {/* Base Pattern (Inlay) Settings */}
+        <section className="space-y-4">
+          <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-2">
+            Base Pattern (Inlay)
+          </h2>
+          <ShapeUploader 
+              label="Upload Inlay Pattern" 
+              onShapesLoaded={(shapes) => setBasePatternShapes(shapes)}
+              onClear={() => setBasePatternShapes([])}
+              allowedTypes={['svg']}
+              extractColors={true}
+          />
+          
+          {basePatternShapes && basePatternShapes.length > 0 && (
+            <>
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <label className="text-sm font-medium text-gray-300">Scale</label>
+                  <button
+                      onClick={() => {
+                          // Extract shapes if they are objects (which they are for basePatternShapes)
+                          const shapes = basePatternShapes.map((s: any) => s.shape || s);
+                          const bounds = getShapesBounds(shapes);
+                          const width = bounds.size.x;
+                          const height = bounds.size.y;
+                          
+                          if (width > 0 && height > 0) {
+                              let targetScale = 1;
+
+                              if (cutoutShapes && cutoutShapes.length > 0) {
+                                  // Fit within Outline Bounds
+                                  const outlineBounds = getShapesBounds(cutoutShapes);
+                                  const outlineW = outlineBounds.size.x;
+                                  const outlineH = outlineBounds.size.y;
+                                  
+                                  const scaleX = (outlineW * 0.8) / width;
+                                  const scaleY = (outlineH * 0.8) / height;
+                                  targetScale = Math.min(scaleX, scaleY);
+                              } else {
+                                  // Fit within Default Square Size
+                                  const maxSize = Math.max(width, height);
+                                  targetScale = (size * 0.8) / maxSize;
+                              }
+                              
+                              setBasePatternScale(targetScale);
+                          }
+                      }}
+                      className="text-gray-400 hover:text-purple-400 transition-colors"
+                      title="Auto Scale to Fit"
+                  >
+                      <Maximize size={14} />
+                  </button>
+                </div>
+                <DebouncedInput
+                  type="number"
+                  value={basePatternScale}
+                  onChange={(val) => setBasePatternScale(Number(val))}
+                  step="0.1"
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-300">Inlay Depth (mm)</label>
+                <DebouncedInput
+                  type="number"
+                  value={basePatternDepth}
+                  onChange={(val) => setBasePatternDepth(Number(val))}
+                  step="0.1"
+                  min="0.1"
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none"
+                />
+              </div>
+            </>
+          )}
         </section>
 
 
@@ -268,10 +360,10 @@ const Controls: React.FC<ControlsProps> = ({
                             </button>
                         )}
                     </div>
-                    <input
+                    <DebouncedInput
                       type="number"
                       value={patternScale}
-                      onChange={(e) => setPatternScale(Number(e.target.value))}
+                      onChange={(val) => setPatternScale(Number(val))}
                       step="0.1"
                       className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none"
                     />
@@ -281,10 +373,10 @@ const Controls: React.FC<ControlsProps> = ({
                     <>
                     <div className="space-y-2">
                       <label className="text-sm font-medium text-gray-300">Spacing</label>
-                      <input
+                      <DebouncedInput
                         type="number"
                         value={tileSpacing}
-                        onChange={(e) => setTileSpacing(Number(e.target.value))}
+                        onChange={(val) => setTileSpacing(Number(val))}
                         className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none"
                       />
                     </div>
@@ -322,10 +414,10 @@ const Controls: React.FC<ControlsProps> = ({
               <div className="grid grid-cols-2 gap-4 pt-2 border-t border-gray-800">
                   <div className="space-y-2">
                        <label className="text-sm font-medium text-gray-300">Margin</label>
-                       <input
+                       <DebouncedInput
                         type="number"
                         value={patternMargin}
-                        onChange={(e) => setPatternMargin(Number(e.target.value))}
+                        onChange={(val) => setPatternMargin(Number(val))}
                         step="0.5"
                         min="0"
                         className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none"
@@ -353,10 +445,10 @@ const Controls: React.FC<ControlsProps> = ({
                    <div className="space-y-2">
                       <label className="text-sm font-medium text-gray-300">Extrusion Angle</label>
                       <div className="relative">
-                          <input
+                          <DebouncedInput
                             type="number"
                             value={extrusionAngle}
-                            onChange={(e) => setExtrusionAngle(Number(e.target.value))}
+                            onChange={(val) => setExtrusionAngle(Number(val))}
                             className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none"
                           />
                           <div className="absolute right-3 top-2 text-gray-500 text-xs pointer-events-none">deg</div>
@@ -365,10 +457,10 @@ const Controls: React.FC<ControlsProps> = ({
 
                   <div className="space-y-2">
                       <label className="text-sm font-medium text-gray-300">Max Height</label>
-                      <input
+                      <DebouncedInput
                         type="number"
                         value={patternHeight}
-                        onChange={(e) => setPatternHeight(e.target.value === '' ? '' : Number(e.target.value))}
+                        onChange={(val) => setPatternHeight(val === '' ? '' : Number(val))}
                         placeholder="Auto"
                         className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none placeholder-gray-600"
                       />

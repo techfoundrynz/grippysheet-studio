@@ -55,12 +55,9 @@ const OutputPanel: React.FC<OutputPanelProps> = ({ meshRef, debugMode = false })
 
     if (!objectToExport) return;
 
-    // Fix orientation for export (Y-up to Z-up)
-    // Three.js uses Y-up, but slicers/STLs usually expect Z-up.
-    // We rotate -90 degrees on X axis.
-    objectToExport.matrixAutoUpdate = false;
-    objectToExport.rotation.x = -Math.PI / 2;
-    objectToExport.updateMatrix();
+    // Fix orientation for export
+    // We want Z-up (flat), which matches our Three.js scene. 
+    // So we don't need to rotate.
     objectToExport.updateMatrixWorld(true);
 
     const exporter = new STLExporter();
@@ -102,7 +99,6 @@ const OutputPanel: React.FC<OutputPanelProps> = ({ meshRef, debugMode = false })
             return;
         }
 
-        exportGroup.rotation.x = -Math.PI / 2;
         exportGroup.updateMatrixWorld(true);
 
         // Async export

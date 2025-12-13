@@ -10,15 +10,17 @@ interface ShapeUploaderProps {
   onClear: () => void;
   className?: string;
   allowedTypes?: ('dxf' | 'svg' | 'stl')[];
+  extractColors?: boolean;
 }
 
-const ShapeUploader: React.FC<ShapeUploaderProps> = ({ 
-    label, 
-    onShapesLoaded, 
-    onClear, 
-    className,
-    allowedTypes = ['dxf', 'svg', 'stl'] 
-}) => {
+const ShapeUploader: React.FC<ShapeUploaderProps> = (props) => {
+  const { 
+      label, 
+      onShapesLoaded, 
+      onClear, 
+      className,
+      allowedTypes = ['dxf', 'svg', 'stl'] 
+  } = props;
   const [fileName, setFileName] = React.useState<string | null>(null);
   const [previewPath, setPreviewPath] = React.useState<string | null>(null);
   const [svgViewBox, setSvgViewBox] = React.useState<string>("0 0 100 100");
@@ -66,7 +68,7 @@ const ShapeUploader: React.FC<ShapeUploaderProps> = ({
     reader.onload = (e) => {
       const text = e.target?.result as string;
       if (text) {
-           let shapes: THREE.Shape[] = [];
+           let shapes: any[] = []; // Changed to any[] to support { shape, color }
            
            if (isSvg) {
                const loader = new SVGLoader();
@@ -74,28 +76,49 @@ const ShapeUploader: React.FC<ShapeUploaderProps> = ({
                
                // Flatten SVG paths to Shapes
                data.paths.forEach((path) => {
+                   const fillColor = path.userData?.style?.fill;
+                   const color = (fillColor && fillColor !== 'none') ? fillColor : (path.color && path.color.getStyle()); // fallback to path color
+                   
                    const subShapes = path.toShapes(true); // isCCW
-                   subShapes.forEach(s => shapes.push(s));
+                   
+                   subShapes.forEach(s => {
+                       if (props.extractColors) {
+                           shapes.push({ shape: s, color: color || '#000000' });
+                       } else {
+                           shapes.push(s);
+                       }
+                   });
                });
                
-               // Center shapes
-               shapes = centerShapes(shapes);
+               // Center shapes logic needs to handle objects or shapes
+               if (props.extractColors) {
+                   // Separate shapes for centering calculation
+                   const rawShapes = shapes.map(item => item.shape);
+                   const centered = centerShapes(rawShapes);
+                   // Re-attach centerd shapes
+                   shapes = shapes.map((item, i) => ({ ...item, shape: centered[i] }));
+               } else {
+                   shapes = centerShapes(shapes as THREE.Shape[]);
+               }
                
            } else {
                // DXF
                shapes = parseDxfToShapes(text);
            }
+           
+           // If returning objects, map to shapes for preview generation
+           const previewShapes = props.extractColors ? shapes.map(s => s.shape) : shapes;
 
            onShapesLoaded(shapes, isSvg ? 'svg' : 'dxf');
            
-           if (shapes.length > 0) {
-               const path = generateSVGPath(shapes);
+           if (previewShapes.length > 0) {
+               const path = generateSVGPath(previewShapes as THREE.Shape[]);
                setPreviewPath(path);
                
                // Calculate bounds for ViewBox
                const min = new THREE.Vector2(Infinity, Infinity);
                const max = new THREE.Vector2(-Infinity, -Infinity);
-               shapes.forEach(shape => {
+               (previewShapes as THREE.Shape[]).forEach(shape => {
                    shape.getPoints().forEach(p => {
                        // Match generateSVGPath (no flip)
                        const y = p.y;

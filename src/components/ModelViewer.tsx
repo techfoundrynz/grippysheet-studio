@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Canvas, useThree, useFrame } from '@react-three/fiber';
 import { OrbitControls, Line, Instances, Instance } from '@react-three/drei';
-import { Box, Layers, RotateCcw, ScanLine, Activity } from 'lucide-react';
+import { Box, Layers, RotateCcw, ScanLine, Activity, Ghost } from 'lucide-react';
 import * as THREE from 'three';
 import { Subtraction, Base, Geometry, Intersection } from '@react-three/csg';
 import { generateTilePositions, getGeometryBounds, getShapesBounds } from '../utils/patternUtils';
@@ -26,6 +26,9 @@ interface ModelViewerProps {
   tilingRotation?: 'none' | 'alternate' | 'random';
   clipToOutline?: boolean;
   debugMode?: boolean;
+  basePatternShapes?: any[] | null;
+  basePatternDepth?: number;
+  basePatternScale?: number;
 }
 
 type ViewType = 'iso' | 'top' | 'front';
@@ -37,13 +40,21 @@ const CameraRig: React.FC<{ view: ViewType }> = ({ view }) => {
     const ctrl = controls as any;
     
     if (view === 'top') {
-      camera.position.set(0, 1000, 0);
-      camera.lookAt(0, 0, 0);
-    } else if (view === 'front') {
+      // Look down Z axis
+      // Must set camera.up to Y so we don't look parallel to the up vector
+      camera.up.set(0, 1, 0); 
       camera.position.set(0, 0, 1000);
       camera.lookAt(0, 0, 0);
+    } else if (view === 'front') {
+      // Front view (Looking along Y axis?? Or X? Usually Front is looking along Y)
+      // If Z is up, Front is usually looking from -Y to +Y or similar.
+      camera.up.set(0, 0, 1);
+      camera.position.set(0, -1000, 0);
+      camera.lookAt(0, 0, 0);
     } else if (view === 'iso') {
-      camera.position.set(500, 500, 500);
+      // Standard Z-up Iso
+      camera.up.set(0, 0, 1);
+      camera.position.set(500, -500, 500);
       camera.lookAt(0, 0, 0);
     }
     
@@ -88,7 +99,10 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
   tilingDistribution = 'grid',
   tilingRotation = 'none',
   clipToOutline = false,
-  debugMode = false
+  debugMode = false,
+  basePatternShapes,
+  basePatternDepth = 0.6,
+  basePatternScale = 1
 }) => {
 
   const [view, setView] = useState<ViewType>('top');
@@ -96,9 +110,10 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
   const [showPatternOutline, setShowPatternOutline] = useState(false);
   const [showWireframe, setShowWireframe] = useState(false);
   const [showFps, setShowFps] = useState(false);
+  const [isPatternTransparent, setIsPatternTransparent] = useState(true);
   const fpsRef = React.useRef<HTMLDivElement>(null);
 
-  const STLTiles = React.memo(({ instances, geometry, color, wireframe, thickness }: { instances: any[], geometry: THREE.BufferGeometry, color: string, wireframe: boolean, thickness: number }) => {
+  const STLTiles = React.memo(({ instances, geometry, color, wireframe, thickness, opacity }: { instances: any[], geometry: THREE.BufferGeometry, color: string, wireframe: boolean, thickness: number, transparent?: boolean, opacity?: number }) => {
         const offset = React.useMemo(() => {
             if (!geometry.boundingBox) geometry.computeBoundingBox();
             const box = geometry.boundingBox!;
@@ -110,14 +125,14 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
             <Instances
                 range={instances.length}
                 geometry={geometry}
-                position={[0, thickness, 0]} 
+                // Overlap base by 0.01mm for manifold export
+                position={[0, 0, thickness - 0.01]} 
             >
-                <meshStandardMaterial color={color} wireframe={wireframe} />
+                <meshStandardMaterial color={color} wireframe={wireframe} transparent opacity={opacity} />
                 {instances.map((data, i) => (
                     <Instance
                         key={i}
-                        position={[data.position.x, (offset * data.scale), -data.position.y]} 
-                        rotation={[-Math.PI / 2, 0, Math.PI]}
+                        position={[data.position.x, data.position.y, offset * data.scale]} 
                         scale={[data.scale, data.scale, data.scale]}
                     />
                 ))}
@@ -377,6 +392,15 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
         >
           <Box size={20} />
         </button>
+
+        <div className="w-px bg-gray-700 mx-1" />
+        <button
+            onClick={() => setIsPatternTransparent(!isPatternTransparent)}
+            className={`p-2 rounded hover:bg-gray-700 transition-colors ${isPatternTransparent ? 'bg-indigo-500/20 text-indigo-400' : 'text-gray-400'}`}
+            title="Toggle Pattern Transparency"
+        >
+            <Ghost size={20} />
+        </button>
         
         {debugMode && cutoutShapes && cutoutShapes.length > 0 && (
           <>
@@ -430,36 +454,72 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
         </div>
       )}
 
-      <Canvas camera={{ position: [500, 500, 500], fov: 50, far: 20000, near: 0.1 }} shadows>
+      <Canvas camera={{ position: [500, -500, 500], up: [0, 0, 1], fov: 50, far: 20000, near: 0.1 }} shadows>
+        {showFps && <FpsTracker fpsRef={fpsRef as React.RefObject<HTMLDivElement>} />}
         <CameraRig view={view} />
         <OrbitControls makeDefault />
         <ambientLight intensity={0.5} />
-        <directionalLight position={[100, 100, 50]} intensity={1} castShadow />
+        <directionalLight position={[100, -50, 100]} intensity={1} castShadow={false} />
         
         <group ref={meshRef}>
             {/* Base Mesh */}
             <mesh 
                 name="Base" 
-                position={cutoutShapes && cutoutShapes.length > 0 ? [0, 0, 0] : [0, thickness / 2, 0]} 
-                rotation={cutoutShapes && cutoutShapes.length > 0 ? [-Math.PI / 2, 0, 0] : [0, 0, 0]}
+                position={[0, 0, 0]} 
                 receiveShadow
                 castShadow
             >
-                {cutoutShapes && cutoutShapes.length > 0 ? (
-                     <extrudeGeometry args={[cutoutShapes, { depth: thickness, bevelEnabled: false }]} />
-                ) : (
-                     <boxGeometry args={[size, thickness, size]} />
-                )}
+                <Geometry>
+                    <Base>
+                        {cutoutShapes && cutoutShapes.length > 0 ? (
+                             // Extrudes along Z automatically. No rotation needed for Z-up.
+                             <extrudeGeometry args={[cutoutShapes, { depth: thickness, bevelEnabled: false }]} />
+                        ) : (
+                             // Box args: width (X), height (Y), depth (Z). 
+                             // We want X/Y base, Z thickness.
+                             <boxGeometry args={[size, size, thickness]} />
+                        )}
+                    </Base>
+                    
+                    {/* Base Pattern Subtraction (Inlay Cutout) */}
+                    {basePatternShapes && basePatternShapes.length > 0 && (
+                        <Subtraction position={[0, 0, thickness - basePatternDepth]} scale={[basePatternScale, basePatternScale, 1]}>
+                             <extrudeGeometry args={[
+                                 basePatternShapes.map(s => s.shape), 
+                                 { depth: basePatternDepth + 1, bevelEnabled: false } // +1 to ensure cut through top
+                             ]} />
+                        </Subtraction>
+                    )}
+                </Geometry>
                 <meshStandardMaterial color={color} wireframe={showWireframe} />
             </mesh>
+
+            {/* Base Pattern Inlays (Colored Meshes) */}
+            {basePatternShapes && basePatternShapes.length > 0 && basePatternShapes.map((item, i) => (
+                <mesh
+                    key={`inlay-${i}`}
+                    // Overlap floor by 0.01mm to fix non-manifold edges in export
+                    position={[0, 0, thickness - basePatternDepth - 0.01]}
+                    scale={[basePatternScale, basePatternScale, 1]}
+                    castShadow
+                    receiveShadow
+                >
+                    <extrudeGeometry args={[
+                        [item.shape], 
+                        { depth: basePatternDepth + 0.01, bevelEnabled: false }
+                    ]} />
+                    <meshStandardMaterial color={item.color} wireframe={showWireframe} />
+                </mesh>
+            ))}
             
             {/* Pattern Mesh - Consolidated */}
             {finalPatternShapes && (finalPatternShapes instanceof THREE.BufferGeometry || (Array.isArray(finalPatternShapes) && finalPatternShapes.length > 0)) && (
                 <mesh 
                     name="Pattern"
-                    position={[0, thickness + Number(activePatternHeight), 0]} 
-                    rotation={[Math.PI/2, 0, Math.PI]}
-                    scale={[-1, 1, 1]}
+                    // Overlap base by 0.01mm for manifold export
+                    position={[0, 0, thickness + Number(activePatternHeight) - 0.01]} 
+                    // Standard Z-up extrusion
+                    scale={[1, 1, -1]}
                     castShadow
                     receiveShadow
                 >    
@@ -472,7 +532,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
                             )}
                         </Base>
                         {/* Cut off the bottom (back-bevel) to ensure single-sided pyramid */}
-                        <Subtraction position={[0, 0, -500]}>
+                        <Subtraction position={[0, 0, -500.1]}>
                             <boxGeometry args={[2000, 2000, 1000]} />
                         </Subtraction>
                         
@@ -494,7 +554,12 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
                         )}
                         
                     </Geometry>
-                    <meshStandardMaterial color={patternColor} wireframe={showWireframe} />
+                    <meshStandardMaterial 
+                        color={patternColor} 
+                        wireframe={showWireframe} 
+                        transparent
+                        opacity={isPatternTransparent ? 0.3 : 1.0}
+                    />
                  </mesh>
             )}
 
@@ -505,6 +570,8 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
                     geometry={patternShapes[0] as unknown as THREE.BufferGeometry} 
                     color={patternColor} 
                     wireframe={showWireframe} 
+                    transparent
+                    opacity={isPatternTransparent ? 0.3 : 1.0}
                     thickness={thickness}
                 />
             )}
@@ -515,8 +582,8 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
             points={cutoutShapes[0].getPoints()} 
             color="#4ade80"
             lineWidth={2}
-            position={[0, thickness + 0.1, 0]}
-            rotation={[-Math.PI / 2, 0, 0]} 
+            position={[0, 0, thickness + 0.1]}
+            // No rotation. Points are XY.
             scale={[1, 1, 1]}
             />
         )}
@@ -527,12 +594,12 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
              points={shape.getPoints()}
              color="#06b6d4" // Cyan
              lineWidth={1}
-             position={[0, thickness + 0.1, 0]}
-             rotation={[-Math.PI / 2, 0, 0]}
+             position={[0, 0, thickness + 0.1]}
              />
         ))}
 
-        <gridHelper args={[2000, 20]} position={[0, 0, 0]} />
+        {/* Rotate GridHelper 90deg X to lie on XY plane */}
+        <gridHelper args={[2000, 20]} position={[0, 0, 0]} rotation={[Math.PI / 2, 0, 0]} />
       </Canvas>
     </div>
   );
