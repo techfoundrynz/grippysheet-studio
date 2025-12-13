@@ -1,15 +1,15 @@
 import React from 'react';
-import { X, Upload } from 'lucide-react';
+import { X, Upload, Box } from 'lucide-react';
 import { parseDxfToShapes, generateSVGPath } from '../utils/dxfUtils';
-import { SVGLoader } from 'three-stdlib';
+import { SVGLoader, STLLoader } from 'three-stdlib';
 import * as THREE from 'three';
 
 interface ShapeUploaderProps {
   label: string;
-  onShapesLoaded: (shapes: any[], type?: 'dxf' | 'svg') => void;
+  onShapesLoaded: (shapes: any[], type?: 'dxf' | 'svg' | 'stl') => void;
   onClear: () => void;
   className?: string;
-  allowedTypes?: ('dxf' | 'svg')[];
+  allowedTypes?: ('dxf' | 'svg' | 'stl')[];
 }
 
 const ShapeUploader: React.FC<ShapeUploaderProps> = ({ 
@@ -17,7 +17,7 @@ const ShapeUploader: React.FC<ShapeUploaderProps> = ({
     onShapesLoaded, 
     onClear, 
     className,
-    allowedTypes = ['dxf', 'svg'] 
+    allowedTypes = ['dxf', 'svg', 'stl'] 
 }) => {
   const [fileName, setFileName] = React.useState<string | null>(null);
   const [previewPath, setPreviewPath] = React.useState<string | null>(null);
@@ -26,6 +26,7 @@ const ShapeUploader: React.FC<ShapeUploaderProps> = ({
   const processFile = (file: File) => {
     const isSvg = file.name.toLowerCase().endsWith('.svg');
     const isDxf = file.name.toLowerCase().endsWith('.dxf');
+    const isStl = file.name.toLowerCase().endsWith('.stl');
 
     if (isSvg && !allowedTypes.includes('svg')) {
         alert("SVG files are not allowed for this input.");
@@ -35,8 +36,31 @@ const ShapeUploader: React.FC<ShapeUploaderProps> = ({
         alert("DXF files are not allowed for this input.");
         return;
     }
+    if (isStl && !allowedTypes.includes('stl')) {
+        alert("STL files are not allowed for this input.");
+        return;
+    }
 
     setFileName(file.name);
+
+    if (isStl) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const buffer = e.target?.result as ArrayBuffer;
+            if (buffer) {
+                const loader = new STLLoader();
+                const geometry = loader.parse(buffer);
+                geometry.center(); // Center the geometry
+                // Pass as array of 1 geometry, marked as 'stl'
+                onShapesLoaded([geometry], 'stl');
+                setPreviewPath(null); // No preview for STL
+                setSvgViewBox("0 0 100 100");
+            }
+        };
+        reader.readAsArrayBuffer(file);
+        return;
+    }
+
     const reader = new FileReader();
     
     reader.onload = (e) => {
@@ -182,7 +206,7 @@ const ShapeUploader: React.FC<ShapeUploaderProps> = ({
   const inputId = `file-upload-${label.replace(/\s+/g, '-').toLowerCase()}`;
   
   const acceptString = allowedTypes.map(t => `.${t}`).join(',');
-  const typeLabel = allowedTypes.map(t => t.toUpperCase()).join(' or ');
+  const typeLabel = allowedTypes.map(t => t.toUpperCase()).join('/');
 
   return (
       <div className={`space-y-2 ${className}`}>
@@ -192,7 +216,7 @@ const ShapeUploader: React.FC<ShapeUploaderProps> = ({
         <div className="flex items-center justify-center w-full">
             <label 
                 htmlFor={inputId}
-                className={`flex flex-col items-center justify-center w-full min-h-24 border-2 border-dashed rounded-lg cursor-pointer transition-colors ${fileName ? 'border-green-500 bg-gray-700/50 h-auto py-2' : 'border-gray-600 bg-gray-700 hover:bg-gray-600 h-24'}`}
+                className={`flex flex-col items-center justify-center w-full h-[150px] border-2 border-dashed rounded-lg cursor-pointer transition-colors ${fileName ? 'border-green-500 bg-gray-700/50 py-2' : 'border-gray-600 bg-gray-700 hover:bg-gray-600'}`}
                 onDragOver={handleDragOver}
                 onDrop={handleDrop}
             >
@@ -203,6 +227,12 @@ const ShapeUploader: React.FC<ShapeUploaderProps> = ({
                                 <path d={previewPath} vectorEffect="non-scaling-stroke" transform="scale(1, -1)" />
                             </svg>
                         </div>
+                    )}
+
+                    {!previewPath && fileName && (
+                         <div className="h-[65px] w-full flex items-center justify-center mb-2 pointer-events-none text-green-500">
+                             <Box size={64} strokeWidth={1} />
+                         </div>
                     )}
                     
                     {fileName ? (

@@ -23,4 +23,4 @@ export const COLORS: Record<string, string> = {
 };
 
 export const DEFAULT_BASE_COLOR = COLORS['Purple'];
-export const DEFAULT_PATTERN_COLOR = COLORS['Dark Gray'];
+export const DEFAULT_PATTERN_COLOR = COLORS['Orange'];

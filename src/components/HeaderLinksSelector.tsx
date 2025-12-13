@@ -1,4 +1,4 @@
-import { Info } from 'lucide-react'
+import { Box, Info } from 'lucide-react'
 import { Dropdown } from './ui/Dropdown'
 import { SiDiscord, SiGithub } from '@icons-pack/react-simple-icons';
 
@@ -13,13 +13,25 @@ export function HeaderLinksSelector() {
         <Dropdown
         options={[
           {
-            value: "https://github.com/techfoundrynz/pubgrip-generator",
+            value: "https://github.com/techfoundrynz/grippysheet-designer",
             tooltip: `Printgrip Maker GitHub repository`,
             icon: <SiGithub className="h-4 w-4" />,
             label: (
               <div className="flex items-center justify-between w-full">
                 <div className="flex-1 truncate">
                   <span className="mr-2">View source code</span>
+                </div>
+              </div>
+            )
+          },
+          {
+            value: "https://www.printables.com/model/968803-onewheel-grip-tape-dxf-outlines",
+            tooltip: `Grip Outlines on Printables`,
+            icon: <Box className="h-4 w-4" />,
+            label: (
+              <div className="flex items-center justify-between w-full">
+                <div className="flex-1 truncate">
+                  <span className="mr-2">Download grip outlines</span>
                 </div>
               </div>
             )
