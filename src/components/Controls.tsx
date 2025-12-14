@@ -44,10 +44,12 @@ interface ControlsProps {
   setBasePatternScale: (scale: number) => void;
   onReset?: () => void;
   onOpenWelcome?: () => void;
+  isCollapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
 import { COLORS } from '../constants/colors';
-import { Grid3x3, MousePointer2, Maximize, Scissors, RotateCcw, AlertTriangle, X, HelpCircle } from 'lucide-react';
+import { Grid3x3, MousePointer2, Maximize, Scissors, RotateCcw, AlertTriangle, X, HelpCircle, ChevronDown } from 'lucide-react';
 import { DebouncedInput } from './DebouncedInput';
 
 
@@ -83,7 +85,9 @@ const Controls: React.FC<ControlsProps> = ({
   basePatternScale,
   setBasePatternScale,
   onReset,
-  onOpenWelcome
+  onOpenWelcome,
+  isCollapsed = false,
+  onToggleCollapse
 }) => {
   const [showResetConfirm, setShowResetConfirm] = React.useState(false);
 
@@ -124,9 +128,19 @@ const Controls: React.FC<ControlsProps> = ({
     <div className="bg-gray-800 rounded-lg border border-gray-700 shadow-lg min-h-0 flex-shrink transition-all overflow-y-auto custom-scrollbar relative">
       <div className="md:sticky md:top-0 z-10 bg-gray-800 p-6 pb-4 border-b border-gray-700/50 mb-0">
         <div className="flex items-center justify-between mb-1">
-          <h2 className="text-xl font-bold bg-gradient-to-r from-purple-400 to-cyan-400 bg-clip-text text-transparent">
-            GrippySheet Studio
-          </h2>
+          <div className="flex items-center gap-3">
+             {onToggleCollapse && (
+                  <button
+                      onClick={onToggleCollapse}
+                      className="md:hidden p-1 -ml-1 text-gray-400 hover:text-white transition-colors"
+                  >
+                      <ChevronDown size={20} className={`transition-transform duration-300 ${isCollapsed ? '-rotate-90' : 'rotate-0'}`} />
+                  </button>
+             )}
+             <h2 className="text-xl font-bold bg-gradient-to-r from-purple-400 to-cyan-400 bg-clip-text text-transparent">
+                GrippySheet Studio
+             </h2>
+          </div>
           <button
             onClick={onOpenWelcome}
             className="p-2 text-gray-400 hover:text-white hover:bg-gray-700/50 rounded-lg transition-all"
@@ -137,6 +151,7 @@ const Controls: React.FC<ControlsProps> = ({
         </div>
       </div>
 
+      <div className={`transition-all duration-300 ease-in-out overflow-hidden ${isCollapsed ? 'max-h-0 opacity-0 md:max-h-[2000px] md:opacity-100' : 'max-h-[2000px] opacity-100'}`}>
       <div className="p-6 pt-2 space-y-6">
         {/* Base Settings */}
         <section className="space-y-4">
@@ -553,6 +568,7 @@ const Controls: React.FC<ControlsProps> = ({
                 </div>
             </div>
          )}
+      </div>
       </div>
     </div>
   );

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { SiGithub } from '@icons-pack/react-simple-icons';
-import { Box, X, ExternalLink, ChevronDown } from 'lucide-react';
+import { Box, X, ExternalLink, ChevronDown, HelpCircle } from 'lucide-react';
 
 interface WelcomeModalProps {
     onClose: () => void;
@@ -133,6 +133,10 @@ export const WelcomeModal: React.FC<WelcomeModalProps> = ({ onClose }) => {
                             </span>
                         </label>
                     </div>
+                    
+                    <p className="text-center text-xs text-gray-600 mt-2">
+                        Tip: Click the <HelpCircle size={14} className="inline text-gray-500 mb-0.5" /> logo to view this window again
+                    </p>
                 </div>
             </div>
         </div>

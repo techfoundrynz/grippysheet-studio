@@ -38,6 +38,8 @@ const App = () => {
       return !localStorage.getItem('welcome_modal_dismissed');
   });
 
+  const [isControlsCollapsed, setIsControlsCollapsed] = useState(false);
+
   const meshRef = useRef<THREE.Group>(null);
 
   React.useEffect(() => {
@@ -83,7 +85,10 @@ const App = () => {
         </div>
 
         {/* Right Panel - Controls & Output */}
-        <div className="h-1/2 md:h-auto w-full md:w-96 overflow-hidden flex flex-col p-4 gap-4 bg-gray-950 md:bg-transparent border-t md:border-t-0 border-gray-800">
+        <div className={`
+            md:h-auto w-full md:w-96 overflow-hidden flex flex-col p-4 gap-4 bg-gray-950 md:bg-transparent border-t md:border-t-0 border-gray-800 transition-all duration-300 ease-in-out
+            ${isControlsCollapsed ? 'h-auto flex-shrink-0 md:flex-none' : 'h-1/2 flex-1 md:flex-none'}
+        `}>
             <Controls 
               size={size} 
               setSize={setSize}
@@ -147,8 +152,10 @@ const App = () => {
                   setBasePatternScale(1);
                }}
                onOpenWelcome={() => setShowWelcome(true)}
+               isCollapsed={isControlsCollapsed}
+               onToggleCollapse={() => setIsControlsCollapsed(!isControlsCollapsed)}
             />
-            <div className="flex-shrink-0">
+            <div className={`flex-shrink-0 transition-opacity duration-300 ${isControlsCollapsed ? 'opacity-0 h-0 overflow-hidden md:opacity-100 md:h-auto md:overflow-visible' : 'opacity-100'}`}>
                <OutputPanel meshRef={meshRef} debugMode={debugMode} />
             </div>
         </div>
