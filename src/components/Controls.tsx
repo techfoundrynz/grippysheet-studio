@@ -46,6 +46,7 @@ interface ControlsProps {
   onOpenWelcome?: () => void;
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
+  mobileContent?: React.ReactNode;
 }
 
 import { COLORS } from '../constants/colors';
@@ -87,7 +88,8 @@ const Controls: React.FC<ControlsProps> = ({
   onReset,
   onOpenWelcome,
   isCollapsed = false,
-  onToggleCollapse
+  onToggleCollapse,
+  mobileContent
 }) => {
   const [showResetConfirm, setShowResetConfirm] = React.useState(false);
 
@@ -511,6 +513,13 @@ const Controls: React.FC<ControlsProps> = ({
             </>
           )}
         </section>
+
+        {/* Mobile-only Content (Export Buttons) */}
+        {mobileContent && (
+             <div className="md:hidden pt-6 border-t border-gray-700">
+                {mobileContent}
+             </div>
+        )}
 
         {/* Reset Button */}
         {onReset && (

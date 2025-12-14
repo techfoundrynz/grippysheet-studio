@@ -23,7 +23,7 @@ export const WelcomeModal: React.FC<WelcomeModalProps> = ({ onClose }) => {
 
     return (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-300">
-            <div className="bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl max-w-lg w-full p-6 space-y-6 animate-in zoom-in-95 duration-300 slide-in-from-bottom-4">
+            <div className="bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto custom-scrollbar p-6 space-y-6 animate-in zoom-in-95 duration-300 slide-in-from-bottom-4 flex flex-col">
                 {/* Header */}
                 <div className="flex items-start justify-between">
                     <div>

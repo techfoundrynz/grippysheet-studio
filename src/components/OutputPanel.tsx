@@ -7,9 +7,10 @@ import * as THREE from 'three';
 interface OutputPanelProps {
   meshRef: React.RefObject<THREE.Group | null>;
   debugMode?: boolean;
+  className?: string;
 }
 
-const OutputPanel: React.FC<OutputPanelProps> = ({ meshRef, debugMode = false }) => {
+const OutputPanel: React.FC<OutputPanelProps> = ({ meshRef, debugMode = false, className = '' }) => {
   const expandInstancedMesh = (instancedMesh: THREE.InstancedMesh): THREE.Group => {
     const group = new THREE.Group();
     group.name = instancedMesh.name;
@@ -160,7 +161,7 @@ const OutputPanel: React.FC<OutputPanelProps> = ({ meshRef, debugMode = false })
   };
 
   return (
-    <div className="bg-gray-800 p-6 rounded-lg border border-gray-700 space-y-4 shadow-lg">
+    <div className={`bg-gray-800 p-6 rounded-lg border border-gray-700 space-y-4 shadow-lg ${className}`}>
       <div className="space-y-2">        
         <div className="grid grid-cols-1 gap-2">
             <button

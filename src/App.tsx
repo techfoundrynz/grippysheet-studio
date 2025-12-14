@@ -21,7 +21,7 @@ const App = () => {
   const [tileSpacing, setTileSpacing] = useState(10);
   const [patternMargin, setPatternMargin] = useState(3);
   const [patternColor, setPatternColor] = useState(DEFAULT_PATTERN_COLOR);
-  const [clipToOutline, setClipToOutline] = useState(true);
+  const [clipToOutline, setClipToOutline] = useState(false);
   const [tilingDistribution, setTilingDistribution] = useState<'grid' | 'offset' | 'random'>('offset');
   const [tilingRotation, setTilingRotation] = useState<'none' | 'alternate' | 'random'>('random');
 
@@ -55,7 +55,7 @@ const App = () => {
   }, []);
 
   return (
-    <div className="h-screen flex flex-col bg-gray-950 text-gray-100 overflow-hidden">
+    <div className="h-[100dvh] flex flex-col bg-gray-950 text-gray-100 overflow-hidden">
       <main className="flex-1 flex flex-col md:flex-row overflow-hidden">
         {/* Left Panel - 3D Viewer */}
         <div className="h-1/2 md:h-auto flex-1 flex flex-col p-4 min-w-0">
@@ -154,9 +154,18 @@ const App = () => {
                onOpenWelcome={() => setShowWelcome(true)}
                isCollapsed={isControlsCollapsed}
                onToggleCollapse={() => setIsControlsCollapsed(!isControlsCollapsed)}
+               mobileContent={
+                   <OutputPanel 
+                        meshRef={meshRef} 
+                        debugMode={debugMode} 
+                        className="bg-transparent border-0 shadow-none p-0 !p-0"
+                   />
+               }
             />
             <div className={`flex-shrink-0 transition-opacity duration-300 ${isControlsCollapsed ? 'opacity-0 h-0 overflow-hidden md:opacity-100 md:h-auto md:overflow-visible' : 'opacity-100'}`}>
-               <OutputPanel meshRef={meshRef} debugMode={debugMode} />
+               <div className="hidden md:block">
+                    <OutputPanel meshRef={meshRef} debugMode={debugMode} />
+               </div>
             </div>
         </div>
       </main>

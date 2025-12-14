@@ -322,7 +322,7 @@ const ScreenshotManager: React.FC<{
                     ctx.fillStyle = '#ffffff';
 
                     const text1 = "Made with GrippySheet Studio";
-                    const text2 = "https://studio.grippysheet.nz";
+                    const text2 = "https://studio.grippysheet.com";
 
                     // Bottom line (URL)
                     ctx.fillText(text2, targetRes - padding, targetRes - padding);
