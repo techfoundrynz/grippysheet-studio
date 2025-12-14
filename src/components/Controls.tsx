@@ -163,13 +163,21 @@ const Controls: React.FC<ControlsProps> = ({
                 GrippySheet Studio
              </h2>
           </div>
-          <button
-            onClick={onOpenWelcome}
-            className="p-2 text-gray-400 hover:text-white hover:bg-gray-700/50 rounded-lg transition-all"
-            title="Help & Info"
-          >
-            <HelpCircle size={20} />
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={onOpenWelcome}
+              className="p-2 text-gray-400 hover:text-white hover:bg-gray-700/50 rounded-lg transition-all"
+              title="Help & Info"
+            >
+              <HelpCircle size={20} />
+            </button>
+          </div>
+        </div>
+          
+        <div className="flex -mt-1">
+             <p className="text-[9px] text-gray-500 font-mono">
+               Build: {import.meta.env.DEV ? 'DEV' : __BUILD_TIMESTAMP__}
+             </p>
         </div>
       </div>
 

@@ -17,4 +17,7 @@ export default defineConfig({
   optimizeDeps: {
     exclude: ['lucide-react'],
   },
+  define: {
+    '__BUILD_TIMESTAMP__': `${Date.now()}`,
+  },
 });
