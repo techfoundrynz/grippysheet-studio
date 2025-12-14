@@ -1,6 +1,6 @@
 import React from 'react';
 import ShapeUploader from './ShapeUploader';
-import { getShapesBounds, getGeometryBounds } from '../utils/patternUtils';
+import { getShapesBounds, getGeometryBounds, centerShapes } from '../utils/patternUtils';
 
 interface ControlsProps {
   size: number;
@@ -50,9 +50,10 @@ interface ControlsProps {
 }
 
 import { COLORS } from '../constants/colors';
-import { Grid3x3, MousePointer2, Maximize, Scissors, RotateCcw, HelpCircle, ChevronDown } from 'lucide-react';
+import { Grid3x3, MousePointer2, Maximize, Scissors, RotateCcw, HelpCircle, ChevronDown, Palette } from 'lucide-react';
 import { DebouncedInput } from './DebouncedInput';
 import { useAlert } from '../context/AlertContext';
+import { SVGPaintModal } from './SVGPaintModal';
 
 
 const Controls: React.FC<ControlsProps> = ({
@@ -93,6 +94,8 @@ const Controls: React.FC<ControlsProps> = ({
   mobileContent
 }) => {
   const { showAlert } = useAlert();
+  const [showPaintModal, setShowPaintModal] = React.useState(false);
+  const [originalBasePatternShapes, setOriginalBasePatternShapes] = React.useState<any[]>([]);
 
   const handleResetClick = () => {
       showAlert({
@@ -227,14 +230,51 @@ const Controls: React.FC<ControlsProps> = ({
         {/* Base Pattern (Inlay) Settings */}
         <section className="space-y-4">
           <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-2">
-            Base Pattern (Inlay)
+            Inlay
           </h2>
           <ShapeUploader 
               label="Upload Inlay Pattern" 
-              onShapesLoaded={(shapes) => setBasePatternShapes(shapes)}
-              onClear={() => setBasePatternShapes([])}
-              allowedTypes={['svg']}
+              onShapesLoaded={(shapes) => {
+                  setOriginalBasePatternShapes(shapes); // Store original
+                  setBasePatternShapes(shapes);
+              }}
+              onClear={() => {
+                  setOriginalBasePatternShapes([]);
+                  setBasePatternShapes([]);
+              }}
+              allowedTypes={['svg', 'dxf']}
               extractColors={true}
+              adornment={
+                  <button
+                      onClick={() => setShowPaintModal(true)}
+                      className={`p-1.5 rounded-lg transition-colors border ${basePatternShapes && basePatternShapes.length > 0 
+                          ? 'bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 hover:text-purple-300 border-purple-500/20 hover:border-purple-500/50' 
+                          : 'bg-gray-700/50 hover:bg-gray-700 text-gray-400 hover:text-white border-gray-600 hover:border-gray-500'}`}
+                      title="Paint / Draw Inlay"
+                  >
+                      <Palette size={16} />
+                  </button>
+              }
+              externalShapes={basePatternShapes && basePatternShapes.length > 0 ? basePatternShapes : undefined}
+          />
+          
+          <SVGPaintModal 
+              isOpen={showPaintModal}
+              onClose={() => setShowPaintModal(false)}
+              shapes={basePatternShapes || []}
+              baseColor={color}
+              onSave={(newShapes) => {
+                  // If standalone mode (no original shapes), center the drawing
+                  if (!originalBasePatternShapes || originalBasePatternShapes.length === 0) {
+                       // newShapes is array of objects { shape, color }
+                       const rawShapes = newShapes.map((s: any) => s.shape || s);
+                       const centered = centerShapes(rawShapes, false); // FlipY false to prevent mirroring on reload
+                       const centeredObjs = newShapes.map((s: any, i: number) => ({ ...s, shape: centered[i] }));
+                       setBasePatternShapes(centeredObjs);
+                  } else {
+                       setBasePatternShapes(newShapes);
+                  }
+              }}
           />
           
           {basePatternShapes && basePatternShapes.length > 0 && (
@@ -305,10 +345,10 @@ const Controls: React.FC<ControlsProps> = ({
         {/* Pattern Settings */}
         <section className="space-y-4">
           <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-2">
-            Grip Pattern
+            Grip Geometry
           </h2>
             <ShapeUploader 
-                label="Upload Pattern" 
+                label="Upload Pattern/Geometry" 
                 onShapesLoaded={handlePatternLoaded}
                 onClear={() => {
                   setPatternShapes([]);

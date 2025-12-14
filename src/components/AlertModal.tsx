@@ -11,7 +11,10 @@ interface AlertModalProps {
     type?: AlertType;
     confirmText?: string;
     cancelText?: string;
-    onConfirm?: () => void;
+    inputType?: 'text' | 'number';
+    inputPlaceholder?: string;
+    defaultValue?: string;
+    onConfirm?: (value?: string) => void;
 }
 
 export const AlertModal: React.FC<AlertModalProps> = ({
@@ -22,8 +25,18 @@ export const AlertModal: React.FC<AlertModalProps> = ({
     type = 'info',
     confirmText = 'Confirm',
     cancelText,
-    onConfirm
+    onConfirm,
+    inputType,
+    inputPlaceholder,
+    defaultValue = ''
 }) => {
+    const [inputValue, setInputValue] = React.useState(defaultValue);
+
+    // Reset input value when modal opens
+    React.useEffect(() => {
+        if (isOpen) setInputValue(defaultValue);
+    }, [isOpen, defaultValue]);
+
     if (!isOpen) return null;
 
     const getIcon = () => {
@@ -71,6 +84,23 @@ export const AlertModal: React.FC<AlertModalProps> = ({
                 <p className="text-gray-300 text-sm leading-relaxed whitespace-pre-wrap">
                     {message}
                 </p>
+
+                {inputType && (
+                    <input
+                        type={inputType}
+                        value={inputValue}
+                        onChange={(e) => setInputValue(e.target.value)}
+                        placeholder={inputPlaceholder}
+                        className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500 placeholder-gray-500 text-sm"
+                        autoFocus
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                                if (onConfirm) onConfirm(inputValue);
+                                onClose();
+                            }
+                        }}
+                    />
+                )}
                 
                 <div className="flex items-center gap-3 pt-2">
                     {cancelText && (
@@ -83,7 +113,7 @@ export const AlertModal: React.FC<AlertModalProps> = ({
                     )}
                     <button
                         onClick={() => {
-                            if (onConfirm) onConfirm();
+                            if (onConfirm) onConfirm(inputType ? inputValue : undefined);
                             onClose();
                         }}
                         className={`flex-1 px-4 py-2 text-white rounded-lg font-medium transition-colors ${getConfirmBtnColor()}`}

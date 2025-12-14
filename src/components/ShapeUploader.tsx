@@ -1,6 +1,7 @@
 import React from 'react';
 import { X, Upload, Box } from 'lucide-react';
 import { parseDxfToShapes, generateSVGPath } from '../utils/dxfUtils';
+import { centerShapes } from '../utils/patternUtils';
 import { SVGLoader, STLLoader } from 'three-stdlib';
 import * as THREE from 'three';
 
@@ -11,6 +12,8 @@ interface ShapeUploaderProps {
   className?: string;
   allowedTypes?: ('dxf' | 'svg' | 'stl')[];
   extractColors?: boolean;
+  adornment?: React.ReactNode;
+  externalShapes?: any[];
 }
 
 const ShapeUploader: React.FC<ShapeUploaderProps> = (props) => {
@@ -19,7 +22,9 @@ const ShapeUploader: React.FC<ShapeUploaderProps> = (props) => {
       onShapesLoaded, 
       onClear, 
       className,
-      allowedTypes = ['dxf', 'svg', 'stl'] 
+      allowedTypes = ['dxf', 'svg', 'stl'],
+      adornment,
+      externalShapes
   } = props;
   const [fileName, setFileName] = React.useState<string | null>(null);
   const [previewPath, setPreviewPath] = React.useState<string | null>(null);
@@ -94,16 +99,16 @@ const ShapeUploader: React.FC<ShapeUploaderProps> = (props) => {
                if (props.extractColors) {
                    // Separate shapes for centering calculation
                    const rawShapes = shapes.map(item => item.shape);
-                   const centered = centerShapes(rawShapes);
+                   const centered = centerShapes(rawShapes, true);
                    // Re-attach centerd shapes
                    shapes = shapes.map((item, i) => ({ ...item, shape: centered[i] }));
                } else {
-                   shapes = centerShapes(shapes as THREE.Shape[]);
+                   shapes = centerShapes(shapes as THREE.Shape[], true);
                }
                
            } else {
                // DXF
-               shapes = parseDxfToShapes(text);
+               shapes = parseDxfToShapes(text); if (props.extractColors) { shapes = shapes.map(s => ({ shape: s, color: '#000000' })); }
            }
            
            // If returning objects, map to shapes for preview generation
@@ -139,62 +144,44 @@ const ShapeUploader: React.FC<ShapeUploaderProps> = (props) => {
       }
     };
     reader.readAsText(file);
+    reader.readAsText(file);
   };
 
-  const centerShapes = (shapes: THREE.Shape[]): THREE.Shape[] => {
-      if (shapes.length === 0) return shapes;
-      
-      const min = new THREE.Vector2(Infinity, Infinity);
-      const max = new THREE.Vector2(-Infinity, -Infinity);
-      
-      shapes.forEach(shape => {
-           shape.getPoints().forEach(p => {
-               min.min(p);
-               max.max(p);
-           });
-      });
-      
-      const center = new THREE.Vector2().addVectors(min, max).multiplyScalar(0.5);
-      
-      // If already centered (close enough), return
-      if (center.lengthSq() < 0.001) return shapes;
+  // Effect to update preview if externalShapes change
+  React.useEffect(() => {
+     if (externalShapes && externalShapes.length > 0) {
+         // Generate preview from external edits
+         const shapesToRender = externalShapes.map(s => s.shape || s);
+         const path = generateSVGPath(shapesToRender);
+         setPreviewPath(path);
+         
+         // Update ViewBox to match these shapes ?? 
+         // For now, assume these are in the same coordinate space as original
+         // Or calculate bounds again?
+         const bounds = new THREE.Box2();
+         shapesToRender.forEach(s => {
+             s.getPoints().forEach(p => {
+                 // Note: logic in processFile calculated Min/Max.
+                 // Here we duplicate it briefly or assume existing svgViewBox is okay?
+                 // If user drew outside, we should expand.
+                 bounds.expandByPoint(p);
+             });
+         });
+         
+         if (!bounds.isEmpty()) {
+             const min = bounds.min;
+             const max = bounds.max;
+             const padding = Math.max((max.x - min.x), (max.y - min.y)) * 0.1;
+             // Match the Y-flip logic of processFile
+             setSvgViewBox(`${min.x - padding} ${-max.y - padding} ${max.x - min.x + padding * 2} ${max.y - min.y + padding * 2}`);
+         }
+     } else if (!fileName) {
+         // Reset if no file and no external shapes
+         setPreviewPath(null);
+     }
+  }, [externalShapes, fileName]);
 
-      return shapes.map(shape => {
-          const newShape = new THREE.Shape();
-          
-          // Move Shape Points
-          const pts = shape.getPoints();
-          
-          // Enforce CCW for outer shape
-          if (THREE.ShapeUtils.area(pts) < 0) {
-              pts.reverse();
-          }
 
-          pts.forEach((p, i) => {
-              const tx = p.x - center.x;
-              const ty = -(p.y - center.y); // Flip Y
-              if (i === 0) newShape.moveTo(tx, ty);
-              else newShape.lineTo(tx, ty);
-          });
-
-          // Move Holes
-          if (shape.holes && shape.holes.length > 0) {
-              shape.holes.forEach(hole => {
-                  const newHole = new THREE.Path();
-                  const hPts = hole.getPoints();
-                  hPts.forEach((p, i) => {
-                      const tx = p.x - center.x;
-                      const ty = -(p.y - center.y); // Flip Y
-                      if (i === 0) newHole.moveTo(tx, ty);
-                      else newHole.lineTo(tx, ty);
-                  });
-                  newShape.holes.push(newHole);
-              });
-          }
-          
-          return newShape;
-      });
-  };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -233,9 +220,12 @@ const ShapeUploader: React.FC<ShapeUploaderProps> = (props) => {
 
   return (
       <div className={`space-y-2 ${className}`}>
-        <label className="block text-sm font-medium text-gray-300">
-          {label}
-        </label>
+        <div className="flex justify-between items-center">
+            <label className="block text-sm font-medium text-gray-300">
+            {label}
+            </label>
+            {adornment}
+        </div>
         <div className="flex items-center justify-center w-full">
             <label 
                 htmlFor={inputId}
@@ -258,9 +248,11 @@ const ShapeUploader: React.FC<ShapeUploaderProps> = (props) => {
                          </div>
                     )}
                     
-                    {fileName ? (
+                    {(fileName || (externalShapes && externalShapes.length > 0)) ? (
                         <div className="flex items-center gap-2 bg-gray-800/80 px-4 py-2 rounded-full backdrop-blur-sm shadow-sm border border-gray-600">
-                            <span className="text-sm text-green-400 font-medium truncate max-w-[180px]">{fileName}</span>
+                            <span className={`text-sm font-medium truncate max-w-[180px] ${fileName ? 'text-green-400' : 'text-purple-400'}`}>
+                                {fileName || "Custom Drawing"}
+                            </span>
                             <button 
                                 onClick={handleRemoveFile}
                                 className="p-1 hover:bg-gray-600 rounded-full text-gray-400 hover:text-white transition-colors"
@@ -276,7 +268,7 @@ const ShapeUploader: React.FC<ShapeUploaderProps> = (props) => {
                         </>
                     )}
                 </div>
-                {!fileName && <input id={inputId} type="file" className="hidden" accept={acceptString} onChange={handleFileChange} />}
+                {!fileName && !(externalShapes && externalShapes.length > 0) && <input id={inputId} type="file" className="hidden" accept={acceptString} onChange={handleFileChange} />}
             </label>
         </div> 
       </div>

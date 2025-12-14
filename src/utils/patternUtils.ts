@@ -477,3 +477,63 @@ export const tileShapes = (
 
     return tiledShapes;
 };
+
+/**
+ * Centers a set of shapes around (0,0).
+ * Optionally flips the Y axis (useful for SVG import).
+ */
+export const centerShapes = (shapes: THREE.Shape[], flipY: boolean = false): THREE.Shape[] => {
+    if (shapes.length === 0) return shapes;
+
+    const min = new THREE.Vector2(Infinity, Infinity);
+    const max = new THREE.Vector2(-Infinity, -Infinity);
+
+    shapes.forEach(shape => {
+        shape.getPoints().forEach(p => {
+            min.min(p);
+            max.max(p);
+        });
+    });
+
+    const center = new THREE.Vector2().addVectors(min, max).multiplyScalar(0.5);
+
+    // If already centered (close enough) and no flip, return
+    if (center.lengthSq() < 0.001 && !flipY) return shapes;
+
+    return shapes.map(shape => {
+        const newShape = new THREE.Shape();
+
+        // Move Shape Points
+        const pts = shape.getPoints();
+
+        // Enforce CCW for outer shape
+        if (THREE.ShapeUtils.area(pts) < 0) {
+            pts.reverse();
+        }
+
+        pts.forEach((p, i) => {
+            const tx = p.x - center.x;
+            const ty = flipY ? -(p.y - center.y) : (p.y - center.y);
+            if (i === 0) newShape.moveTo(tx, ty);
+            else newShape.lineTo(tx, ty);
+        });
+
+        // Move Holes
+        if (shape.holes && shape.holes.length > 0) {
+            shape.holes.forEach(hole => {
+                const newHole = new THREE.Path();
+                const hPts = hole.getPoints();
+                hPts.forEach((p, i) => {
+                    const tx = p.x - center.x;
+                    const ty = flipY ? -(p.y - center.y) : (p.y - center.y);
+                    if (i === 0) newHole.moveTo(tx, ty);
+                    else newHole.lineTo(tx, ty);
+                });
+                newShape.holes.push(newHole);
+            });
+        }
+
+        return newShape;
+    });
+};
+

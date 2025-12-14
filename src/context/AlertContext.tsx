@@ -7,7 +7,10 @@ interface AlertOptions {
     type?: AlertType;
     confirmText?: string;
     cancelText?: string;
-    onConfirm?: () => void;
+    inputType?: 'text' | 'number';
+    inputPlaceholder?: string;
+    defaultValue?: string;
+    onConfirm?: (value?: string) => void;
 }
 
 interface AlertContextType {

@@ -750,7 +750,14 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
         {showFps && <FpsTracker fpsRef={fpsRef as React.RefObject<HTMLDivElement>} />}
         <ScreenshotManager triggerRef={captureRef} size={size} />
         <CameraRig viewState={viewState} size={size} setCameraType={setCameraType} />
-        <OrbitControls makeDefault />
+        <OrbitControls 
+            makeDefault 
+            mouseButtons={{
+                LEFT: THREE.MOUSE.ROTATE,
+                MIDDLE: THREE.MOUSE.PAN,
+                RIGHT: THREE.MOUSE.PAN
+            }}
+        />
         <ambientLight intensity={0.5} />
         <directionalLight position={[100, -50, 100]} intensity={1} castShadow={false} />
         
@@ -788,12 +795,14 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
             </mesh>
 
             {/* Base Pattern Inlays (Colored Meshes) */}
-            {basePatternShapes && basePatternShapes.length > 0 && basePatternShapes.map((item, i) => (
+            {basePatternShapes && basePatternShapes.length > 0 && basePatternShapes.map((item, i) => {
+                if (item.color === 'transparent') return null;
+                return (
                 <mesh
                     key={`inlay-${i}`}
                     // Overlap floor by 0.01mm to fix non-manifold edges in export
-                    position={[0, 0, thickness - basePatternDepth - 0.01]}
-                    scale={[basePatternScale, basePatternScale, 1]}
+                    position={[0, 0, thickness - basePatternDepth]}
+                    scale={[basePatternScale, basePatternScale, 1 + (i * 0.0002)]}
                     castShadow
                     receiveShadow
                 >
@@ -801,9 +810,10 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
                         [item.shape], 
                         { depth: basePatternDepth + 0.01, bevelEnabled: false }
                     ]} />
-                    <meshStandardMaterial color={item.color} wireframe={showWireframe} />
+                    <meshStandardMaterial color={item.color === 'base' ? color : item.color} wireframe={showWireframe} />
                 </mesh>
-            ))}
+                );
+            })}
             
             {/* Pattern Mesh - Consolidated */}
             {finalPatternShapes && (finalPatternShapes instanceof THREE.BufferGeometry || (Array.isArray(finalPatternShapes) && finalPatternShapes.length > 0)) && (
