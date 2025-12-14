@@ -259,7 +259,7 @@ const ShapeUploader: React.FC<ShapeUploaderProps> = (props) => {
                     )}
                     
                     {fileName ? (
-                        <div className="flex items-center gap-2 z-10 bg-gray-800/80 px-4 py-2 rounded-full backdrop-blur-sm shadow-sm border border-gray-600">
+                        <div className="flex items-center gap-2 bg-gray-800/80 px-4 py-2 rounded-full backdrop-blur-sm shadow-sm border border-gray-600">
                             <span className="text-sm text-green-400 font-medium truncate max-w-[180px]">{fileName}</span>
                             <button 
                                 onClick={handleRemoveFile}

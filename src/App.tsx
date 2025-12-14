@@ -5,6 +5,8 @@ import OutputPanel from "./components/OutputPanel";
 import * as THREE from 'three';
 import { DEFAULT_BASE_COLOR, DEFAULT_PATTERN_COLOR } from './constants/colors';
 
+import { WelcomeModal } from "./components/WelcomeModal";
+
 const App = () => {
   const [size, setSize] = useState(300);
   const [thickness, setThickness] = useState(3);
@@ -29,6 +31,12 @@ const App = () => {
   const [basePatternShapes, setBasePatternShapes] = useState<any[] | null>(null);
   const [basePatternDepth, setBasePatternDepth] = useState(0.6);
   const [basePatternScale, setBasePatternScale] = useState(1);
+
+  // Welcome Modal State
+  const [showWelcome, setShowWelcome] = useState(() => {
+      // Check local storage on init
+      return !localStorage.getItem('welcome_modal_dismissed');
+  });
 
   const meshRef = useRef<THREE.Group>(null);
 
@@ -75,7 +83,7 @@ const App = () => {
         </div>
 
         {/* Right Panel - Controls & Output */}
-        <div className="h-1/2 md:h-auto w-full md:w-96 overflow-y-auto flex flex-col p-4 gap-4 bg-gray-950 md:bg-transparent border-t md:border-t-0 border-gray-800">
+        <div className="h-1/2 md:h-auto w-full md:w-96 overflow-hidden flex flex-col p-4 gap-4 bg-gray-950 md:bg-transparent border-t md:border-t-0 border-gray-800">
             <Controls 
               size={size} 
               setSize={setSize}
@@ -117,14 +125,39 @@ const App = () => {
               setBasePatternDepth={setBasePatternDepth}
               basePatternScale={basePatternScale}
               setBasePatternScale={setBasePatternScale}
+              onReset={() => {
+                  setSize(300);
+                  setThickness(3);
+                  setColor(DEFAULT_BASE_COLOR);
+                  setCutoutShapes(null);
+                  setPatternShapes(null);
+                  setPatternType(null);
+                  setExtrusionAngle(45);
+                  setPatternHeight('');
+                  setPatternScale(1);
+                  setIsTiled(false);
+                  setTileSpacing(10);
+                  setPatternMargin(3);
+                  setPatternColor(DEFAULT_PATTERN_COLOR);
+                  setClipToOutline(true);
+                  setTilingDistribution('offset');
+                  setTilingRotation('random');
+                  setBasePatternShapes(null);
+                  setBasePatternDepth(0.6);
+                  setBasePatternScale(1);
+               }}
+               onOpenWelcome={() => setShowWelcome(true)}
             />
-            <div>
+            <div className="flex-shrink-0">
                <OutputPanel meshRef={meshRef} debugMode={debugMode} />
             </div>
         </div>
       </main>
+
+      {/* Welcome Modal */}
+      {showWelcome && <WelcomeModal onClose={() => setShowWelcome(false)} />}
     </div>
   );
 };
 
-export default App;
+export default App; // Force update

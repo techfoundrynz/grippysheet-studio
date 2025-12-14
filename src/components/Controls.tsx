@@ -1,6 +1,5 @@
 import React from 'react';
 import ShapeUploader from './ShapeUploader';
-import { HeaderLinksSelector } from './HeaderLinksSelector';
 import { getShapesBounds, getGeometryBounds } from '../utils/patternUtils';
 
 interface ControlsProps {
@@ -43,10 +42,12 @@ interface ControlsProps {
   setBasePatternDepth: (depth: number) => void;
   basePatternScale: number;
   setBasePatternScale: (scale: number) => void;
+  onReset?: () => void;
+  onOpenWelcome?: () => void;
 }
 
 import { COLORS } from '../constants/colors';
-import { Grid3x3, MousePointer2, Maximize, Scissors } from 'lucide-react';
+import { Grid3x3, MousePointer2, Maximize, Scissors, RotateCcw, AlertTriangle, X, HelpCircle } from 'lucide-react';
 import { DebouncedInput } from './DebouncedInput';
 
 
@@ -80,8 +81,11 @@ const Controls: React.FC<ControlsProps> = ({
   basePatternDepth,
   setBasePatternDepth,
   basePatternScale,
-  setBasePatternScale
+  setBasePatternScale,
+  onReset,
+  onOpenWelcome
 }) => {
+  const [showResetConfirm, setShowResetConfirm] = React.useState(false);
 
   // ... handlePatternLoaded ... (omitted for brevity, assume keeps existing)
   const handlePatternLoaded = (shapes: any[], type?: 'dxf' | 'svg' | 'stl') => {
@@ -117,18 +121,23 @@ const Controls: React.FC<ControlsProps> = ({
   };
 
   return (
-    <div className="bg-gray-800 p-6 rounded-lg border border-gray-700 shadow-lg space-y-6">
-      <div className="flex items-start justify-between mb-2">
-        <div>
+    <div className="bg-gray-800 rounded-lg border border-gray-700 shadow-lg min-h-0 flex-shrink transition-all overflow-y-auto custom-scrollbar relative">
+      <div className="md:sticky md:top-0 z-10 bg-gray-800 p-6 pb-4 border-b border-gray-700/50 mb-0">
+        <div className="flex items-center justify-between mb-1">
           <h2 className="text-xl font-bold bg-gradient-to-r from-purple-400 to-cyan-400 bg-clip-text text-transparent">
-            GrippySheet Designer
+            GrippySheet Studio
           </h2>
-          <p className="text-gray-400 text-sm">Configure your grip</p>
+          <button
+            onClick={onOpenWelcome}
+            className="p-2 text-gray-400 hover:text-white hover:bg-gray-700/50 rounded-lg transition-all"
+            title="Help & Info"
+          >
+            <HelpCircle size={20} />
+          </button>
         </div>
-        <HeaderLinksSelector />
       </div>
 
-      <div className="space-y-6">
+      <div className="p-6 pt-2 space-y-6">
         {/* Base Settings */}
         <section className="space-y-4">
           <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-2">
@@ -173,7 +182,7 @@ const Controls: React.FC<ControlsProps> = ({
                   <button
                     key={value}
                     onClick={() => setColor(value)}
-                    className={`w-6 h-6 rounded-md transition-all hover:scale-110 active:scale-95 ${color === value ? 'ring-2 ring-white z-10' : 'hover:ring-1 hover:ring-white/50'}`}
+                    className={`w-6 h-6 rounded-md transition-all hover:scale-110 active:scale-95 ${color === value ? 'ring-2 ring-white' : 'hover:ring-1 hover:ring-white/50'}`}
                     style={{ backgroundColor: value }}
                     title={name}
                   />
@@ -477,7 +486,7 @@ const Controls: React.FC<ControlsProps> = ({
                      <button
                        key={value}
                        onClick={() => setPatternColor(value)}
-                       className={`w-6 h-6 rounded-md transition-all hover:scale-110 active:scale-95 ${patternColor === value ? 'ring-2 ring-white z-10' : 'hover:ring-1 hover:ring-white/50'}`}
+                       className={`w-6 h-6 rounded-md transition-all hover:scale-110 active:scale-95 ${patternColor === value ? 'ring-2 ring-white' : 'hover:ring-1 hover:ring-white/50'}`}
                        style={{ backgroundColor: value }}
                        title={name}
                      />
@@ -487,6 +496,63 @@ const Controls: React.FC<ControlsProps> = ({
             </>
           )}
         </section>
+
+        {/* Reset Button */}
+        {onReset && (
+             <div className="pt-6 border-t border-gray-700">
+                <button
+                    onClick={() => setShowResetConfirm(true)}
+                    className="w-full bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 border border-red-500/50 hover:border-red-400 p-3 rounded-lg flex items-center justify-center gap-2 transition-all font-medium"
+                >
+                    <RotateCcw size={18} />
+                    Reset All Settings
+                </button>
+             </div>
+        )}
+
+        {/* Custom Reset Modal */}
+         {showResetConfirm && (
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                <div className="bg-gray-800 border border-gray-700 rounded-xl shadow-2xl max-w-sm w-full p-6 space-y-4 animate-in fade-in zoom-in duration-200">
+                    <div className="flex items-start justify-between">
+                        <div className="flex items-center gap-3 text-amber-400">
+                             <div className="p-2 bg-amber-400/10 rounded-lg">
+                                <AlertTriangle size={24} />
+                             </div>
+                             <h3 className="text-lg font-bold text-white">Reset Settings?</h3>
+                        </div>
+                        <button 
+                            onClick={() => setShowResetConfirm(false)}
+                            className="text-gray-400 hover:text-white transition-colors"
+                        >
+                            <X size={20} />
+                        </button>
+                    </div>
+                    
+                    <p className="text-gray-300 text-sm leading-relaxed">
+                        Are you sure you want to reset all settings to their defaults? This action cannot be undone and your current design will be lost.
+                    </p>
+                    
+                    <div className="flex items-center gap-3 pt-2">
+                        <button
+                            onClick={() => setShowResetConfirm(false)}
+                            className="flex-1 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg font-medium transition-colors"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={() => {
+                                if (onReset) onReset();
+                                setShowResetConfirm(false);
+                            }}
+                            className="flex-1 px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg font-medium transition-colors"
+                        >
+                            Confirm Reset
+                        </button>
+                    </div>
+                </div>
+            </div>
+         )}
       </div>
     </div>
   );

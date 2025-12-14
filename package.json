@@ -1,7 +1,7 @@
 {
-  "name": "grippysheet-designer",
+  "name": "grippysheet-studio",
   "private": true,
-  "homepage": "https://techfoundrynz.github.io/grippysheet-designer",
+  "homepage": "https://techfoundrynz.github.io/grippysheet-studio",
   "version": "0.0.0",
   "type": "module",
   "scripts": {

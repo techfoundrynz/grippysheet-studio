@@ -161,13 +161,7 @@ const OutputPanel: React.FC<OutputPanelProps> = ({ meshRef, debugMode = false })
 
   return (
     <div className="bg-gray-800 p-6 rounded-lg border border-gray-700 space-y-4 shadow-lg">
-      <h2 className="text-xl font-semibold text-white">Output</h2>
-      
-      <div className="space-y-2">
-        <p className="text-sm text-gray-400">
-          Export options:
-        </p>
-        
+      <div className="space-y-2">        
         <div className="grid grid-cols-1 gap-2">
             <button
             onClick={handleExport3MF}
