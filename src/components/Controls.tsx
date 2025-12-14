@@ -31,10 +31,10 @@ interface ControlsProps {
   setPatternColor: (val: string) => void;
   clipToOutline?: boolean;
   setClipToOutline?: (val: boolean) => void;
-  tilingDistribution: 'grid' | 'offset' | 'hex' | 'radial' | 'random';
-  setTilingDistribution: (val: 'grid' | 'offset' | 'hex' | 'radial' | 'random') => void;
-  tilingRotation: 'none' | 'alternate' | 'random';
-  setTilingRotation: (v: 'none' | 'alternate' | 'random') => void;
+  tilingDistribution: 'grid' | 'offset' | 'hex' | 'radial' | 'random' | 'wave-v' | 'wave-h' | 'zigzag-v' | 'zigzag-h';
+  setTilingDistribution: (val: 'grid' | 'offset' | 'hex' | 'radial' | 'random' | 'wave-v' | 'wave-h' | 'zigzag-v' | 'zigzag-h') => void;
+  tilingRotation: 'none' | 'alternate' | 'random' | 'aligned';
+  setTilingRotation: (v: 'none' | 'alternate' | 'random' | 'aligned') => void;
   debugMode?: boolean;
   inlayShapes: any[] | null;
   setInlayShapes: (shapes: any[]) => void;
@@ -53,9 +53,9 @@ interface ControlsProps {
 
 import { COLORS } from '../constants/colors';
 import { Grid3x3, MousePointer2, Maximize, Scissors, RotateCcw, HelpCircle, ChevronDown, Palette } from 'lucide-react';
-import { DebouncedInput } from './DebouncedInput';
+import DebouncedInput from './DebouncedInput';
 import { useAlert } from '../context/AlertContext';
-import { SVGPaintModal } from './SVGPaintModal';
+import SVGPaintModal from './SVGPaintModal';
 
 
 const Controls: React.FC<ControlsProps> = ({

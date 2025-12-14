@@ -15,7 +15,7 @@ interface SVGPaintModalProps {
     baseColor: string;
 }
 
-export const SVGPaintModal: React.FC<SVGPaintModalProps> = ({ isOpen, onClose, shapes, onSave, baseColor }) => {
+const SVGPaintModal: React.FC<SVGPaintModalProps> = ({ isOpen, onClose, shapes, onSave, baseColor }) => {
     const { showAlert } = useAlert();
     const [localShapes, setLocalShapes] = useState<any[]>([]);
     const [selectedColor, setSelectedColor] = useState<string>(COLORS.White);
@@ -601,3 +601,5 @@ export const SVGPaintModal: React.FC<SVGPaintModalProps> = ({ isOpen, onClose, s
         </div>
     );
 };
+
+export default SVGPaintModal;

@@ -6,7 +6,7 @@ interface WelcomeModalProps {
     onClose: () => void;
 }
 
-export const WelcomeModal: React.FC<WelcomeModalProps> = ({ onClose }) => {
+const WelcomeModal: React.FC<WelcomeModalProps> = ({ onClose }) => {
     const [dontShowAgain, setDontShowAgain] = useState(() => {
         return !!localStorage.getItem('welcome_modal_dismissed');
     });
@@ -142,3 +142,5 @@ export const WelcomeModal: React.FC<WelcomeModalProps> = ({ onClose }) => {
         </div>
     );
 };
+
+export default WelcomeModal;

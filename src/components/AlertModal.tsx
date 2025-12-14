@@ -17,7 +17,7 @@ interface AlertModalProps {
     onConfirm?: (value?: string) => void;
 }
 
-export const AlertModal: React.FC<AlertModalProps> = ({
+const AlertModal: React.FC<AlertModalProps> = ({
     isOpen,
     onClose,
     title,
@@ -125,3 +125,5 @@ export const AlertModal: React.FC<AlertModalProps> = ({
         </div>
     );
 };
+
+export default AlertModal;

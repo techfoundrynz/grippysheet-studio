@@ -6,7 +6,7 @@ interface DebouncedInputProps extends Omit<React.InputHTMLAttributes<HTMLInputEl
   debounce?: number;
 }
 
-export const DebouncedInput: React.FC<DebouncedInputProps> = ({ 
+const DebouncedInput: React.FC<DebouncedInputProps> = ({ 
   value: initialValue, 
   onChange, 
   debounce = 300, 
@@ -36,3 +36,5 @@ export const DebouncedInput: React.FC<DebouncedInputProps> = ({
     />
   );
 };
+
+export default DebouncedInput;

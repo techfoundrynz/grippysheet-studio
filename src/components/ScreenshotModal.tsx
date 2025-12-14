@@ -8,7 +8,7 @@ interface ScreenshotModalProps {
     onCapture: (bgColor: string | null) => void;
 }
 
-export const ScreenshotModal: React.FC<ScreenshotModalProps> = ({ isOpen, onClose, onCapture }) => {
+const ScreenshotModal: React.FC<ScreenshotModalProps> = ({ isOpen, onClose, onCapture }) => {
     const [selectedColor, setSelectedColor] = React.useState<string | null>(null); // null = transparent
 
     if (!isOpen) return null;
@@ -72,3 +72,5 @@ export const ScreenshotModal: React.FC<ScreenshotModalProps> = ({ isOpen, onClos
         </div>
     );
 };
+
+export default ScreenshotModal;

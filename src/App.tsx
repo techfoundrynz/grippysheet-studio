@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import { DEFAULT_BASE_COLOR, DEFAULT_PATTERN_COLOR } from './constants/colors';
 import { AlertProvider } from './context/AlertContext';
 
-import { WelcomeModal } from "./components/WelcomeModal";
+import WelcomeModal from "./components/WelcomeModal";
 
 const App = () => {
   const [size, setSize] = useState(300);

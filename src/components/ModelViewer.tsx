@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Canvas, useThree, useFrame } from '@react-three/fiber';
-import { OrbitControls, Line, Instances, Instance, OrthographicCamera, PerspectiveCamera } from '@react-three/drei';
+import { Canvas } from '@react-three/fiber';
+import { OrbitControls, OrthographicCamera, PerspectiveCamera, Line } from '@react-three/drei';
 import { Box, Layers, ScanLine, Activity, Ghost, RotateCcw, Camera as CameraIcon } from 'lucide-react';
 import * as THREE from 'three';
-import { ScreenshotModal } from './ScreenshotModal';
+import ScreenshotModal from './ScreenshotModal';
 import { Subtraction, Base, Geometry, Intersection } from '@react-three/csg';
 import { generateTilePositions, getGeometryBounds, getShapesBounds } from '../utils/patternUtils';
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
@@ -24,7 +24,7 @@ interface ModelViewerProps {
   tileSpacing: number;
   patternMargin: number;
   tilingDistribution?: 'grid' | 'offset' | 'hex' | 'radial' | 'random' | 'wave-v' | 'wave-h' | 'zigzag-v' | 'zigzag-h';
-  tilingRotation?: 'none' | 'alternate' | 'random';
+  tilingRotation?: 'none' | 'alternate' | 'random' | 'aligned';
   clipToOutline?: boolean;
   debugMode?: boolean;
   inlayShapes?: any[] | null;
@@ -33,339 +33,11 @@ interface ModelViewerProps {
   inlayExtend?: number;
 }
 
-type ViewState = {
-  type: 'iso' | 'ortho';
-  timestamp: number;
-};
+import CameraRig, { ViewState } from './CameraRig';
+import FpsTracker from './FpsTracker';
+import STLTiles from './STLTiles';
+import ScreenshotManager from './ScreenshotManager';
 
-export type ViewType = 'top' | 'perspective';
-
-const CameraRig: React.FC<{ 
-  viewState: ViewState; 
-  size: number; 
-  setCameraType: (type: 'perspective' | 'orthographic') => void 
-}> = ({ viewState, size, setCameraType }) => {
-  const { camera, controls, size: canvasSize } = useThree();
-  const targetPos = React.useRef(new THREE.Vector3(500, -500, 500));
-  const targetZoom = React.useRef(1);
-  const targetLookAt = React.useRef(new THREE.Vector3(0, 0, 0));
-  const animationPhase = React.useRef<'idle' | 'rotate' | 'zoom'>('idle');
-  const lastTimestamp = React.useRef(0);
-  const animationStart = React.useRef(0);
-  const pendingOrthoZoom = React.useRef<number | null>(null);
-
-  useEffect(() => {
-    // Only trigger if timestamp changed (user action)
-    if (viewState.timestamp === lastTimestamp.current) return;
-    lastTimestamp.current = viewState.timestamp;
-
-    // 1. Setup based on View Type
-    if (viewState.type === 'ortho') {
-      // Transition to Ortho:
-      // Keep Perspective (don't switch yet)
-      targetPos.current.set(0, -1, 1000); // Top view position
-      
-      // Calculate target zoom for Fit (to apply later)
-      const minDim = Math.min(canvasSize.width, canvasSize.height);
-      const fitZoom = (minDim * 0.7) / size;
-      targetZoom.current = fitZoom;
-      
-    } else {
-      // Transition to Iso:
-      // Switch to Perspective immediately
-      setCameraType('perspective');
-      targetPos.current.set(500, -500, 500); 
-      targetZoom.current = 1; // Perspective zoom usually 1
-    }
-    
-    // 2. Reset Controls Target
-    targetLookAt.current.set(0, 0, 0);
-    
-    // 3. Start Animation
-    animationPhase.current = 'rotate';
-    animationStart.current = Date.now();
-    pendingOrthoZoom.current = null; // Reset
-
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [viewState]);
-
-  // Handle Camera Switch (Apply matched zoom)
-  useEffect(() => {
-     if (camera instanceof THREE.OrthographicCamera && pendingOrthoZoom.current !== null) {
-         camera.zoom = pendingOrthoZoom.current;
-         camera.updateProjectionMatrix();
-         // Reset pending
-         pendingOrthoZoom.current = null;
-     }
-  }, [camera]);
-
-  // Stop animation when user interacts
-  useEffect(() => {
-    if (!controls) return;
-    const ctrl = controls as any;
-    const callback = () => {
-        // Grace period: ignore events shortly after animation starts
-        if (Date.now() - animationStart.current < 200) return;
-        animationPhase.current = 'idle';
-    };
-    ctrl.addEventListener('start', callback);
-    return () => ctrl.removeEventListener('start', callback);
-  }, [controls]);
-
-  useFrame((_, delta) => {
-      if (animationPhase.current === 'idle') return;
-
-      const damp = Math.min(15 * delta, 0.8); 
-      const epsilon = 0.001;
-      const zoomEpsilon = 0.001;
-
-      // PHASE 1: ROTATE & PAN
-      if (animationPhase.current === 'rotate') {
-          // Lerp Position with Slerp-like behavior (Nlerp)
-          const distCurrent = camera.position.distanceTo(JSON.stringify(targetLookAt.current) === JSON.stringify(new THREE.Vector3(0,0,0)) ? new THREE.Vector3(0,0,0) : targetLookAt.current);
-          const distTarget = targetPos.current.distanceTo(new THREE.Vector3(0,0,0));
-          
-          camera.position.lerp(targetPos.current, damp);
-          const interpolatedDist = THREE.MathUtils.lerp(distCurrent, distTarget, damp);
-          camera.position.normalize().multiplyScalar(interpolatedDist);
-          
-          // Lerp Controls Target
-          if (controls) {
-             const orbit = controls as any;
-             orbit.target.lerp(targetLookAt.current, damp);
-             orbit.update();
-          }
-
-          // Check if Rotation Finished
-          const distPos = camera.position.distanceTo(targetPos.current);
-          if (distPos < 5) { 
-               // If going to Ortho, switch NOW
-               if (viewState.type === 'ortho' && !(camera instanceof THREE.OrthographicCamera)) {
-                   
-                   // Calculate Matched Zoom for smooth transition
-                   const dist = camera.position.distanceTo(targetLookAt.current); // Should be ~1000
-                   // Perspective visible height at distance d = 2 * d * tan(fov/2)
-                   // We assume default FOV 45
-                   const fovRad = (45 * Math.PI) / 180;
-                   const visibleHeight = 2 * dist * Math.tan(fovRad / 2); // ~828 at 1000
-                   const matchedZoom = canvasSize.height / visibleHeight;
-                   
-                   pendingOrthoZoom.current = matchedZoom;
-                   setCameraType('orthographic');
-               }
-               animationPhase.current = 'zoom';
-          }
-      }
-
-      // PHASE 2: ZOOM (Sequential)
-      if (animationPhase.current === 'zoom') {
-          // Continue positional lerp
-          camera.position.lerp(targetPos.current, damp);
-          if (controls) {
-             const orbit = controls as any;
-             orbit.target.lerp(targetLookAt.current, damp);
-             orbit.update();
-          }
-
-          // Lerp Zoom
-          let currentZoom = camera.zoom;
-          
-          if (camera instanceof THREE.OrthographicCamera) {
-              camera.zoom = THREE.MathUtils.lerp(camera.zoom, targetZoom.current, damp);
-              camera.updateProjectionMatrix();
-              currentZoom = camera.zoom;
-          } else {
-              // Perspective Zoom (FOV scaling? or just 1?)
-              // Generally keep at 1. If we used zoom for effect, we'd lerp it.
-              camera.zoom = THREE.MathUtils.lerp(camera.zoom, 1, damp);
-              camera.updateProjectionMatrix();
-              currentZoom = camera.zoom;
-          }
-
-          // Check Completion
-          const distPos = camera.position.distanceTo(targetPos.current);
-          const distZoom = Math.abs(currentZoom - targetZoom.current);
-
-          if (distPos < epsilon && distZoom < zoomEpsilon) {
-              animationPhase.current = 'idle';
-          }
-      }
-  });
-
-  return null;
-};
-
-const FpsTracker: React.FC<{ fpsRef: React.RefObject<HTMLDivElement> }> = ({ fpsRef }) => {
-  const lastTimeRef = React.useRef(performance.now());
-  const updateInterval = 1000 / 15;
-
-  useFrame((_, delta) => {
-      const now = performance.now();
-      if (fpsRef.current && now - lastTimeRef.current >= updateInterval) {
-          const fps = 1 / Math.max(delta, 0.001);
-          const fpsString = String(Math.round(fps)).padStart(3, '\u00A0');
-          fpsRef.current.innerText = `${fpsString} FPS`;
-          lastTimeRef.current = now;
-      }
-  });
-
-  return null;
-};
-
-const STLTiles = React.memo(({ instances, geometry, color, wireframe, thickness, opacity }: { instances: any[], geometry: THREE.BufferGeometry, color: string, wireframe: boolean, thickness: number, transparent?: boolean, opacity?: number }) => {
-    const offset = React.useMemo(() => {
-        if (!geometry.boundingBox) geometry.computeBoundingBox();
-        const box = geometry.boundingBox!;
-        const zHeight = box.max.z - box.min.z;
-        return zHeight / 2;
-    }, [geometry]);
-
-    return (
-        <Instances
-            range={instances.length}
-            geometry={geometry}
-            // Overlap base by 0.01mm for manifold export
-            position={[0, 0, thickness - 0.01]} 
-        >
-            <meshStandardMaterial color={color} wireframe={wireframe} transparent opacity={opacity} />
-            {instances.map((data, i) => (
-                <Instance
-                    key={i}
-                    position={[data.position.x, data.position.y, offset * data.scale]} 
-                    rotation={[0, 0, data.rotation]}
-                    scale={[data.scale, data.scale, data.scale]}
-                />
-            ))}
-        </Instances>
-    );
-});
-
-// Screenshot Manager Component using useThree hook
-const ScreenshotManager: React.FC<{ 
-    triggerRef: React.MutableRefObject<((bgColor: string | null) => void) | null>,
-    size: number
-}> = ({ triggerRef, size }) => {
-    const { gl, scene, camera: activeCamera } = useThree();
-    
-    useEffect(() => {
-        triggerRef.current = (bgColor: string | null) => {
-            const originalSize = new THREE.Vector2();
-            gl.getSize(originalSize);
-            const originalPixelRatio = gl.getPixelRatio();
-            const originalBackground = scene.background;
-            
-            try {
-                // 1. Configure High-Res Render
-                const targetRes = 1600;
-                gl.setPixelRatio(1);
-                gl.setSize(targetRes, targetRes, false); // false = don't update CSS style
-                
-                // 2. Setup Background
-                if (bgColor) {
-                    scene.background = new THREE.Color(bgColor);
-                } else {
-                    scene.background = null;
-                }
-                
-                // 3. Setup Temporary Orthographic Camera (Top Down)
-                // Calculate Frustum to fit object with padding
-                const padding = 1.2;
-                const frustumSize = size * padding;
-                const halfSize = frustumSize / 2;
-                
-                const shotCamera = new THREE.OrthographicCamera(
-                    -halfSize, halfSize, 
-                    halfSize, -halfSize, 
-                    -2000, 2000
-                );
-                shotCamera.position.set(0, 0, 1000);
-                shotCamera.lookAt(0, 0, 0);
-                shotCamera.updateProjectionMatrix();
-
-                // 4. Hide Helpers (Grid, Gizmos if any)
-                const hiddenObjects: THREE.Object3D[] = [];
-                scene.traverse((obj) => {
-                    if (obj instanceof THREE.GridHelper || obj.type === 'GridHelper' || obj.type === 'AxesHelper') {
-                        if (obj.visible) {
-                            obj.visible = false;
-                            hiddenObjects.push(obj);
-                        }
-                    }
-                });
-
-                // 5. Render & Capture
-                gl.render(scene, shotCamera);
-                
-                // Composite Watermark (2D Canvas)
-                const canvas = document.createElement('canvas');
-                canvas.width = targetRes;
-                canvas.height = targetRes;
-                const ctx = canvas.getContext('2d');
-                
-                let dataUrl = '';
-
-                if (ctx) {
-                    // Draw 3D Scale
-                    ctx.drawImage(gl.domElement, 0, 0);
-
-                    // Watermark Settings
-                    const fontSize = 32;
-                    const lineHeight = 1.4;
-                    const padding = 40;
-                    
-                    ctx.font = `bold ${fontSize}px Inter, system-ui, sans-serif`;
-                    ctx.textAlign = 'right';
-                    ctx.textBaseline = 'bottom';
-                    
-                    // Shadow for visibility
-                    ctx.shadowColor = 'rgba(0,0,0,0.8)';
-                    ctx.shadowBlur = 4;
-                    ctx.shadowOffsetX = 1;
-                    ctx.shadowOffsetY = 1;
-                    ctx.fillStyle = '#ffffff';
-
-                    const text1 = "Made with GrippySheet Studio";
-                    const text2 = "https://studio.grippysheet.com";
-
-                    // Bottom line (URL)
-                    ctx.fillText(text2, targetRes - padding, targetRes - padding);
-                    // Top line (Title)
-                    ctx.fillText(text1, targetRes - padding, targetRes - padding - (fontSize * lineHeight));
-                    
-                    dataUrl = canvas.toDataURL('image/png');
-                } else {
-                     // Fallback if context fails
-                     dataUrl = gl.domElement.toDataURL('image/png');
-                }
-                
-                // 6. Download
-                const link = document.createElement('a');
-                link.download = `grippysheet-ortho-${Date.now()}.png`;
-                link.href = dataUrl;
-                link.click();
-
-                // Restore Helper Visibility
-                hiddenObjects.forEach(obj => obj.visible = true);
-
-            } catch (e) {
-                console.error("Screenshot failed:", e);
-            } finally {
-                // Restore State
-                scene.background = originalBackground;
-                gl.setPixelRatio(originalPixelRatio);
-                gl.setSize(originalSize.x, originalSize.y, false);
-                
-                // Re-render current view to prevent flicker of old buffer
-                gl.render(scene, activeCamera); 
-            }
-        };
-    }, [gl, scene, activeCamera, size, triggerRef]);
-
-    return null;
-};
-
-
-// Screenshot Manager Component using useThree hook
 
 
 const ModelViewer: React.FC<ModelViewerProps> = ({ 
@@ -521,11 +193,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
         let patternWidth = 0;
         let patternHeight = 0;
 
-        if (patternType === 'stl' || (patternShapes.length > 0 && patternShapes[0] instanceof THREE.BufferGeometry)) {
-             const geoBounds = getGeometryBounds(patternShapes[0]);
-             patternWidth = geoBounds.size.x * patternScale;
-             patternHeight = geoBounds.size.y * patternScale;
-        } else if (unitShapes && unitShapes.length > 0) {
+     if (unitShapes && unitShapes.length > 0) {
              const shpBounds = getShapesBounds(unitShapes);
              patternWidth = shpBounds.size.x * patternScale;
              patternHeight = shpBounds.size.y * patternScale;
@@ -547,16 +215,11 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
         // 3. Create Unit Geometry
         let unitGeo: THREE.BufferGeometry;
         
-        if (patternType === 'stl' || (patternShapes.length > 0 && patternShapes[0] instanceof THREE.BufferGeometry)) {
-            unitGeo = (patternShapes[0] as THREE.BufferGeometry).clone();
-            unitGeo.scale(patternScale, patternScale, 1);
-        } else {
-            // For Shapes, exclude holes logic is inside ExtrudeGeometry usually
+        // For Shapes, exclude holes logic is inside ExtrudeGeometry usually
             // but we need to pass unitShapes (Shape[]) to ExtrudeGeometry
             unitGeo = new THREE.ExtrudeGeometry(unitShapes!, patternExtrudeSettings);
             // Apply scale to the geometry
             unitGeo.scale(patternScale, patternScale, 1);
-        }
         
         // Center the geometry? 
         // patternUtils assumes placement is based on center.

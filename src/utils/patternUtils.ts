@@ -125,7 +125,7 @@ export const generateTilePositions = (
     boundaryShapes: THREE.Shape[] | null,
     margin: number = 0,
     allowPartial: boolean = false,
-    distribution: 'grid' | 'offset' | 'hex' | 'radial' | 'random' | 'wave' = 'grid',
+    distribution: 'grid' | 'offset' | 'hex' | 'radial' | 'random' | 'wave-v' | 'wave-h' | 'zigzag-v' | 'zigzag-h' = 'grid',
     rotationMode: 'none' | 'alternate' | 'random' | 'aligned' = 'none'
 ): TileInstance[] => {
     // Safety check
@@ -509,8 +509,8 @@ export const tileShapes = (
     margin: number = 0,
     patternType?: 'dxf' | 'svg' | 'stl' | null,
     allowPartial: boolean = false,
-    distribution: 'grid' | 'offset' | 'hex' | 'radial' | 'random' | 'wave' = 'grid',
-    rotationMode: 'none' | 'alternate' | 'random' = 'none'
+    distribution: 'grid' | 'offset' | 'hex' | 'radial' | 'random' | 'wave-v' | 'wave-h' | 'zigzag-v' | 'zigzag-h' = 'grid',
+    rotationMode: 'none' | 'alternate' | 'random' | 'aligned' = 'none'
 ): any[] => {
     if (!patternShapes || patternShapes.length === 0) return [];
 

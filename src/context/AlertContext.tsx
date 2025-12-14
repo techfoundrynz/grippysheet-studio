@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
-import { AlertModal, AlertType } from '../components/AlertModal';
+import AlertModal, { AlertType } from '../components/AlertModal';
 
 interface AlertOptions {
     title: string;
