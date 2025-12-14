@@ -28,10 +28,11 @@ const App = () => {
 
   const [debugMode, setDebugMode] = useState(false);
 
-  // Base Pattern (Inlay) State
-  const [basePatternShapes, setBasePatternShapes] = useState<any[] | null>(null);
-  const [basePatternDepth, setBasePatternDepth] = useState(0.6);
-  const [basePatternScale, setBasePatternScale] = useState(1);
+  // Inlay State
+  const [inlayShapes, setInlayShapes] = useState<any[] | null>(null);
+  const [inlayDepth, setInlayDepth] = useState(0.6);
+  const [inlayScale, setInlayScale] = useState(1);
+  const [inlayExtend, setInlayExtend] = useState(0);
 
   // Welcome Modal State
   const [showWelcome, setShowWelcome] = useState(() => {
@@ -79,9 +80,10 @@ const App = () => {
                   tilingDistribution={tilingDistribution}
                   tilingRotation={tilingRotation}
                   clipToOutline={clipToOutline}
-                  basePatternShapes={basePatternShapes}
-                  basePatternDepth={basePatternDepth}
-                  basePatternScale={basePatternScale}
+                  inlayShapes={inlayShapes}
+                  inlayDepth={inlayDepth}
+                  inlayScale={inlayScale}
+                  inlayExtend={inlayExtend}
                 />
             </div>
         </div>
@@ -126,12 +128,14 @@ const App = () => {
               setTilingRotation={setTilingRotation}
 
               debugMode={debugMode}
-              basePatternShapes={basePatternShapes}
-              setBasePatternShapes={setBasePatternShapes}
-              basePatternDepth={basePatternDepth}
-              setBasePatternDepth={setBasePatternDepth}
-              basePatternScale={basePatternScale}
-              setBasePatternScale={setBasePatternScale}
+              inlayShapes={inlayShapes}
+              setInlayShapes={setInlayShapes}
+              inlayDepth={inlayDepth}
+              setInlayDepth={setInlayDepth}
+              inlayScale={inlayScale}
+              setInlayScale={setInlayScale}
+              inlayExtend={inlayExtend}
+              setInlayExtend={setInlayExtend}
               onReset={() => {
                   setSize(300);
                   setThickness(3);
@@ -149,9 +153,10 @@ const App = () => {
                   setClipToOutline(true);
                   setTilingDistribution('offset');
                   setTilingRotation('random');
-                  setBasePatternShapes(null);
-                  setBasePatternDepth(0.6);
-                  setBasePatternScale(1);
+                  setInlayShapes(null);
+                  setInlayDepth(0.6);
+                  setInlayScale(1);
+                  setInlayExtend(0);
                }}
                onOpenWelcome={() => setShowWelcome(true)}
                isCollapsed={isControlsCollapsed}

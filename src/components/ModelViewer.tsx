@@ -27,9 +27,10 @@ interface ModelViewerProps {
   tilingRotation?: 'none' | 'alternate' | 'random';
   clipToOutline?: boolean;
   debugMode?: boolean;
-  basePatternShapes?: any[] | null;
-  basePatternDepth?: number;
-  basePatternScale?: number;
+  inlayShapes?: any[] | null;
+  inlayDepth?: number;
+  inlayScale?: number;
+  inlayExtend?: number;
 }
 
 type ViewState = {
@@ -384,9 +385,10 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
   tilingRotation = 'none',
   clipToOutline = false,
   debugMode = false,
-  basePatternShapes,
-  basePatternDepth = 0.6,
-  basePatternScale = 1
+  inlayShapes,
+  inlayDepth = 0.6,
+  inlayScale = 1,
+  inlayExtend = 0
 }) => {
 
   const [viewState, setViewState] = useState<ViewState>({ type: 'ortho', timestamp: Date.now() });
@@ -675,14 +677,9 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
           <RotateCcw size={20} />
         </button>
 
-        <div className="w-px bg-gray-700 mx-1" />
-        <button
-            onClick={() => setIsPatternTransparent(!isPatternTransparent)}
-            className={`p-2 rounded hover:bg-gray-700 transition-colors ${isPatternTransparent ? 'bg-indigo-500/20 text-indigo-400' : 'text-gray-400'}`}
-            title="Toggle Pattern Transparency"
-        >
-            <Ghost size={20} />
-        </button>
+        {debugMode && (
+            <div className="w-px bg-gray-700 mx-1" />
+        )}
         
         {debugMode && cutoutShapes && cutoutShapes.length > 0 && (
           <>
@@ -718,13 +715,21 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
         )}
         
         <div className="w-px bg-gray-700 mx-1" />
+
         <button
             onClick={() => setShowFps(!showFps)}
             className={`p-2 rounded hover:bg-gray-700 transition-colors ${showFps ? 'bg-purple-500/20 text-purple-400' : 'text-gray-400'}`}
             title="Toggle FPS Counter"
         >
             <Activity size={20} />
-        </button>        
+        </button> 
+        <button
+            onClick={() => setIsPatternTransparent(!isPatternTransparent)}
+            className={`p-2 rounded hover:bg-gray-700 transition-colors ${isPatternTransparent ? 'bg-indigo-500/20 text-indigo-400' : 'text-gray-400'}`}
+            title="Toggle Pattern Transparency"
+        >
+            <Ghost size={20} />
+        </button>       
         <button
             onClick={() => setShowScreenshotModal(true)}
             className="p-2 rounded hover:bg-gray-700 transition-colors text-gray-400 hover:text-white"
@@ -772,43 +777,45 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
                 <Geometry>
                     <Base>
                         {cutoutShapes && cutoutShapes.length > 0 ? (
-                             // Extrudes along Z automatically. No rotation needed for Z-up.
+                             // Extrudes along Z automaticall. No rotation needed for Z-up.
                              <extrudeGeometry args={[cutoutShapes, { depth: thickness, bevelEnabled: false }]} />
                         ) : (
-                             // Box args: width (X), height (Y), depth (Z). 
-                             // We want X/Y base, Z thickness.
-                             <boxGeometry args={[size, size, thickness]} />
+                             // Use ExtrudeGeometry for default square too, to match Z-coordinate system (0 to thickness)
+                             <extrudeGeometry args={[
+                                [new THREE.Shape()
+                                    .moveTo(-size/2, -size/2)
+                                    .lineTo(size/2, -size/2)
+                                    .lineTo(size/2, size/2)
+                                    .lineTo(-size/2, size/2)
+                                    .lineTo(-size/2, -size/2)], 
+                                { depth: thickness, bevelEnabled: false }
+                             ]} />
                         )}
                     </Base>
-                    
-                    {/* Base Pattern Subtraction (Inlay Cutout) */}
-                    {basePatternShapes && basePatternShapes.length > 0 && (
-                        <Subtraction position={[0, 0, thickness - basePatternDepth]} scale={[basePatternScale, basePatternScale, 1]}>
-                             <extrudeGeometry args={[
-                                 basePatternShapes.map(s => s.shape), 
-                                 { depth: basePatternDepth + 1, bevelEnabled: false } // +1 to ensure cut through top
-                             ]} />
-                        </Subtraction>
-                    )}
                 </Geometry>
                 <meshStandardMaterial color={color} wireframe={showWireframe} />
             </mesh>
 
             {/* Base Pattern Inlays (Colored Meshes) */}
-            {basePatternShapes && basePatternShapes.length > 0 && basePatternShapes.map((item, i) => {
+            {inlayShapes && inlayShapes.length > 0 && inlayShapes.map((item: any, i: number) => {
                 if (item.color === 'transparent') return null;
+                // Calculate extended depth with small offset for Z-fighting
+                // The base starts at 'thickness - inlayDepth'
+                // It should go up by 'inlayDepth' (to flush) + 'inlayExtend' (pop out)
+                const totalDepth = inlayDepth + Number(inlayExtend || 0) + ((i + 1) * 0.001);
+
                 return (
                 <mesh
                     key={`inlay-${i}`}
-                    // Overlap floor by 0.01mm to fix non-manifold edges in export
-                    position={[0, 0, thickness - basePatternDepth]}
-                    scale={[basePatternScale, basePatternScale, 1 + (i * 0.0002)]}
+                    // Position at the bottom of the cutout
+                    position={[0, 0, thickness - inlayDepth]}
+                    scale={[inlayScale, inlayScale, 1]}
                     castShadow
                     receiveShadow
                 >
                     <extrudeGeometry args={[
                         [item.shape], 
-                        { depth: basePatternDepth + 0.01, bevelEnabled: false }
+                        { depth: totalDepth, bevelEnabled: false }
                     ]} />
                     <meshStandardMaterial color={item.color === 'base' ? color : item.color} wireframe={showWireframe} />
                 </mesh>

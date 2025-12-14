@@ -36,12 +36,14 @@ interface ControlsProps {
   tilingRotation: 'none' | 'alternate' | 'random';
   setTilingRotation: (v: 'none' | 'alternate' | 'random') => void;
   debugMode?: boolean;
-  basePatternShapes: any[] | null;
-  setBasePatternShapes: (shapes: any[]) => void;
-  basePatternDepth: number;
-  setBasePatternDepth: (depth: number) => void;
-  basePatternScale: number;
-  setBasePatternScale: (scale: number) => void;
+  inlayShapes: any[] | null;
+  setInlayShapes: (shapes: any[]) => void;
+  inlayDepth: number;
+  setInlayDepth: (depth: number) => void;
+  inlayScale: number;
+  setInlayScale: (scale: number) => void;
+  inlayExtend: number;
+  setInlayExtend: (val: number) => void;
   onReset?: () => void;
   onOpenWelcome?: () => void;
   isCollapsed?: boolean;
@@ -81,12 +83,14 @@ const Controls: React.FC<ControlsProps> = ({
   setTilingRotation,
 
   debugMode = false,
-  basePatternShapes,
-  setBasePatternShapes,
-  basePatternDepth,
-  setBasePatternDepth,
-  basePatternScale,
-  setBasePatternScale,
+  inlayShapes,
+  setInlayShapes,
+  inlayDepth,
+  setInlayDepth,
+  inlayScale,
+  setInlayScale,
+  inlayExtend,
+  setInlayExtend,
   onReset,
   onOpenWelcome,
   isCollapsed = false,
@@ -95,7 +99,7 @@ const Controls: React.FC<ControlsProps> = ({
 }) => {
   const { showAlert } = useAlert();
   const [showPaintModal, setShowPaintModal] = React.useState(false);
-  const [originalBasePatternShapes, setOriginalBasePatternShapes] = React.useState<any[]>([]);
+  const [originalInlayShapes, setOriginalInlayShapes] = React.useState<any[]>([]);
 
   const handleResetClick = () => {
       showAlert({
@@ -235,19 +239,19 @@ const Controls: React.FC<ControlsProps> = ({
           <ShapeUploader 
               label="Upload Inlay Pattern" 
               onShapesLoaded={(shapes) => {
-                  setOriginalBasePatternShapes(shapes); // Store original
-                  setBasePatternShapes(shapes);
+                  setOriginalInlayShapes(shapes); // Store original
+                  setInlayShapes(shapes);
               }}
               onClear={() => {
-                  setOriginalBasePatternShapes([]);
-                  setBasePatternShapes([]);
+                  setOriginalInlayShapes([]);
+                  setInlayShapes([]);
               }}
               allowedTypes={['svg', 'dxf']}
               extractColors={true}
               adornment={
                   <button
                       onClick={() => setShowPaintModal(true)}
-                      className={`p-1.5 rounded-lg transition-colors border ${basePatternShapes && basePatternShapes.length > 0 
+                      className={`p-1.5 rounded-lg transition-colors border ${inlayShapes && inlayShapes.length > 0 
                           ? 'bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 hover:text-purple-300 border-purple-500/20 hover:border-purple-500/50' 
                           : 'bg-gray-700/50 hover:bg-gray-700 text-gray-400 hover:text-white border-gray-600 hover:border-gray-500'}`}
                       title="Paint / Draw Inlay"
@@ -255,37 +259,37 @@ const Controls: React.FC<ControlsProps> = ({
                       <Palette size={16} />
                   </button>
               }
-              externalShapes={basePatternShapes && basePatternShapes.length > 0 ? basePatternShapes : undefined}
+              externalShapes={inlayShapes && inlayShapes.length > 0 ? inlayShapes : undefined}
           />
           
           <SVGPaintModal 
               isOpen={showPaintModal}
               onClose={() => setShowPaintModal(false)}
-              shapes={basePatternShapes || []}
+              shapes={inlayShapes || []}
               baseColor={color}
               onSave={(newShapes) => {
                   // If standalone mode (no original shapes), center the drawing
-                  if (!originalBasePatternShapes || originalBasePatternShapes.length === 0) {
+                  if (!originalInlayShapes || originalInlayShapes.length === 0) {
                        // newShapes is array of objects { shape, color }
                        const rawShapes = newShapes.map((s: any) => s.shape || s);
                        const centered = centerShapes(rawShapes, false); // FlipY false to prevent mirroring on reload
                        const centeredObjs = newShapes.map((s: any, i: number) => ({ ...s, shape: centered[i] }));
-                       setBasePatternShapes(centeredObjs);
+                       setInlayShapes(centeredObjs);
                   } else {
-                       setBasePatternShapes(newShapes);
+                       setInlayShapes(newShapes);
                   }
               }}
           />
           
-          {basePatternShapes && basePatternShapes.length > 0 && (
+          {inlayShapes && inlayShapes.length > 0 && (
             <>
               <div className="space-y-2">
                 <div className="flex justify-between items-center">
                   <label className="text-sm font-medium text-gray-300">Scale</label>
                   <button
                       onClick={() => {
-                          // Extract shapes if they are objects (which they are for basePatternShapes)
-                          const shapes = basePatternShapes.map((s: any) => s.shape || s);
+                          // Extract shapes if they are objects (which they are for inlayShapes)
+                          const shapes = inlayShapes.map((s: any) => s.shape || s);
                           const bounds = getShapesBounds(shapes);
                           const width = bounds.size.x;
                           const height = bounds.size.y;
@@ -308,7 +312,7 @@ const Controls: React.FC<ControlsProps> = ({
                                   targetScale = (size * 0.8) / maxSize;
                               }
                               
-                              setBasePatternScale(targetScale);
+                              setInlayScale(targetScale);
                           }
                       }}
                       className="text-gray-400 hover:text-purple-400 transition-colors"
@@ -318,11 +322,17 @@ const Controls: React.FC<ControlsProps> = ({
                   </button>
                 </div>
                 <DebouncedInput
-                  type="number"
-                  value={basePatternScale}
-                  onChange={(val) => setBasePatternScale(Number(val))}
-                  step="0.1"
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none"
+                    type="number"
+                    value={inlayScale}
+                    onChange={(val) => {
+                        const num = Number(val);
+                        // Prevent NaN or 0, but allow negative numbers.
+                        if (!isNaN(num) && num !== 0) {
+                            setInlayScale(num);
+                        }
+                    }}
+                    step="0.1"
+                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none"
                 />
               </div>
 
@@ -330,10 +340,22 @@ const Controls: React.FC<ControlsProps> = ({
                 <label className="text-sm font-medium text-gray-300">Inlay Depth (mm)</label>
                 <DebouncedInput
                   type="number"
-                  value={basePatternDepth}
-                  onChange={(val) => setBasePatternDepth(Number(val))}
+                  value={inlayDepth}
+                  onChange={(val) => setInlayDepth(Number(val))}
                   step="0.1"
                   min="0.1"
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-300">Inlay Extend (mm)</label>
+                <DebouncedInput
+                  type="number"
+                  value={inlayExtend}
+                  onChange={(val) => setInlayExtend(Number(val))}
+                  step="0.1"
+                  min="0"
                   className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none"
                 />
               </div>

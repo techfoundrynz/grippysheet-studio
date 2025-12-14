@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAlert } from '../context/AlertContext';
-import { X, Check, MousePointer2, Type, Pipette, Palette, Droplet, Pencil, Square, Circle, Eraser } from 'lucide-react';
+import { X, Check, Pipette, Palette, Droplet, Pencil, Square, Circle, Eraser } from 'lucide-react';
 import * as THREE from 'three';
 import { COLORS } from '../constants/colors';
 import { flattenColors } from '../utils/colorUtils';
