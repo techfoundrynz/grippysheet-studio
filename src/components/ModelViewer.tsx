@@ -724,7 +724,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
             title="Toggle FPS Counter"
         >
             <Activity size={20} />
-        </button>
+        </button>        
         <button
             onClick={() => setShowScreenshotModal(true)}
             className="p-2 rounded hover:bg-gray-700 transition-colors text-gray-400 hover:text-white"
