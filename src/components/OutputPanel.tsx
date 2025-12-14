@@ -10,6 +10,59 @@ interface OutputPanelProps {
 }
 
 const OutputPanel: React.FC<OutputPanelProps> = ({ meshRef, debugMode = false }) => {
+  const expandInstancedMesh = (instancedMesh: THREE.InstancedMesh): THREE.Group => {
+    const group = new THREE.Group();
+    group.name = instancedMesh.name;
+    group.position.copy(instancedMesh.position);
+    group.rotation.copy(instancedMesh.rotation);
+    group.scale.copy(instancedMesh.scale);
+    
+    const count = instancedMesh.count;
+    const matrix = new THREE.Matrix4();
+    const geom = instancedMesh.geometry.clone();
+    const material = instancedMesh.material;
+
+    // Apply instance matrices
+    for (let i = 0; i < count; i++) {
+        instancedMesh.getMatrixAt(i, matrix);
+        const mesh = new THREE.Mesh(geom, material);
+        mesh.applyMatrix4(matrix);
+        group.add(mesh);
+    }
+    return group;
+  };
+
+  const prepareForExport = (source: THREE.Object3D): THREE.Object3D | null => {
+      // Special handling for Base and Pattern (CSG results) - clone shallow to drop CSG children
+      if (source.name === 'Base' || source.name === 'Pattern') {
+          return source.clone(false);
+      }
+      
+      if (source instanceof THREE.InstancedMesh) {
+          return expandInstancedMesh(source);
+      }
+      
+      if (source instanceof THREE.Group) {
+          const newGroup = new THREE.Group();
+          newGroup.name = source.name;
+          newGroup.position.copy(source.position);
+          newGroup.rotation.copy(source.rotation);
+          newGroup.scale.copy(source.scale);
+          
+          source.children.forEach(child => {
+              const processed = prepareForExport(child);
+              if (processed) newGroup.add(processed);
+          });
+          return newGroup;
+      }
+      
+      if (source instanceof THREE.Mesh) {
+          return source.clone(true);
+      }
+      
+      return null;
+  };
+
   const handleExport = (mode: 'merged' | 'base' | 'pattern') => {
     if (!meshRef.current) return;
 
@@ -40,14 +93,8 @@ const OutputPanel: React.FC<OutputPanelProps> = ({ meshRef, debugMode = false })
         // Merged
         const exportGroup = new THREE.Group();
         group.children.forEach(child => {
-             // For Base and Pattern, we ONLY want the mesh geometry, not the CSG children (which include the subtraction box)
-             if (child.name === 'Base' || child.name === 'Pattern') {
-                 exportGroup.add(child.clone(false));
-             } else if (child instanceof THREE.Mesh || child instanceof THREE.InstancedMesh || child instanceof THREE.Group) {
-                 // For others (like STL instances which might be nested), deep clone is safer, 
-                 // or iterate if we know the structure.
-                 exportGroup.add(child.clone(true));
-             }
+             const processed = prepareForExport(child);
+             if (processed) exportGroup.add(processed);
         });
         objectToExport = exportGroup;
         filename = 'grippysheet-merged.stl';
@@ -85,13 +132,8 @@ const OutputPanel: React.FC<OutputPanelProps> = ({ meshRef, debugMode = false })
         const exportGroup = new THREE.Group();
         
         group.children.forEach(child => {
-            if (child.name === 'Base' || child.name === 'Pattern') {
-                 // Shallow clone to avoid CSG children
-                 exportGroup.add(child.clone(false));
-            } else if (child instanceof THREE.Mesh || child instanceof THREE.InstancedMesh || child instanceof THREE.Group) {
-               const clone = child.clone(true);
-               exportGroup.add(clone);
-            }
+             const processed = prepareForExport(child);
+             if (processed) exportGroup.add(processed);
         });
         
         if (exportGroup.children.length === 0) {

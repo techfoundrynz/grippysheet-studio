@@ -133,6 +133,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
                     <Instance
                         key={i}
                         position={[data.position.x, data.position.y, offset * data.scale]} 
+                        rotation={[0, 0, data.rotation]}
                         scale={[data.scale, data.scale, data.scale]}
                     />
                 ))}
@@ -149,7 +150,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
   // Standardize Unit Source Shapes
   const unitShapes = React.useMemo(() => {
     if (!patternShapes || patternShapes.length === 0) return null;
-    if (patternType === 'stl') return null; // Handle separately
+    if (patternType === 'stl' || (patternShapes.length > 0 && patternShapes[0] instanceof THREE.BufferGeometry)) return null; // Handle separately
 
     return (patternShapes as THREE.Shape[]).map(shape => {
          const newShape = new THREE.Shape();
@@ -220,7 +221,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
   // Process pattern shapes (Tiling + Scaling)
   const finalPatternShapes = React.useMemo(() => {
     if (!patternShapes || patternShapes.length === 0) return null;
-    if (patternType === 'stl') return null; // Handle separately
+    if (patternType === 'stl' || (patternShapes.length > 0 && patternShapes[0] instanceof THREE.BufferGeometry)) return null; // Handle separately
 
       // 1. Get Base Bounds
      let bounds = new THREE.Box2(
@@ -331,7 +332,8 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
 
   // Calculate STL instances
   const stlInstances = React.useMemo(() => {
-      if (patternType !== 'stl' || !patternShapes || patternShapes.length === 0) return null;
+      const isStl = patternType === 'stl' || (patternShapes && patternShapes.length > 0 && patternShapes[0] instanceof THREE.BufferGeometry);
+      if (!isStl || !patternShapes || patternShapes.length === 0) return null;
       
       const geometry = patternShapes[0] as unknown as THREE.BufferGeometry;
       const geoBounds = getGeometryBounds(geometry);
@@ -355,8 +357,10 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
                tileSpacing,
                cutoutShapes, 
                patternMargin,
-               clipToOutline
-           );
+               false, // Force strict containment for STLs since we can't clip them
+               tilingDistribution,
+               tilingRotation
+           ).map(p => ({ ...p, scale: patternScale }));
        } else {
           return [{
               position: new THREE.Vector2(0, 0),
@@ -532,9 +536,9 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
                             )}
                         </Base>
                         {/* Cut off the bottom (back-bevel) to ensure single-sided pyramid */}
-                        <Subtraction position={[0, 0, -500.1]}>
+                        {/* <Subtraction position={[0, 0, -500.1]}>
                             <boxGeometry args={[2000, 2000, 1000]} />
-                        </Subtraction>
+                        </Subtraction> */}
                         
                         {/* Clip To Outline Logic */}
                         {clipToOutline && cutoutShapes && cutoutShapes.length > 0 && (
@@ -564,7 +568,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
             )}
 
             {/* STL Rendering */}
-            {patternType === 'stl' && stlInstances && patternShapes && patternShapes.length > 0 && typeof patternShapes[0] === 'object' && (
+            {(patternType === 'stl' || (patternShapes && patternShapes.length > 0 && patternShapes[0] instanceof THREE.BufferGeometry)) && stlInstances && patternShapes && patternShapes.length > 0 && typeof patternShapes[0] === 'object' && (
                 <STLTiles 
                     instances={stlInstances} 
                     geometry={patternShapes[0] as unknown as THREE.BufferGeometry} 
