@@ -1,0 +1,44 @@
+solid climbing_hold
+  facet normal 0 0 -1
+    outer loop
+      vertex -10 -10 0
+      vertex 10 -10 0
+      vertex 12 10 0
+    endloop
+  endfacet
+  facet normal 0 0 -1
+    outer loop
+      vertex -10 -10 0
+      vertex 12 10 0
+      vertex -12 12 0
+    endloop
+  endfacet
+  facet normal 0.5 0 0.8
+    outer loop
+      vertex -10 -10 0
+      vertex 10 -10 0
+      vertex -2 5 15
+    endloop
+  endfacet
+  facet normal 0.5 0.5 0.7
+    outer loop
+      vertex 10 -10 0
+      vertex 12 10 0
+      vertex -2 5 15
+    endloop
+  endfacet
+  facet normal 0 0.5 0.8
+    outer loop
+      vertex 12 10 0
+      vertex -12 12 0
+      vertex -2 5 15
+    endloop
+  endfacet
+  facet normal -0.5 0 0.8
+    outer loop
+      vertex -12 12 0
+      vertex -10 -10 0
+      vertex -2 5 15
+    endloop
+  endfacet
+endsolid climbing_hold
