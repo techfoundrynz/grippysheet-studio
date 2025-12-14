@@ -4,6 +4,7 @@ import Controls from "./components/Controls";
 import OutputPanel from "./components/OutputPanel";
 import * as THREE from 'three';
 import { DEFAULT_BASE_COLOR, DEFAULT_PATTERN_COLOR } from './constants/colors';
+import { AlertProvider } from './context/AlertContext';
 
 import { WelcomeModal } from "./components/WelcomeModal";
 
@@ -55,6 +56,7 @@ const App = () => {
   }, []);
 
   return (
+    <AlertProvider>
     <div className="h-[100dvh] flex flex-col bg-gray-950 text-gray-100 overflow-hidden">
       <main className="flex-1 flex flex-col md:flex-row overflow-hidden">
         {/* Left Panel - 3D Viewer */}
@@ -173,6 +175,7 @@ const App = () => {
       {/* Welcome Modal */}
       {showWelcome && <WelcomeModal onClose={() => setShowWelcome(false)} />}
     </div>
+    </AlertProvider>
   );
 };
 

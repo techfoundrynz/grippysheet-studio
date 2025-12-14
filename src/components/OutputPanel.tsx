@@ -1,6 +1,7 @@
 import React from 'react';
 import { Download, Layers, Box } from 'lucide-react';
 import { STLExporter } from 'three-stdlib';
+import { useAlert } from '../context/AlertContext';
 import { exportTo3MF } from 'three-3mf-exporter';
 import * as THREE from 'three';
 
@@ -11,6 +12,8 @@ interface OutputPanelProps {
 }
 
 const OutputPanel: React.FC<OutputPanelProps> = ({ meshRef, debugMode = false, className = '' }) => {
+  const { showAlert } = useAlert();
+
   const expandInstancedMesh = (instancedMesh: THREE.InstancedMesh): THREE.Group => {
     const group = new THREE.Group();
     group.name = instancedMesh.name;
@@ -78,14 +81,14 @@ const OutputPanel: React.FC<OutputPanelProps> = ({ meshRef, debugMode = false, c
 
     if (mode === 'base') {
         if (!baseMesh) {
-             alert("Base mesh not found!");
+             showAlert({ title: "Export Error", message: "Base mesh not found!", type: "error" });
              return;
         }
         objectToExport = baseMesh.clone(false);
         filename = 'grippysheet-base.stl';
     } else if (mode === 'pattern') {
         if (!patternMesh) {
-             alert("Pattern mesh not found!");
+             showAlert({ title: "Export Error", message: "Pattern mesh not found!", type: "error" });
              return;
         }
         objectToExport = patternMesh.clone(false);
@@ -126,6 +129,7 @@ const OutputPanel: React.FC<OutputPanelProps> = ({ meshRef, debugMode = false, c
   };
 
   const handleExport3MF = async () => {
+    try {
         if (!meshRef.current) return;
 
         const group = meshRef.current; // ... existing clone logic ...
@@ -138,7 +142,7 @@ const OutputPanel: React.FC<OutputPanelProps> = ({ meshRef, debugMode = false, c
         });
         
         if (exportGroup.children.length === 0) {
-            alert("Nothing to export!");
+            showAlert({ title: "Export Error", message: "Nothing to export! The scene appears empty.", type: "warning" });
             return;
         }
 
@@ -158,6 +162,15 @@ const OutputPanel: React.FC<OutputPanelProps> = ({ meshRef, debugMode = false, c
         
         document.body.removeChild(link);
         URL.revokeObjectURL(url);
+    } catch (e) {
+        console.error("3MF Export Error:", e);
+        showAlert({ 
+            title: "Export Failed", 
+            message: `Failed to export 3MF: ${e instanceof Error ? e.message : String(e)}`, 
+            type: "error" ,
+            confirmText: "OK",
+        });
+    }
   };
 
   return (
