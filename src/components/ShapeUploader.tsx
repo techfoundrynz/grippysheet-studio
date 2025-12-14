@@ -147,6 +147,7 @@ const ShapeUploader: React.FC<ShapeUploaderProps> = (props) => {
       }
     };
     reader.readAsText(file);
+    reader.readAsText(file);
   };
 
   // Effect to update preview if externalShapes change

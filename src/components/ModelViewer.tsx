@@ -75,7 +75,6 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
   const [showOutline, setShowOutline] = useState(false);
   const [showWireframe, setShowWireframe] = useState(false);
   const [showFps, setShowFps] = useState(true);
-  const [isProcessing, setIsProcessing] = useState(false);
   const [isPatternTransparent, setIsPatternTransparent] = useState(false);
   const fpsRef = React.useRef<HTMLDivElement>(null);
   const [showScreenshotModal, setShowScreenshotModal] = useState(false);
@@ -161,20 +160,12 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
         </button>       
         <button
             onClick={() => setShowScreenshotModal(true)}
-            disabled={isProcessing}
-            className={`p-2 rounded hover:bg-gray-700 transition-colors ${isProcessing ? 'text-gray-600 cursor-not-allowed' : 'text-gray-400 hover:text-white'}`}
+            className="p-2 rounded hover:bg-gray-700 transition-colors text-gray-400 hover:text-white"
             title="Screenshot"
         >
             <CameraIcon size={20} />
         </button>
       </div>
-
-        {isProcessing && (
-            <div className="absolute top-4 right-4 z-20 flex items-center gap-2 px-3 py-2 bg-gray-800/90 backdrop-blur rounded-lg border border-yellow-500/50 text-yellow-500 shadow-lg">
-                <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                <span className="text-sm font-medium">Processing...</span>
-            </div>
-        )}
 
       {showFps && (
         <div 
@@ -228,11 +219,8 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
                 inlayExtend={inlayExtend}
                 wireframe={showWireframe}
                 isPatternTransparent={isPatternTransparent}
-                onProcessingChange={setIsProcessing}
             />
         
-
-
         {showOutline && cutoutShapes && cutoutShapes.length > 0 && (
             <Line
             points={cutoutShapes[0].getPoints()} 

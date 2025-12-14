@@ -746,7 +746,7 @@ const Controls: React.FC<ControlsProps> = ({
                         />
                     </ControlField>
                   </div>
-                  {isTiled && cutoutShapes && cutoutShapes.length > 0 && (
+                  {cutoutShapes && cutoutShapes.length > 0 && (
                       <div className="flex-1 min-w-0">
                         <ControlField label="Clip to Edge" tooltip="Trim patterns that cross the outline boundary">
                             <ToggleButton

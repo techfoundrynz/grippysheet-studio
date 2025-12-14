@@ -1,10 +1,9 @@
 import React, { useEffect, useRef, useMemo } from 'react';
 import * as THREE from 'three';
-import { Brush, Evaluator, INTERSECTION } from 'three-bvh-csg';
+import { Brush, Evaluator, SUBTRACTION, INTERSECTION } from 'three-bvh-csg';
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import GeometryWorker from '../workers/geometry.worker?worker';
+import { generateTilePositions, getShapesBounds, getGeometryBounds } from '../utils/patternUtils';
 
-// Define Prop Interface with new callback
 interface ImperativeModelProps {
   size: number;
   thickness: number;
@@ -28,17 +27,7 @@ interface ImperativeModelProps {
   inlayExtend?: number;
   wireframe?: boolean;
   isPatternTransparent?: boolean;
-  onProcessingChange?: (isProcessing: boolean) => void;
 }
-
-// Helper to serialize shapes for worker
-const serializeShapes = (shapes: THREE.Shape[] | null) => {
-    if (!shapes) return null;
-    return shapes.map(s => ({
-        points: s.getPoints(),
-        holes: s.holes.map(h => ({ points: h.getPoints() }))
-    }));
-};
 
 const ImperativeModel = React.forwardRef<THREE.Group, ImperativeModelProps>(({
   size,
@@ -63,157 +52,13 @@ const ImperativeModel = React.forwardRef<THREE.Group, ImperativeModelProps>(({
   inlayExtend = 0,
   wireframe = false,
   isPatternTransparent = false,
-  onProcessingChange,
 }, ref) => {
   const localGroupRef = useRef<THREE.Group>(null);
-  const workerRef = useRef<Worker | null>(null);
-  const currentJobId = useRef<string>('');
-
+  
   // Expose ref
   React.useImperativeHandle(ref, () => localGroupRef.current!, []);
 
-  // Initialize Worker
-  useEffect(() => {
-      workerRef.current = new GeometryWorker();
-      workerRef.current.onmessage = handleWorkerMessage;
-      return () => {
-          workerRef.current?.terminate();
-      };
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const handleWorkerMessage = (e: MessageEvent) => {
-      const { id, success, data, error } = e.data;
-      if (id !== currentJobId.current) return; // Stale job
-
-      if (onProcessingChange) onProcessingChange(false);
-
-      if (!success) {
-          console.error("Worker Error:", error);
-          return;
-      }
-
-      updatePatternScene(data);
-  };
-
-  const updatePatternScene = (data: any) => {
-      const group = localGroupRef.current;
-      if (!group) return;
-
-      // Cleanup old Pattern
-      const existingPattern = group.getObjectByName('Pattern');
-      if (existingPattern) {
-           if (existingPattern instanceof THREE.Mesh || existingPattern instanceof THREE.InstancedMesh) {
-              existingPattern.geometry.dispose();
-              if (Array.isArray(existingPattern.material)) {
-                  existingPattern.material.forEach(m => m.dispose());
-              } else {
-                  (existingPattern.material as THREE.Material).dispose();
-              }
-           }
-           group.remove(existingPattern);
-      }
-
-      if (!data) return;
-
-      const { instanceMatrices, geometry } = data; // geometry data is Float32Arrays
-      // instanceMatrices is Float32Array
-
-      // Reconstruct Geometry
-      let unitGeo: THREE.BufferGeometry | null = null;
-      if (geometry) {
-           unitGeo = new THREE.BufferGeometry();
-           unitGeo.setAttribute('position', new THREE.BufferAttribute(geometry.position, 3));
-           if (geometry.normal) unitGeo.setAttribute('normal', new THREE.BufferAttribute(geometry.normal, 3));
-           if (geometry.uv) unitGeo.setAttribute('uv', new THREE.BufferAttribute(geometry.uv, 2));
-           if (geometry.index) unitGeo.setIndex(new THREE.BufferAttribute(geometry.index, 1));
-           // Groups unsupported for now or not needed? ExtrudeGeometry has groups?
-      } else if (patternType === 'stl' && patternShapes && patternShapes[0] instanceof THREE.BufferGeometry) {
-           // Provide STL geometry directly from Main Thread prop
-           unitGeo = patternShapes[0].clone();
-           // We need to apply the centering/scaling logic that worker *would* have done?
-           // Worker calculated Tiling Matrices assuming geometry is centered.
-           // So we must CENTER this geo here to match.
-            unitGeo.computeBoundingBox();
-            const center = new THREE.Vector3(); 
-            if (unitGeo.boundingBox) unitGeo.boundingBox.getCenter(center);
-            unitGeo.translate(-center.x, -center.y, -center.z);
-      }
-
-      if (!unitGeo) return;
-
-      // Material
-      const mat = new THREE.MeshStandardMaterial({
-        color: patternColor,
-        wireframe: wireframe,
-        transparent: isPatternTransparent,
-        opacity: isPatternTransparent ? 0.3 : 1.0
-      });
-
-      // Construct InstancedMesh
-      const count = instanceMatrices.length / 16;
-      
-      if (!clipToOutline || !cutoutShapes || cutoutShapes.length === 0) {
-          // --- Instanced Mesh ---
-          const iMesh = new THREE.InstancedMesh(unitGeo, mat, count);
-          iMesh.name = 'Pattern';
-          iMesh.castShadow = true;
-          iMesh.receiveShadow = true;
-          iMesh.instanceMatrix.array.set(instanceMatrices);
-          iMesh.instanceMatrix.needsUpdate = true;
-          group.add(iMesh);
-      } else {
-          // --- CSG Path ---
-          // We must merge manually using the matrices
-          const geometries: THREE.BufferGeometry[] = [];
-          const dummy = new THREE.Object3D();
-          
-          for (let i = 0; i < count; i++) {
-               dummy.matrix.fromArray(instanceMatrices, i * 16);
-               const clone = unitGeo.clone();
-               clone.applyMatrix4(dummy.matrix);
-               geometries.push(clone);
-          }
-          
-           if (geometries.length === 0) return;
-           const rawMergedGeo = BufferGeometryUtils.mergeGeometries(geometries);
-           const mergedGeo = BufferGeometryUtils.mergeVertices(rawMergedGeo);
-           rawMergedGeo.dispose();
-           geometries.forEach(g => g.dispose());
-
-           // Prepare Cutter
-           const cutterGeo = new THREE.ExtrudeGeometry(cutoutShapes, {
-               depth: 1000, bevelEnabled: true, bevelThickness: 0.1, bevelSize: -patternMargin, bevelSegments: 1, bevelOffset: 0
-           });
-
-           if (!mergedGeo.attributes.position || mergedGeo.attributes.position.count === 0 || 
-               !cutterGeo.attributes.position || cutterGeo.attributes.position.count === 0) {
-               console.warn("Skipping CSG: Invalid geometry");
-               return;
-           }
-
-            const patternBrush = new Brush(mergedGeo);
-            const cutterBrush = new Brush(cutterGeo);
-            patternBrush.updateMatrixWorld();
-            cutterBrush.updateMatrixWorld();
-            
-            const evaluator = new Evaluator();
-            evaluator.attributes = ['position', 'normal'];
-            const result = evaluator.evaluate(patternBrush, cutterBrush, INTERSECTION);
-            
-            result.name = 'Pattern';
-            result.material = mat;
-            result.castShadow = true;
-            result.receiveShadow = true;
-            group.add(result);
-            
-            mergedGeo.dispose();
-            cutterGeo.dispose();
-      }
-  };
-
-
-  // --- 1. Base Mesh Construction (Sync) ---
+  // --- 1. Base Mesh Construction ---
   useEffect(() => {
     const group = localGroupRef.current;
     if (!group) return;
@@ -258,7 +103,7 @@ const ImperativeModel = React.forwardRef<THREE.Group, ImperativeModelProps>(({
   }, [size, thickness, color, cutoutShapes, wireframe]);
 
 
-  // --- 2. Inlays Construction (Sync) ---
+  // --- 2. Inlays Construction ---
   useEffect(() => {
     const group = localGroupRef.current;
     if (!group) return;
@@ -301,62 +146,248 @@ const ImperativeModel = React.forwardRef<THREE.Group, ImperativeModelProps>(({
   }, [inlayShapes, inlayDepth, inlayScale, inlayExtend, thickness, color, wireframe]);
 
 
-  // --- 3. Pattern Construction (ASYNC WORKER) ---
+  // --- 3. Pattern Construction (The Heavy Lifter) ---
   useEffect(() => {
-    if (!patternShapes || patternShapes.length === 0) {
-        // Clear pattern
-        const group = localGroupRef.current;
-        const existingPattern = group?.getObjectByName('Pattern');
-        if (existingPattern && group) group.remove(existingPattern);
-        return;
-    }
+    const group = localGroupRef.current;
+    if (!group) return;
 
-    const isStl = patternType === 'stl' || (patternShapes[0] instanceof THREE.BufferGeometry);
-
-    // Serialize
-    const sPatternShapes = !isStl ? serializeShapes(patternShapes) : [];
-    const sCutoutShapes = serializeShapes(cutoutShapes);
-
-    let geometryBounds = undefined;
-    if (isStl && patternShapes[0] instanceof THREE.BufferGeometry) {
-         const geo = patternShapes[0];
-         if (!geo.boundingBox) geo.computeBoundingBox();
-         if (geo.boundingBox) {
-            geometryBounds = {
-                min: geo.boundingBox.min,
-                max: geo.boundingBox.max,
-                size: new THREE.Vector3().subVectors(geo.boundingBox.max, geo.boundingBox.min)
-            };
+    // Cleanup old Pattern
+    const existingPattern = group.getObjectByName('Pattern');
+    if (existingPattern) {
+         if (existingPattern instanceof THREE.Mesh || existingPattern instanceof THREE.InstancedMesh) {
+            existingPattern.geometry.dispose();
+            if (Array.isArray(existingPattern.material)) {
+                existingPattern.material.forEach(m => m.dispose());
+            } else {
+                (existingPattern.material as THREE.Material).dispose();
+            }
          }
+         group.remove(existingPattern);
     }
 
-    const jobId = Math.random().toString(36).substring(7);
-    currentJobId.current = jobId;
+    if (!patternShapes || patternShapes.length === 0) return;
 
-    if (onProcessingChange) onProcessingChange(true);
+    // ---------------------------------------------------------
+    // A. Prepare Unit Geometry
+    // ---------------------------------------------------------
+    const isStl = patternType === 'stl' || (patternShapes[0] instanceof THREE.BufferGeometry);
+    let unitGeo: THREE.BufferGeometry | null = null;
+    let unitShapes: THREE.Shape[] | null = null;
 
-    workerRef.current?.postMessage({
-        id: jobId,
-        type: 'compute',
-        payload: {
-            patternShapes: sPatternShapes,
-            cutoutShapes: sCutoutShapes,
-            patternType,
-            extrusionAngle,
-            patternHeight,
-            patternScale,
-            isTiled,
-            tileSpacing,
-            patternMargin,
-            tilingDistribution,
-            tilingRotation,
-            clipToOutline,
-            size,
-            thickness,
-            isStl,
-            geometryBounds
+    // Extrude Settings Calculation
+    let activePatternHeight = Number(patternHeight === '' ? 1 : patternHeight);
+    const angleRad = (Math.abs(extrusionAngle) * Math.PI) / 180;
+    let extrudeSettings: any = { depth: activePatternHeight, bevelEnabled: false };
+
+    // Standardize shapes and calculate advanced bevels if needed
+    if (!isStl) {
+        unitShapes = (patternShapes as THREE.Shape[]).map(s => {
+            const ns = new THREE.Shape();
+            const pts = s.getPoints();
+            if (THREE.ShapeUtils.area(pts) < 0) pts.reverse();
+            ns.setFromPoints(pts);
+            s.holes?.forEach(h => ns.holes.push(new THREE.Path(h.getPoints())));
+            return ns;
+        });
+
+        // Bevel Logic for "Pyramid" effect
+        if (Math.abs(extrusionAngle) > 0 && unitShapes.length > 0) {
+            const shpBounds = getShapesBounds(unitShapes);
+            const radius = Math.min(shpBounds.size.x, shpBounds.size.y) / 2;
+            const scaledRadius = radius * patternScale;
+            let autoHeight = scaledRadius / Math.tan(angleRad);
+            
+            if (patternHeight !== '' && Number(patternHeight) > 0) {
+                autoHeight = Math.min(autoHeight, Number(patternHeight));
+            }
+            activePatternHeight = autoHeight;
+
+            extrudeSettings = {
+                depth: 0.05,
+                bevelEnabled: true,
+                bevelThickness: autoHeight,
+                bevelSize: -radius + 0.1, // Approximate convergence
+                bevelSegments: 1,
+                bevelOffset: 0
+            };
         }
+
+        unitGeo = new THREE.ExtrudeGeometry(unitShapes, extrudeSettings);
+    } else {
+        // STL
+        unitGeo = (patternShapes[0] as THREE.BufferGeometry).clone();
+        // Compute bounding box to center it?
+        // Usually STLs come in "as is". 
+    }
+
+    if (!unitGeo) return;
+
+    // Center the Geometry locally
+    unitGeo.computeBoundingBox();
+    const center = new THREE.Vector3(); 
+    if (unitGeo.boundingBox) unitGeo.boundingBox.getCenter(center);
+    unitGeo.translate(-center.x, -center.y, -center.z);
+
+    // Apply scaling to geometry if it's instanced, usually we scale via Matrix, 
+    // but for Merge fallback, we need it. 
+    // Ideally, for InstancedMesh, we set scale in the instance matrix.
+    // However, the `generateTilePositions` logic assumes "patternWidth" is pre-scaled.
+    
+
+    // ---------------------------------------------------------
+    // B. Calculate Positions
+    // ---------------------------------------------------------
+    let bounds = new THREE.Box2(new THREE.Vector2(-size/2, -size/2), new THREE.Vector2(size/2, size/2));
+    if (cutoutShapes && cutoutShapes.length > 0) {
+        const sb = getShapesBounds(cutoutShapes);
+        bounds = new THREE.Box2(sb.min, sb.max);
+    }
+
+    let pWidth = 0, pHeight = 0;
+    if (unitGeo.boundingBox) {
+        // Dimensions * Scale
+        pWidth = (unitGeo.boundingBox.max.x - unitGeo.boundingBox.min.x) * patternScale;
+        pHeight = (unitGeo.boundingBox.max.y - unitGeo.boundingBox.min.y) * patternScale;
+    }
+
+    const positions = isTiled ? generateTilePositions(
+        bounds, pWidth, pHeight, tileSpacing, 
+        cutoutShapes, patternMargin, 
+        clipToOutline, // Allow Partial?
+        tilingDistribution, tilingRotation 
+    ) : [{ position: new THREE.Vector2(0,0), rotation: 0, scale: 1 }];
+
+
+    if (positions.length === 0) return;
+
+    // ---------------------------------------------------------
+    // C. Render Selection (Instanced vs Merged CSG)
+    // ---------------------------------------------------------
+    
+    // Material
+    const mat = new THREE.MeshStandardMaterial({
+        color: patternColor,
+        wireframe: wireframe,
+        transparent: isPatternTransparent,
+        opacity: isPatternTransparent ? 0.3 : 1.0
     });
+
+    // STRATEGY: 
+    // If NOT cutting to outline -> InstancedMesh (Fastest)
+    // If cutting to outline -> Merged Geometry -> CSG Intersection (Accurate)
+
+    if (!clipToOutline || !cutoutShapes || cutoutShapes.length === 0) {
+        // --- INSTANCED MESH PATH ---
+        const iMesh = new THREE.InstancedMesh(unitGeo, mat, positions.length);
+        iMesh.name = 'Pattern';
+        iMesh.castShadow = true;
+        iMesh.receiveShadow = true;
+        
+        const dummy = new THREE.Object3D();
+        
+        positions.forEach((p, i) => {
+            // Apply scale first to determine height
+            if (!isStl) {
+                dummy.scale.set(patternScale, patternScale, -1); 
+            } else {
+                dummy.scale.set(patternScale * p.scale, patternScale * p.scale, patternScale * p.scale);
+            }
+
+            // Calculate exact height of the instance
+            const instH = (unitGeo!.boundingBox!.max.z - unitGeo!.boundingBox!.min.z) * Math.abs(dummy.scale.z);
+            
+            // Position on top of surface (Thickness)
+            // Geometry is centered at (0,0,0), so we lift it by half its height
+            const zCenter = thickness - 0.01 + (instH / 2);
+            
+            dummy.position.set(p.position.x, p.position.y, zCenter);
+            dummy.rotation.set(0, 0, p.rotation);
+            dummy.updateMatrix();
+            iMesh.setMatrixAt(i, dummy.matrix);
+        });
+
+        iMesh.instanceMatrix.needsUpdate = true;
+        group.add(iMesh);
+
+    } else {
+        // --- CSG PATH (Merged) ---
+        // 1. Create Merged Geometry
+        const geometries: THREE.BufferGeometry[] = [];
+        const dummy = new THREE.Object3D();
+
+        positions.forEach(p => {
+             // Scale
+             if (!isStl) {
+                 dummy.scale.set(patternScale, patternScale, -1);
+             } else {
+                 dummy.scale.set(patternScale * p.scale, patternScale * p.scale, patternScale * p.scale);
+             }
+
+             // Position
+             const instH = (unitGeo!.boundingBox!.max.z - unitGeo!.boundingBox!.min.z) * Math.abs(dummy.scale.z);
+             const zCenter = thickness - 0.01 + (instH / 2);
+             
+             dummy.position.set(p.position.x, p.position.y, zCenter);
+             dummy.rotation.set(0, 0, p.rotation);
+             dummy.updateMatrix();
+             
+             const clone = unitGeo!.clone();
+             clone.applyMatrix4(dummy.matrix);
+             geometries.push(clone);
+        });
+
+        if (geometries.length === 0) return;
+        const rawMergedGeo = BufferGeometryUtils.mergeGeometries(geometries);
+        // Optimize and ensure index
+        const mergedGeo = BufferGeometryUtils.mergeVertices(rawMergedGeo);
+        rawMergedGeo.dispose();
+        
+        // 2. Prepare Cutter (The Outline)
+        // We need a big volume that matches the cutout shape
+        const cutterGeo = new THREE.ExtrudeGeometry(cutoutShapes, {
+            depth: 1000, 
+            bevelEnabled: true, 
+            bevelThickness: 0.1, 
+            bevelSize: -patternMargin,
+            bevelSegments: 1, 
+            bevelOffset: 0
+        });
+
+        // Safety check
+        if (!mergedGeo.attributes.position || mergedGeo.attributes.position.count === 0 || 
+            !cutterGeo.attributes.position || cutterGeo.attributes.position.count === 0) {
+            console.warn("Skipping CSG: Invalid geometry");
+            return;
+        }
+
+        // 3. Perform CSG
+        const patternBrush = new Brush(mergedGeo);
+        const cutterBrush = new Brush(cutterGeo);
+        
+        patternBrush.updateMatrixWorld();
+        cutterBrush.updateMatrixWorld();
+        
+        // We want INTERSECTION
+        const evaluator = new Evaluator();
+        // Avoid attribute mismatch errors (e.g. missing UVs on STL)
+        evaluator.attributes = ['position', 'normal'];
+        const result = evaluator.evaluate(patternBrush, cutterBrush, INTERSECTION);
+        
+        // 4. Result Mesh
+        result.name = 'Pattern';
+        result.material = mat;
+        result.castShadow = true;
+        result.receiveShadow = true;
+        group.add(result);
+        
+        // Cleanup intermediates?
+        // Geometries in `geometries` are clones, need dispose? 
+        // BufferGeometryUtils.merge... creates new one?
+        // Yes, good practice to dispose if possible, but JS GC handles transient objects.
+        geometries.forEach(g => g.dispose());
+        mergedGeo.dispose();
+        cutterGeo.dispose();
+    }
 
   }, [
       patternShapes, patternType, cutoutShapes, size, thickness, 
