@@ -4,6 +4,7 @@ import { parseDxfToShapes, generateSVGPath } from '../utils/dxfUtils';
 import { centerShapes } from '../utils/patternUtils';
 import { SVGLoader, STLLoader } from 'three-stdlib';
 import * as THREE from 'three';
+import ControlField from './ui/ControlField';
 
 interface ShapeUploaderProps {
   label: string;
@@ -14,6 +15,7 @@ interface ShapeUploaderProps {
   extractColors?: boolean;
   adornment?: React.ReactNode;
   externalShapes?: any[];
+  externalFileName?: string | null;
 }
 
 const ShapeUploader: React.FC<ShapeUploaderProps> = (props) => {
@@ -24,7 +26,8 @@ const ShapeUploader: React.FC<ShapeUploaderProps> = (props) => {
       className,
       allowedTypes = ['dxf', 'svg', 'stl'],
       adornment,
-      externalShapes
+      externalShapes,
+      externalFileName
   } = props;
   const [fileName, setFileName] = React.useState<string | null>(null);
   const [previewPath, setPreviewPath] = React.useState<string | null>(null);
@@ -124,7 +127,7 @@ const ShapeUploader: React.FC<ShapeUploaderProps> = (props) => {
                const min = new THREE.Vector2(Infinity, Infinity);
                const max = new THREE.Vector2(-Infinity, -Infinity);
                (previewShapes as THREE.Shape[]).forEach(shape => {
-                   shape.getPoints().forEach(p => {
+                   shape.getPoints().forEach((p: THREE.Vector2) => {
                        // Match generateSVGPath (no flip)
                        const y = p.y;
                        if (p.x < min.x) min.x = p.x;
@@ -151,29 +154,32 @@ const ShapeUploader: React.FC<ShapeUploaderProps> = (props) => {
   React.useEffect(() => {
      if (externalShapes && externalShapes.length > 0) {
          // Generate preview from external edits
-         const shapesToRender = externalShapes.map(s => s.shape || s);
-         const path = generateSVGPath(shapesToRender);
-         setPreviewPath(path);
-         
-         // Update ViewBox to match these shapes ?? 
-         // For now, assume these are in the same coordinate space as original
-         // Or calculate bounds again?
-         const bounds = new THREE.Box2();
-         shapesToRender.forEach(s => {
-             s.getPoints().forEach(p => {
-                 // Note: logic in processFile calculated Min/Max.
-                 // Here we duplicate it briefly or assume existing svgViewBox is okay?
-                 // If user drew outside, we should expand.
-                 bounds.expandByPoint(p);
+         // Ensure we only try to generate SVG paths from valid 2D Shapes (which have .getPoints)
+         const shapesToRender = externalShapes
+            .map(s => s.shape || s)
+            .filter(s => s && typeof s.getPoints === 'function');
+
+         if (shapesToRender.length > 0) {
+             const path = generateSVGPath(shapesToRender);
+             setPreviewPath(path);
+             
+             const bounds = new THREE.Box2();
+             shapesToRender.forEach(s => {
+                 s.getPoints().forEach((p: THREE.Vector2) => {
+                     bounds.expandByPoint(p);
+                 });
              });
-         });
-         
-         if (!bounds.isEmpty()) {
-             const min = bounds.min;
-             const max = bounds.max;
-             const padding = Math.max((max.x - min.x), (max.y - min.y)) * 0.1;
-             // Match the Y-flip logic of processFile
-             setSvgViewBox(`${min.x - padding} ${-max.y - padding} ${max.x - min.x + padding * 2} ${max.y - min.y + padding * 2}`);
+             
+             if (!bounds.isEmpty()) {
+                 const min = bounds.min;
+                 const max = bounds.max;
+                 const padding = Math.max((max.x - min.x), (max.y - min.y)) * 0.1;
+                 setSvgViewBox(`${min.x - padding} ${-max.y - padding} ${max.x - min.x + padding * 2} ${max.y - min.y + padding * 2}`);
+             }
+         } else {
+             // If we have external shapes but no valid 2D shapes (e.g. 3D geometry), 
+             // we can't show a 2D path preview.
+             setPreviewPath(null);
          }
      } else if (!fileName) {
          // Reset if no file and no external shapes
@@ -218,18 +224,14 @@ const ShapeUploader: React.FC<ShapeUploaderProps> = (props) => {
   const acceptString = allowedTypes.map(t => `.${t}`).join(',');
   const typeLabel = allowedTypes.map(t => t.toUpperCase()).join('/');
 
+
+
   return (
-      <div className={`space-y-2 ${className}`}>
-        <div className="flex justify-between items-center">
-            <label className="block text-sm font-medium text-gray-300">
-            {label}
-            </label>
-            {adornment}
-        </div>
+      <ControlField label={label} action={adornment} className={className}>
         <div className="flex items-center justify-center w-full">
             <label 
                 htmlFor={inputId}
-                className={`flex flex-col items-center justify-center w-full h-[150px] border-2 border-dashed rounded-lg cursor-pointer transition-colors ${fileName ? 'border-green-500 bg-gray-700/50 py-2' : 'border-gray-600 bg-gray-700 hover:bg-gray-600'}`}
+                className={`flex flex-col items-center justify-center w-full h-[150px] border-2 border-dashed rounded-lg cursor-pointer transition-colors ${(fileName || externalFileName) ? 'border-green-500 bg-gray-700/50 py-2' : 'border-gray-600 bg-gray-700 hover:bg-gray-600'}`}
                 onDragOver={handleDragOver}
                 onDrop={handleDrop}
             >
@@ -242,7 +244,7 @@ const ShapeUploader: React.FC<ShapeUploaderProps> = (props) => {
                         </div>
                     )}
 
-                    {!previewPath && fileName && (
+                    {!previewPath && (fileName || externalFileName) && (
                          <div className="h-[65px] w-full flex items-center justify-center mb-2 pointer-events-none text-green-500">
                              <Box size={64} strokeWidth={1} />
                          </div>
@@ -250,8 +252,8 @@ const ShapeUploader: React.FC<ShapeUploaderProps> = (props) => {
                     
                     {(fileName || (externalShapes && externalShapes.length > 0)) ? (
                         <div className="flex items-center gap-2 bg-gray-800/80 px-4 py-2 rounded-full backdrop-blur-sm shadow-sm border border-gray-600">
-                            <span className={`text-sm font-medium truncate max-w-[180px] ${fileName ? 'text-green-400' : 'text-purple-400'}`}>
-                                {fileName || "Custom Drawing"}
+                            <span className={`text-sm font-medium truncate max-w-[180px] ${(fileName || externalFileName) ? 'text-green-400' : 'text-purple-400'}`}>
+                                {fileName || externalFileName || "Custom Drawing"}
                             </span>
                             <button 
                                 onClick={handleRemoveFile}
@@ -271,7 +273,7 @@ const ShapeUploader: React.FC<ShapeUploaderProps> = (props) => {
                 {!fileName && !(externalShapes && externalShapes.length > 0) && <input id={inputId} type="file" className="hidden" accept={acceptString} onChange={handleFileChange} />}
             </label>
         </div> 
-      </div>
+      </ControlField>
   );
 };
 

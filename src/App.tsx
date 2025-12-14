@@ -90,7 +90,7 @@ const App = () => {
 
         {/* Right Panel - Controls & Output */}
         <div className={`
-            md:h-auto w-full md:w-96 overflow-hidden flex flex-col p-4 gap-4 bg-gray-950 md:bg-transparent border-t md:border-t-0 border-gray-800 transition-all duration-300 ease-in-out
+            md:h-auto w-full md:w-96 overflow-hidden flex flex-col p-4 bg-gray-950 md:bg-transparent border-t md:border-t-0 border-gray-800 transition-all duration-300 ease-in-out
             ${isControlsCollapsed ? 'h-auto flex-shrink-0 md:flex-none' : 'h-1/2 flex-1 md:flex-none'}
         `}>
             <Controls 
@@ -161,7 +161,7 @@ const App = () => {
                onOpenWelcome={() => setShowWelcome(true)}
                isCollapsed={isControlsCollapsed}
                onToggleCollapse={() => setIsControlsCollapsed(!isControlsCollapsed)}
-               mobileContent={
+               exportControls={
                    <OutputPanel 
                         meshRef={meshRef} 
                         debugMode={debugMode} 
@@ -170,9 +170,7 @@ const App = () => {
                }
             />
             <div className={`flex-shrink-0 transition-opacity duration-300 ${isControlsCollapsed ? 'opacity-0 h-0 overflow-hidden md:opacity-100 md:h-auto md:overflow-visible' : 'opacity-100'}`}>
-               <div className="hidden md:block">
-                    <OutputPanel meshRef={meshRef} debugMode={debugMode} />
-               </div>
+               {/* OutputPanel moved to Controls */}
             </div>
         </div>
       </main>
