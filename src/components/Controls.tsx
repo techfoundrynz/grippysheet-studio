@@ -31,8 +31,8 @@ interface ControlsProps {
   setPatternColor: (val: string) => void;
   clipToOutline?: boolean;
   setClipToOutline?: (val: boolean) => void;
-  tilingDistribution: 'grid' | 'offset' | 'random';
-  setTilingDistribution: (v: 'grid' | 'offset' | 'random') => void;
+  tilingDistribution: 'grid' | 'offset' | 'hex' | 'radial' | 'random';
+  setTilingDistribution: (val: 'grid' | 'offset' | 'hex' | 'radial' | 'random') => void;
   tilingRotation: 'none' | 'alternate' | 'random';
   setTilingRotation: (v: 'none' | 'alternate' | 'random') => void;
   debugMode?: boolean;
@@ -496,9 +496,15 @@ const Controls: React.FC<ControlsProps> = ({
                         onChange={(e) => setTilingDistribution(e.target.value as any)}
                         className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none"
                       >
-                        <option value="grid">Grid</option>
-                        <option value="offset">Offset Grid (Brick)</option>
-                        <option value="random">Random (Scatter)</option>
+                        <option value="grid">Grid (Rectangular)</option>
+                        <option value="offset">Offset (Brick)</option>
+                        <option value="hex">Hex (Clusters)</option>
+                        <option value="radial">Radial</option>
+                        <option value="wave-v">Wave (Vertical)</option>
+                        <option value="wave-h">Wave (Horizontal)</option>
+                        <option value="zigzag-v">Zigzag (Vertical)</option>
+                        <option value="zigzag-h">Zigzag (Horizontal)</option>
+                        <option value="random">Random</option>
                       </select>
                     </div>
                      <div className="space-y-2">
@@ -510,6 +516,7 @@ const Controls: React.FC<ControlsProps> = ({
                       >
                         <option value="none">None</option>
                         <option value="alternate">Alternate (Checker)</option>
+                        <option value="aligned">Aligned (Tangential)</option>
                         <option value="random">Random</option>
                       </select>
                     </div>

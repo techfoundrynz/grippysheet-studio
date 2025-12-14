@@ -23,8 +23,8 @@ const App = () => {
   const [patternMargin, setPatternMargin] = useState(3);
   const [patternColor, setPatternColor] = useState(DEFAULT_PATTERN_COLOR);
   const [clipToOutline, setClipToOutline] = useState(false);
-  const [tilingDistribution, setTilingDistribution] = useState<'grid' | 'offset' | 'random'>('offset');
-  const [tilingRotation, setTilingRotation] = useState<'none' | 'alternate' | 'random'>('random');
+  const [tilingDistribution, setTilingDistribution] = useState<'grid' | 'offset' | 'hex' | 'radial' | 'random' | 'wave-v' | 'wave-h' | 'zigzag-v' | 'zigzag-h'>('hex');
+  const [tilingRotation, setTilingRotation] = useState<'none' | 'alternate' | 'random' | 'aligned'>('random');
 
   const [debugMode, setDebugMode] = useState(false);
 

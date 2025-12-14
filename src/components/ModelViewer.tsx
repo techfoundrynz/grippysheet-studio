@@ -23,7 +23,7 @@ interface ModelViewerProps {
   isTiled: boolean;
   tileSpacing: number;
   patternMargin: number;
-  tilingDistribution?: 'grid' | 'offset' | 'random';
+  tilingDistribution?: 'grid' | 'offset' | 'hex' | 'radial' | 'random' | 'wave-v' | 'wave-h' | 'zigzag-v' | 'zigzag-h';
   tilingRotation?: 'none' | 'alternate' | 'random';
   clipToOutline?: boolean;
   debugMode?: boolean;
@@ -37,6 +37,8 @@ type ViewState = {
   type: 'iso' | 'ortho';
   timestamp: number;
 };
+
+export type ViewType = 'top' | 'perspective';
 
 const CameraRig: React.FC<{ 
   viewState: ViewState; 
@@ -381,7 +383,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
   isTiled,
   tileSpacing,
   patternMargin,
-  tilingDistribution = 'grid',
+  tilingDistribution = 'hex',
   tilingRotation = 'none',
   clipToOutline = false,
   debugMode = false,

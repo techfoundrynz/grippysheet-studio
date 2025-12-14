@@ -125,20 +125,16 @@ export const generateTilePositions = (
     boundaryShapes: THREE.Shape[] | null,
     margin: number = 0,
     allowPartial: boolean = false,
-    distribution: 'grid' | 'offset' | 'random' = 'grid',
-    rotationMode: 'none' | 'alternate' | 'random' = 'none'
+    distribution: 'grid' | 'offset' | 'hex' | 'radial' | 'random' | 'wave' = 'grid',
+    rotationMode: 'none' | 'alternate' | 'random' | 'aligned' = 'none'
 ): TileInstance[] => {
     // Safety check
-    if (tileWidth <= 0 || tileHeight <= 0) return [];
+    if (!bounds) return [];
 
     const positions: TileInstance[] = [];
 
-    // Grid calculations
-    const fullWidth = tileWidth + spacing;
-    const fullHeight = tileHeight + spacing;
-
     // Buffer for edge checking
-    const buffer = allowPartial ? Math.max(fullWidth, fullHeight) : 0;
+    const buffer = allowPartial ? Math.max(tileWidth + spacing, tileHeight + spacing) : 0;
     const startX = bounds.min.x - buffer;
     const startY = bounds.min.y - buffer;
     const endX = bounds.max.x + buffer;
@@ -216,71 +212,61 @@ export const generateTilePositions = (
     };
 
     // --- Helper for Rotation ---
-    const getRotation = (c: number, r: number): number => {
+    const getRotation = (c: number, r: number, x: number, y: number): number => {
         if (rotationMode === 'random') return Math.random() * Math.PI * 2;
         if (rotationMode === 'alternate') {
             // Checkerboard
             return ((c + r) % 2 !== 0) ? Math.PI / 2 : 0;
         }
+        if (rotationMode === 'aligned') {
+            // Tangential to Center
+            const center = new THREE.Vector2();
+            bounds.getCenter(center);
+            const angle = Math.atan2(y - center.y, x - center.x);
+            return angle + Math.PI / 2;
+        }
         return 0;
     };
 
 
+    const fullWidth = tileWidth + spacing;
+    const fullHeight = tileHeight + spacing;
+
     if (distribution === 'random') {
         // --- Random / Scatter Logic ---
-        // Naive rejection sampling
-        // Try to fill area with max attempts logic
 
         // Estimate max tiles based on area
+        const spanW = bounds.max.x - bounds.min.x;
+        const spanH = bounds.max.y - bounds.min.y;
         const area = spanW * spanH;
         const tileArea = fullWidth * fullHeight;
-        const maxTiles = Math.floor(area / tileArea) * 2; // Heuristic cap
+        const maxTiles = Math.floor(area / tileArea) * 2;
         const maxAttempts = maxTiles * 50;
 
-        // Use a simple array for collision check (optimize later if needed)
-        // Check dist > size/2 + spacing + existingSize/2
-        // Assumes circular collision radius for simplicity or Box?
-        // Box overlap for strictness. Let's use Radius for speed and "Scatter" feel.
-        // effective radius = max(w,h)/2 + spacing/2? 
-        // Or simply: dist > max(w,h) + spacing?
-        // If we want tight packing this is too generous. 
-        // Correct check: Rect Intersect.
+        const startX = bounds.min.x + fullWidth / 2;
+        const startY = bounds.min.y + fullHeight / 2;
+        const effSpanW = Math.max(0, spanW - fullWidth);
+        const effSpanH = Math.max(0, spanH - fullHeight);
 
         const rects: { x: number, y: number, w: number, h: number }[] = [];
 
         let attempts = 0;
         let count = 0;
 
-        // Seeded random would be better but simple random for now.
-        // Needs to fill relevant area only.
-
         while (attempts < maxAttempts && count < maxTiles) {
             attempts++;
-            const rx = startX + Math.random() * spanW;
-            const ry = startY + Math.random() * spanH;
+            const rx = startX + Math.random() * effSpanW;
+            const ry = startY + Math.random() * effSpanH;
 
             // 1. Check Collision with existing
             let collision = false;
             for (const rect of rects) {
-                // Simple AABB overlap check for spacing
-                // New Rect: [rx-w/2, rx+w/2] ...
-                // Effectively check center distances vs collision box
-                // But rotation makes this hard. 
-                // Assuming worst case (bounding circle) is safest for "Random".
-                // Radius = Hypotenuse / 2.
-
                 const dx = rx - rect.x;
                 const dy = ry - rect.y;
-                // distance squared
                 const d2 = dx * dx + dy * dy;
-
-                // Required distance?
-                // If we successfully placed it, we don't want overlap.
-                // Min dist centers > (size + spacing)?
-                // Let's use crude circle check for speed: 
-                // radius = Math.max(tileWidth, tileHeight) / 2 + spacing/2;
-                // minCenterDist = radius * 2;
-                const minDist = Math.max(tileWidth, tileHeight) + spacing;
+                // Use slightly relaxed spacing for random to allow denser packing?
+                // Or strict: tileWidth + spacing
+                const minDist = (tileWidth + tileHeight) / 2 + spacing * 0.8;
                 if (d2 < minDist * minDist) {
                     collision = true;
                     break;
@@ -296,45 +282,210 @@ export const generateTilePositions = (
             rects.push({ x: rx, y: ry, w: tileWidth, h: tileHeight });
             positions.push({
                 position: new THREE.Vector2(rx, ry),
-                rotation: getRotation(count, 0), // Index based alternate won't work well for random, effectively random
+                rotation: getRotation(count, 0, rx, ry),
                 scale: 1
             });
             count++;
         }
+    } else if (distribution === 'radial') {
+        // --- Radial Logic ---
+        const boundsCenter = new THREE.Vector2();
+        bounds.getCenter(boundsCenter);
+
+        const bWidth = bounds.max.x - bounds.min.x;
+        const bHeight = bounds.max.y - bounds.min.y;
+        const maxDim = Math.max(bWidth, bHeight) * 0.6; // extent
+
+        // Center point
+        if (checkPosition(boundsCenter.x, boundsCenter.y)) {
+            positions.push({
+                position: boundsCenter.clone(),
+                rotation: 0,
+                scale: 1
+            });
+        }
+
+        // Step size ~ tile size + spacing
+        const stepSize = Math.max(tileWidth, tileHeight) + spacing;
+
+        let currentRadius = stepSize;
+
+        while (currentRadius < maxDim) {
+            const circumference = 2 * Math.PI * currentRadius;
+            // Arc length per item approx tileWidth + spacing
+            const arcLen = Math.max(tileWidth, tileHeight) + spacing;
+            const count = Math.floor(circumference / arcLen);
+
+            if (count > 0) {
+                const angleStep = (2 * Math.PI) / count;
+                // alternating offset for packing
+                const ringIndex = Math.round(currentRadius / stepSize);
+                const angleOffset = (ringIndex % 2 === 0) ? angleStep / 2 : 0;
+
+                for (let i = 0; i < count; i++) {
+                    const angle = i * angleStep + angleOffset;
+                    const x = boundsCenter.x + currentRadius * Math.cos(angle);
+                    const y = boundsCenter.y + currentRadius * Math.sin(angle);
+
+                    if (checkPosition(x, y)) {
+                        positions.push({
+                            position: new THREE.Vector2(x, y),
+                            rotation: getRotation(i, ringIndex, x, y),
+                            scale: 1
+                        });
+                    }
+                }
+            }
+            currentRadius += stepSize;
+        }
+
+    } else if (distribution === 'hex') {
+        // --- Hex Cluster Logic (Clusters of 6) ---
+        // 6 items arranged in a ring.
+        // Ring Radius (center to item center) such that items have `spacing` gap.
+        // Side length of huge hex = R. Distance between neighbors = R.
+        // We want neighbor distance = tileWidth + spacing.
+        // So R = tileWidth + spacing.
+
+        const R = Math.max(tileWidth, tileHeight) + spacing;
+
+        // Cluster Size approx diameter
+        // const clusterDiameter = 2 * R + Math.max(tileWidth, tileHeight);
+
+        // Spacing between Clusters
+        // For "Interlocked", we want them tighter.
+        // Hex grid stride:
+        // X-stride = 3 * R approx? No, standard hex grid spacing.
+        // If we want clusters to "nest", we treat the cluster as a large hex unit.
+        // Radius of cluster is R.
+        // Distance between cluster centers should be roughly 3*R? or 2.5*R?
+        // Let's stick to the previous spacing but maybe slightly tighter if "Interlocked" meant density.
+        // Actually, user might mean the orientation (30 deg offset).
+
+        const clusterSpacing = spacing * 2;
+        const clusterStepX = (2 * R) + Math.max(tileWidth, tileHeight) + clusterSpacing;
+        const clusterStepY = clusterStepX * 0.866;
+
+        const boundsCenter = new THREE.Vector2();
+        bounds.getCenter(boundsCenter);
+
+        const spanW = bounds.max.x - bounds.min.x;
+        const spanH = bounds.max.y - bounds.min.y;
+
+        const cols = Math.ceil(spanW / clusterStepX) + 1;
+        const rows = Math.ceil(spanH / clusterStepY) + 1;
+
+        const gridW = cols * clusterStepX;
+        const gridH = rows * clusterStepY;
+
+        const startX = boundsCenter.x - gridW / 2 + clusterStepX / 2;
+        const startY = boundsCenter.y - gridH / 2 + clusterStepY / 2;
+
+        for (let r = 0; r <= rows; r++) {
+            for (let c = 0; c <= cols; c++) {
+                let cx = startX + c * clusterStepX;
+                const cy = startY + r * clusterStepY;
+
+                // Stagger rows for hexagonal cluster packing
+                if (r % 2 !== 0) {
+                    cx += clusterStepX / 2;
+                }
+
+                // Generate 6 items for this cluster
+                for (let i = 0; i < 6; i++) {
+                    const angle = (i * 60) * (Math.PI / 180) + (Math.PI / 6);
+                    // Add 30 deg offset to make it "pointy top" or 0 for "flat top"?
+                    // Usually 30 deg looks like a proper honeycomb cell orientation if the cluster is staggered?
+                    // Let's stick to 0 for standard ring.
+
+                    const px = cx + R * Math.cos(angle);
+                    const py = cy + R * Math.sin(angle);
+
+                    if (checkPosition(px, py)) {
+                        let rot = 0;
+                        if (rotationMode === 'aligned') {
+                            // Tangential to CLUSTER center
+                            rot = Math.atan2(py - cy, px - cx) + Math.PI / 2;
+                        } else {
+                            rot = getRotation(c, r, px, py);
+                        }
+
+                        positions.push({
+                            position: new THREE.Vector2(px, py),
+                            rotation: rot,
+                            scale: 1
+                        });
+                    }
+                }
+            }
+        }
 
     } else {
-        // --- Grid / Offset Grid Logic ---
+        // --- Grid / Offset Logic ---
 
         // Center Grid
         const boundsCenter = new THREE.Vector2();
         bounds.getCenter(boundsCenter);
 
-        const cols = Math.ceil(spanW / fullWidth);
-        const rows = Math.ceil(spanH / fullHeight);
+        // Adjust row height for Hex (Legacy Hex was here)
+        // Now just Grid/Offset
+        const effectiveFullHeight = fullHeight;
+
+        // Cover area
+        const spanW = bounds.max.x - bounds.min.x;
+        const spanH = bounds.max.y - bounds.min.y;
+
+        const cols = Math.ceil(spanW / fullWidth) + 1;
+        const rows = Math.ceil(spanH / effectiveFullHeight) + 1;
 
         const grossGridWidth = cols * fullWidth;
-        const grossGridHeight = rows * fullHeight;
+        const grossGridHeight = rows * effectiveFullHeight;
 
         const gridOriginX = boundsCenter.x - (grossGridWidth / 2) + (fullWidth / 2);
-        const gridOriginY = boundsCenter.y - (grossGridHeight / 2) + (fullHeight / 2);
+        const gridOriginY = boundsCenter.y - (grossGridHeight / 2) + (effectiveFullHeight / 2);
 
-        for (let r = 0; r < rows; r++) {
-            for (let c = 0; c < cols; c++) {
+        for (let r = 0; r <= rows; r++) {
+            for (let c = 0; c <= cols; c++) {
                 // Offset Logic
                 let cx = gridOriginX + c * fullWidth;
-                const cy = gridOriginY + r * fullHeight;
+                let cy = gridOriginY + r * effectiveFullHeight;
 
                 if (distribution === 'offset') {
-                    // Offset every other row
-                    if (r % 2 !== 0) {
-                        cx += fullWidth / 2;
-                    }
+                    if (r % 2 !== 0) cx += fullWidth / 2;
+                }
+                else if (distribution === 'wave-v') {
+                    const amp = fullWidth * 0.35;
+                    const freq = 0.6;
+                    cx += Math.sin(r * freq) * amp;
+                }
+                else if (distribution === 'wave-h') {
+                    const amp = fullHeight * 0.35;
+                    const freq = 0.6;
+                    cy += Math.sin(c * freq) * amp;
+                }
+                else if (distribution === 'zigzag-v') {
+                    // Zigzag columns
+                    // Create a linear back-and-forth offset based on row index
+                    const period = 8;
+                    const scalar = r % period; // 0..7
+                    // 0,1,2,3,4,3,2,1
+                    const tri = (scalar < period / 2) ? scalar : period - scalar;
+                    // Center it: -2..2
+                    const norm = tri - period / 4;
+                    cx += norm * (fullWidth * 0.3);
+                }
+                else if (distribution === 'zigzag-h') {
+                    const period = 8;
+                    const scalar = c % period;
+                    const tri = (scalar < period / 2) ? scalar : period - scalar;
+                    const norm = tri - period / 4;
+                    cy += norm * (fullHeight * 0.3);
                 }
 
                 if (checkPosition(cx, cy)) {
                     positions.push({
                         position: new THREE.Vector2(cx, cy),
-                        rotation: getRotation(c, r),
+                        rotation: getRotation(c, r, cx, cy),
                         scale: 1
                     });
                 }
@@ -358,7 +509,7 @@ export const tileShapes = (
     margin: number = 0,
     patternType?: 'dxf' | 'svg' | 'stl' | null,
     allowPartial: boolean = false,
-    distribution: 'grid' | 'offset' | 'random' = 'grid',
+    distribution: 'grid' | 'offset' | 'hex' | 'radial' | 'random' | 'wave' = 'grid',
     rotationMode: 'none' | 'alternate' | 'random' = 'none'
 ): any[] => {
     if (!patternShapes || patternShapes.length === 0) return [];
