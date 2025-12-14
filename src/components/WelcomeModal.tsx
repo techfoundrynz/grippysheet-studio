@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { SiGithub } from '@icons-pack/react-simple-icons';
-import { Box, X, ExternalLink } from 'lucide-react';
+import { Box, X, ExternalLink, ChevronDown } from 'lucide-react';
 
 interface WelcomeModalProps {
     onClose: () => void;
@@ -10,6 +10,7 @@ export const WelcomeModal: React.FC<WelcomeModalProps> = ({ onClose }) => {
     const [dontShowAgain, setDontShowAgain] = useState(() => {
         return !!localStorage.getItem('welcome_modal_dismissed');
     });
+    const [showHelp, setShowHelp] = useState(false);
 
     const handleClose = () => {
         if (dontShowAgain) {
@@ -77,6 +78,34 @@ export const WelcomeModal: React.FC<WelcomeModalProps> = ({ onClose }) => {
                             </div>
                             <ExternalLink size={16} className="text-gray-500 group-hover:text-orange-400 transition-colors" />
                          </a>
+                    </div>
+
+                    <div className="pt-4 border-t border-gray-800">
+                        <button 
+                            onClick={() => setShowHelp(!showHelp)}
+                            className="flex items-center justify-between w-full text-left group"
+                        >
+                            <h3 className="text-sm font-semibold text-gray-200 group-hover:text-cyan-400 transition-colors">How to use this tool</h3>
+                            <ChevronDown 
+                                size={16} 
+                                className={`text-gray-500 transition-transform duration-300 ${showHelp ? 'rotate-180' : ''}`} 
+                            />
+                        </button>
+                        
+                        <div className={`grid transition-all duration-300 ease-in-out ${showHelp ? 'grid-rows-[1fr] opacity-100 mt-3' : 'grid-rows-[0fr] opacity-0 mt-0'}`}>
+                            <div className="overflow-hidden">
+                                <ol className="text-sm text-gray-400 space-y-3 list-decimal list-outside ml-4 marker:text-gray-600">
+                                    <li className="pl-1"><span className="text-gray-300 font-medium">Upload your DXF file</span> for the grip outline. This will set the main shape of your grip tape.</li>
+                                    <li className="pl-1"><span className="text-gray-300 font-medium">Set the thickness</span> of your grip tape. 1mm or 3mm is recommended but 1mm is recommended if you have not used 3D printed grip before.</li>
+                                    <li className="pl-1"><span className="text-gray-300 font-medium">Optional - Upload a SVG file for your inlay.</span> This allows for custom backgrounds on your grip tape underneath the actual grip pattern and each color will be exported as a separate mesh for printing with multicolor printers.</li>
+                                    <li className="pl-1">
+                                        <span className="text-gray-300 font-medium">Configure your grip pattern</span>. You can use a 2D (DXF/SVG) or 3D (STL) file here. There are various options for how these are distributed.
+                                        <p className="mt-1 text-xs text-amber-500/80 italic">Please note that operations with complex geometries may take up to a minute to process.</p>
+                                    </li>
+                                    <li className="pl-1"><span className="text-gray-300 font-medium">Export your grip file</span> as 3MF and open in your slicer.</li>
+                                </ol>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
