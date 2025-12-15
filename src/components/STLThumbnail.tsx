@@ -2,6 +2,7 @@ import React, { useState, useEffect, Suspense } from 'react';
 import { Canvas, useThree, useLoader } from '@react-three/fiber';
 import { STLLoader } from 'three-stdlib';
 import { Center } from '@react-three/drei';
+import * as THREE from 'three';
 
 interface ThumbnailSceneProps {
     url: string;
@@ -10,15 +11,41 @@ interface ThumbnailSceneProps {
 
 const ThumbnailScene: React.FC<ThumbnailSceneProps> = ({ url, onCapture }) => {
     const geometry = useLoader(STLLoader, url);
-    const { gl, scene, camera } = useThree();
+    const { gl, scene, camera, size } = useThree();
 
     useEffect(() => {
+        if (!geometry) return;
+
+        // Center the geometry
+        geometry.center();
+        geometry.computeBoundingSphere();
+        
+        const sphere = geometry.boundingSphere;
+        if (sphere) {
+            const fov = 40 * (Math.PI / 180); // Convert FOV to radians
+            const objectSize = sphere.radius * 2.2; // Add some margin
+            
+            // Calculate distance to fit object (distance from camera to center)
+            const distance = objectSize / (2 * Math.tan(fov / 2));
+            
+            // Position camera at [distance, distance, distance] relative direction, but scaled to exact distance
+            const dir = new THREE.Vector3(1, 1, 1).normalize();
+            camera.position.copy(dir.multiplyScalar(distance));
+            camera.lookAt(0, 0, 0);
+            camera.updateProjectionMatrix();
+        }
+
         // Trigger a render to ensure geometry is drawn
         gl.render(scene, camera);
+        
         // Capture
-        const dataUrl = gl.domElement.toDataURL('image/png');
-        onCapture(dataUrl);
-    }, [gl, scene, camera, onCapture]);
+        // Small timeout to ensure render is complete
+        setTimeout(() => {
+             const dataUrl = gl.domElement.toDataURL('image/png');
+             onCapture(dataUrl);
+        }, 50);
+        
+    }, [gl, scene, camera, geometry, onCapture]);
 
     return (
         <Center>

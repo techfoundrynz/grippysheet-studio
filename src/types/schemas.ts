@@ -43,6 +43,7 @@ export const GeometrySettingsSchema = z.object({
     tilingDirection: z.enum(['horizontal', 'vertical']),
     tilingOrientation: z.enum(['none', 'alternate', 'random', 'aligned']),
     baseRotation: z.number().default(0),
+    rotationClamp: z.number().optional(),
     debugMode: z.boolean().optional(),
 });
 

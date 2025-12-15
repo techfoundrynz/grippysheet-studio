@@ -22,6 +22,7 @@ const PRESETS: PatternPreset[] = [
     
     // Inlays
     { name: 'Pubmote', file: 'pubmote.svg', type: 'svg', category: 'inlays', keepOriginalColors: true },
+    { name: 'Spooderman', file: 'spooderman.svg', type: 'svg', category: 'inlays', keepOriginalColors: true },
 ];
 
 interface PatternLibraryModalProps {

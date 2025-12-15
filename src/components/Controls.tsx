@@ -199,8 +199,11 @@ const Controls: React.FC<ControlsProps> = ({
           </div>
         </div>
           
-        <div className="flex -mt-1 mb-4">
-             <p className="text-[9px] text-gray-500 font-mono">
+        <div className="flex flex-col -mt-1 mb-4 gap-0.25">
+             <p className="text-[12px] text-gray-300 font-mono font-bold">
+               Built by Siwoz
+             </p>
+             <p className="text-[10px] text-gray-500 font-mono">
                Build: {import.meta.env.DEV ? 'DEV' : __BUILD_TIMESTAMP__}
              </p>
         </div>

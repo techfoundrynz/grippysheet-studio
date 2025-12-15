@@ -21,6 +21,7 @@ interface ImperativeModelProps {
   tilingDirection?: 'horizontal' | 'vertical';
   tilingOrientation?: 'none' | 'alternate' | 'random' | 'aligned';
   baseRotation?: number; // Rotates the PATTERN units
+  rotationClamp?: number;
   clipToOutline?: boolean;
   baseOutlineRotation?: number; // Rotates the BASE shape
   baseOutlineMirror?: boolean; // Mirrors the BASE shape
@@ -54,6 +55,7 @@ const ImperativeModel = React.forwardRef<THREE.Group, ImperativeModelProps>(({
   tilingDirection = 'horizontal',
   tilingOrientation = 'aligned',
   baseRotation = 0,
+  rotationClamp,
   clipToOutline = false,
   baseOutlineRotation = 0,
   baseOutlineMirror = false,
@@ -393,15 +395,32 @@ const ImperativeModel = React.forwardRef<THREE.Group, ImperativeModelProps>(({
     // ---------------------------------------------------------
 
     // We now assume patternShapes[0] is always a BufferGeometry (STL)
-    // as we've removed SVG/DXF support for patterns.
+    // OR an array of Shapes (SVG/DXF) which we convert to ExtrudeGeometry
     let unitGeo: THREE.BufferGeometry | null = null;
     
     if (patternShapes[0] instanceof THREE.BufferGeometry) {
         unitGeo = patternShapes[0].clone();
     } else {
-        // Fallback or error if somehow non-STL passed (though Controls restricts it)
-        console.warn("Non-STL pattern shape received in STL-only mode");
-        return; 
+        // Assume THREE.Shape[] or objects with .shape
+        try {
+            const shapes = patternShapes.map((s: any) => s.shape || s).filter((s: any) => s instanceof THREE.Shape);
+            if (shapes.length > 0) {
+                 // Use depth 1 for unit geometry, scaling handles the rest
+                 unitGeo = new THREE.ExtrudeGeometry(shapes, { depth: 1, bevelEnabled: false });
+                 
+                 // Center logic: ExtrudeGeometry is usually roughly centered if shapes are centered?
+                 // But we center unitGeo later anyway (lines 414+).
+                 // However, Extrusion starts at Z=0 and goes to Z=depth.
+                 // Centering later handles X/Y/Z.
+            }
+        } catch (e) {
+            console.error("Error converting shapes to geometry", e);
+        }
+        
+        if (!unitGeo) {
+             console.warn("Invalid pattern shapes received");
+             return;
+        }
     }
 
     if (!unitGeo) return;
@@ -416,7 +435,13 @@ const ImperativeModel = React.forwardRef<THREE.Group, ImperativeModelProps>(({
 
     // Apply Base Rotation
     if (baseRotation !== 0) {
-        unitGeo.rotateZ(baseRotation * (Math.PI / 180));
+        let rotationToApply = baseRotation;
+        if (rotationClamp && rotationClamp > 0) {
+             const steps = Math.round(baseRotation / rotationClamp);
+             rotationToApply = steps * rotationClamp;
+        }
+
+        unitGeo.rotateZ(rotationToApply * (Math.PI / 180));
         unitGeo.computeBoundingBox(); // Recompute bounds after rotation
     }
 
@@ -509,6 +534,14 @@ const ImperativeModel = React.forwardRef<THREE.Group, ImperativeModelProps>(({
         finalInclusionShapes
     ) : [{ position: new THREE.Vector2(0,0), rotation: 0, scale: 1 }];
 
+    // Apply Rotation Clamp to Instances (e.g. Random Orientation)
+    if (rotationClamp && rotationClamp > 0) {
+        const radClamp = rotationClamp * (Math.PI / 180);
+        positions.forEach(p => {
+             const steps = Math.round(p.rotation / radClamp);
+             p.rotation = steps * radClamp;
+        });
+    }
 
     if (positions.length === 0) return;
 
@@ -666,7 +699,7 @@ const ImperativeModel = React.forwardRef<THREE.Group, ImperativeModelProps>(({
       patternColor, wireframePattern, patternOpacity, 
       patternScale, patternScaleZ, 
       isTiled, tileSpacing, patternMargin, tilingDistribution, tilingOrientation, tilingDirection,
-      clipToOutline, displayMode, inlayShapes, inlayScale, inlayRotation, inlayMirror, baseRotation,
+      clipToOutline, displayMode, inlayShapes, inlayScale, inlayRotation, inlayMirror, baseRotation, rotationClamp,
       thickness, filledCutoutShapes, holeShapes, patternShapes, size
   ]);
 

@@ -38,7 +38,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
       patternShapes, patternType, patternScale, patternScaleZ,
       isTiled, tileSpacing, patternMargin, 
       tilingDistribution, tilingDirection, tilingOrientation,
-      clipToOutline, debugMode, patternColor: geomPatternColor
+      clipToOutline, debugMode, patternColor: geomPatternColor, rotationClamp
   } = geometrySettings;
 
   const [viewState, setViewState] = useState<ViewState>({ type: 'ortho', timestamp: Date.now() });
@@ -344,6 +344,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
                 tilingDirection={tilingDirection}
                 tilingOrientation={tilingOrientation}
                 baseRotation={geometrySettings.baseRotation}
+                rotationClamp={rotationClamp}
                 clipToOutline={clipToOutline}
                 inlayShapes={inlayShapes}
                 inlayDepth={inlayDepth}

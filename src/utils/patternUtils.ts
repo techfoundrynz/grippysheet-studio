@@ -146,44 +146,52 @@ export const generateTilePositions = (
     // --- Helper for Validity Check (Shape/Bounds) ---
     const checkPosition = (px: number, py: number): boolean => {
         const center = new THREE.Vector2(px, py);
+        const halfW = tileWidth / 2;
+        const halfH = tileHeight / 2;
+
+        // Use 5 test points (Center + Corners) to determine containment
+        const testPoints = [
+            center,
+            new THREE.Vector2(px - halfW, py - halfH),
+            new THREE.Vector2(px + halfW, py - halfH),
+            new THREE.Vector2(px + halfW, py + halfH),
+            new THREE.Vector2(px - halfW, py + halfH)
+        ];
 
         // 1. Check Exclusion Zones
         if (exclusionShapes && exclusionShapes.length > 0) {
-            let isExcluded = false;
+            let pointsFullyExcluded = 0;
 
-            // Check if inside ANY exclusion zone
-            for (const shape of exclusionShapes) {
-                if (isPointInShape(center, shape)) {
-                    isExcluded = true;
-                    break;
-                }
-            }
+            for (const pt of testPoints) {
+                let isPtExcluded = false;
 
-            // If excluded, check if rescued by inclusion zone
-            if (isExcluded && inclusionShapes && inclusionShapes.length > 0) {
-                for (const shape of inclusionShapes) {
-                    if (isPointInShape(center, shape)) {
-                        isExcluded = false; // Is inside an Inclusion Zone (Island)
+                // Must be inside ANY exclusion shape
+                for (const shape of exclusionShapes) {
+                    if (isPointInShape(pt, shape)) {
+                        isPtExcluded = true;
                         break;
                     }
                 }
+
+                // But NOT inside ANY inclusion shape (rescue)
+                if (isPtExcluded && inclusionShapes && inclusionShapes.length > 0) {
+                    for (const shape of inclusionShapes) {
+                        if (isPointInShape(pt, shape)) {
+                            isPtExcluded = false;
+                            break;
+                        }
+                    }
+                }
+
+                if (isPtExcluded) pointsFullyExcluded++;
             }
 
-            if (isExcluded) return false;
+            // ONLY exclude if ALL points are in the exclusion zone.
+            // If even one point is outside (partial overlap), we KEEP it (to be cut by CSG later).
+            if (pointsFullyExcluded === testPoints.length) return false;
         }
 
         if (boundaryShapes && boundaryShapes.length > 0) {
-            const halfW = tileWidth / 2;
-            const halfH = tileHeight / 2;
-
-            const testPoints = [
-                center,
-                new THREE.Vector2(px - halfW, py - halfH),
-                new THREE.Vector2(px + halfW, py - halfH),
-                new THREE.Vector2(px + halfW, py + halfH),
-                new THREE.Vector2(px - halfW, py + halfH)
-            ];
-
             let validCount = 0;
             for (const p of testPoints) {
                 let pValid = false;
@@ -218,9 +226,6 @@ export const generateTilePositions = (
             const safeMaxX = bounds.max.x - margin;
             const safeMinY = bounds.min.y + margin;
             const safeMaxY = bounds.max.y - margin;
-
-            const halfW = tileWidth / 2;
-            const halfH = tileHeight / 2;
 
             const tMinX = px - halfW;
             const tMaxX = px + halfW;

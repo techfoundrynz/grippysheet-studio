@@ -28,7 +28,7 @@ const GeometryControls: React.FC<GeometryControlsProps> = ({
     patternShapes, patternType, patternScale, patternScaleZ, 
     isTiled, tileSpacing, patternMargin, clipToOutline, 
     tilingDistribution, tilingDirection, tilingOrientation,
-    baseRotation, patternColor 
+    baseRotation, rotationClamp, patternColor 
   } = settings;
 
   const [showPatternLibrary, setShowPatternLibrary] = useState(false);
@@ -257,63 +257,85 @@ const GeometryControls: React.FC<GeometryControlsProps> = ({
 
           {isTiled && (
             <>
-            <ControlField label="Distribution">
-              <div className="relative">
-                  <select
-                  value={tilingDistribution}
-                  onChange={(e) => updateSettings({ tilingDistribution: e.target.value as any })}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg pl-3 pr-10 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none appearance-none truncate"
-                  >
-                  <option value="grid">Grid</option>
-                  <option value="offset">Offset</option>
-                  <option value="hex">Hex</option>
-                  <option value="radial">Radial</option>
-                  <option value="wave">Wave</option>
-                  <option value="zigzag">Zigzag</option>
-                  <option value="warped-grid">Warped Grid</option>
-                  <option value="random">Random</option>
-                  </select>
-                  <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
-                      <ChevronDown size={16} />
-                  </div>
-              </div>
-            </ControlField>
-
-            {(tilingDistribution === 'wave' || tilingDistribution === 'zigzag') && (
-                <ControlField label="Direction">
-                <div className="relative">
-                    <select
-                    value={tilingDirection}
-                    onChange={(e) => updateSettings({ tilingDirection: e.target.value as any })}
-                    className="w-full bg-gray-800 border border-gray-700 rounded-lg pl-3 pr-10 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none appearance-none truncate"
-                    >
-                    <option value="horizontal">Horizontal</option>
-                    <option value="vertical">Vertical</option>
-                    </select>
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
-                        <ChevronDown size={16} />
-                    </div>
+            <div className="flex gap-4">
+                <div className="flex-1 min-w-0">
+                    <ControlField label="Distribution">
+                        <div className="relative">
+                            <select
+                            value={tilingDistribution}
+                            onChange={(e) => updateSettings({ tilingDistribution: e.target.value as any })}
+                            className="w-full bg-gray-800 border border-gray-700 rounded-lg pl-3 pr-10 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none appearance-none truncate"
+                            >
+                            <option value="grid">Grid</option>
+                            <option value="offset">Offset</option>
+                            <option value="hex">Hex</option>
+                            <option value="radial">Radial</option>
+                            <option value="wave">Wave</option>
+                            <option value="zigzag">Zigzag</option>
+                            <option value="warped-grid">Warped Grid</option>
+                            <option value="random">Random</option>
+                            </select>
+                            <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
+                                <ChevronDown size={16} />
+                            </div>
+                        </div>
+                    </ControlField>
                 </div>
-                </ControlField>
-            )}
 
-            <ControlField label="Orientation">
-              <div className="relative">
-                  <select
-                  value={tilingOrientation}
-                  onChange={(e) => updateSettings({ tilingOrientation: e.target.value as any })}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg pl-3 pr-10 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none appearance-none truncate"
-                  >
-                  <option value="none">None</option>
-                  <option value="alternate">Alternate</option>
-                  <option value="aligned">Aligned</option>
-                  <option value="random">Random</option>
-                  </select>
-                  <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
-                      <ChevronDown size={16} />
-                  </div>
-              </div>
-            </ControlField>
+                {(tilingDistribution === 'wave' || tilingDistribution === 'zigzag') && (
+                    <div className="flex-1 min-w-0">
+                        <ControlField label="Direction">
+                        <div className="relative">
+                            <select
+                            value={tilingDirection}
+                            onChange={(e) => updateSettings({ tilingDirection: e.target.value as any })}
+                            className="w-full bg-gray-800 border border-gray-700 rounded-lg pl-3 pr-10 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none appearance-none truncate"
+                            >
+                            <option value="horizontal">Horizontal</option>
+                            <option value="vertical">Vertical</option>
+                            </select>
+                            <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
+                                <ChevronDown size={16} />
+                            </div>
+                        </div>
+                        </ControlField>
+                    </div>
+                )}
+            </div>
+
+            <div className="flex gap-4">
+                <div className="flex-1 min-w-0">
+                    <ControlField label="Orientation">
+                    <div className="relative">
+                        <select
+                        value={tilingOrientation}
+                        onChange={(e) => updateSettings({ tilingOrientation: e.target.value as any })}
+                        className="w-full bg-gray-800 border border-gray-700 rounded-lg pl-3 pr-10 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none appearance-none truncate"
+                        >
+                        <option value="none">None</option>
+                        <option value="alternate">Alternate</option>
+                        <option value="aligned">Aligned</option>
+                        <option value="random">Random</option>
+                        </select>
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
+                            <ChevronDown size={16} />
+                        </div>
+                    </div>
+                    </ControlField>
+                </div>
+
+                <div className="flex-1 min-w-0">
+                    <ControlField label="Clamp" tooltip="Snap rotation increments">
+                        <DebouncedInput
+                            type="number"
+                            value={rotationClamp ?? ''}
+                            onChange={(val) => updateSettings({ rotationClamp: val === '' ? undefined : Number(val) })}
+                            placeholder="None"
+                            className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none"
+                        />
+                    </ControlField>
+                </div>
+            </div>
             </>
           )}
 
