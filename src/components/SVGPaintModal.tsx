@@ -28,6 +28,11 @@ const SVGPaintModal: React.FC<SVGPaintModalProps> = ({ isOpen, onClose, shapes, 
     const [activeTool, setActiveTool] = useState<'paint' | 'draw' | 'rectangle' | 'circle' | 'eraser' | 'text' | 'exclude'>('paint');
     const [currentPath, setCurrentPath] = useState<THREE.Vector2[]>([]);
     
+    // Zoom/Pan State
+    const isPanning = useRef(false);
+    const panStart = useRef({ x: 0, y: 0 });
+    const viewBoxStart = useRef({ x: 0, y: 0, w: 0, h: 0 });
+    
     const svgRef = useRef<SVGSVGElement>(null);
 
     useEffect(() => {
@@ -120,6 +125,15 @@ const SVGPaintModal: React.FC<SVGPaintModalProps> = ({ isOpen, onClose, shapes, 
 
     const handlePointerDown = (e: React.PointerEvent) => {
         (e.target as Element).setPointerCapture(e.pointerId);
+
+        // Handle Pan (Middle Mouse or Right Mouse)
+        if (e.button === 1 || e.button === 2) {
+            e.preventDefault();
+            isPanning.current = true;
+            panStart.current = { x: e.clientX, y: e.clientY };
+            viewBoxStart.current = { ...vbParams };
+            return;
+        }
         
         if (activeTool === 'paint' || activeTool === 'eraser' || activeTool === 'exclude') return;
 
@@ -132,9 +146,23 @@ const SVGPaintModal: React.FC<SVGPaintModalProps> = ({ isOpen, onClose, shapes, 
     };
 
     const handlePointerMove = (e: React.PointerEvent) => {
-        // Panning removed
-
-
+        // Handle Panning
+        if (isPanning.current && svgRef.current) {
+            const dx = e.clientX - panStart.current.x;
+            const dy = e.clientY - panStart.current.y;
+            
+            const rect = svgRef.current.getBoundingClientRect();
+            // Scale screen pixels to viewBox units
+            const scaleX = viewBoxStart.current.w / rect.width;
+            const scaleY = viewBoxStart.current.h / rect.height;
+            
+            setVbParams({
+                ...viewBoxStart.current,
+                x: viewBoxStart.current.x - dx * scaleX,
+                y: viewBoxStart.current.y - dy * scaleY
+            });
+            return;
+        }
         if (currentPath.length > 0) {
             const pt = getSVGPoint(e);
             if (!pt) return;
@@ -152,8 +180,30 @@ const SVGPaintModal: React.FC<SVGPaintModalProps> = ({ isOpen, onClose, shapes, 
     };
     
     const handleWheel = (e: React.WheelEvent) => {
-        // Disabled Zoom/Pan as requested
-        // e.stopPropagation();
+        if (!svgRef.current) return;
+        e.stopPropagation();
+        e.preventDefault();
+
+        const zoomFactor = e.deltaY > 0 ? 1.1 : 0.9;
+        
+        // Calculate mouse position ratio mainly to zoom towards mouse
+        const rect = svgRef.current.getBoundingClientRect();
+        const rx = (e.clientX - rect.left) / rect.width;
+        const ry = (e.clientY - rect.top) / rect.height;
+        
+        setVbParams(prev => {
+            const newW = prev.w * zoomFactor;
+            const newH = prev.h * zoomFactor;
+            const newX = prev.x + (prev.w - newW) * rx;
+            const newY = prev.y + (prev.h - newH) * ry;
+            
+            return {
+                x: newX,
+                y: newY,
+                w: newW,
+                h: newH
+            };
+        });
     };
 
     // Font Loading
@@ -191,6 +241,11 @@ const SVGPaintModal: React.FC<SVGPaintModalProps> = ({ isOpen, onClose, shapes, 
 
     const handlePointerUp = (e: React.PointerEvent) => {
         (e.target as Element).releasePointerCapture(e.pointerId);
+
+        if (isPanning.current) {
+            isPanning.current = false;
+            return;
+        }
 
         if (activeTool === 'text') {
             // Prevent text tool from triggering on mouse leave
@@ -362,6 +417,7 @@ const SVGPaintModal: React.FC<SVGPaintModalProps> = ({ isOpen, onClose, shapes, 
                                 onPointerUp={handlePointerUp}
                                 onPointerLeave={handlePointerUp} // Use Up handler to clean state
                                 onWheel={handleWheel}
+                                onContextMenu={(e) => e.preventDefault()}
                             >
                                 <g transform="scale(1, -1)">
                                     {localShapes.map((item, index) => {
@@ -569,7 +625,7 @@ const SVGPaintModal: React.FC<SVGPaintModalProps> = ({ isOpen, onClose, shapes, 
                                        style={{ backgroundColor: baseColor }}
                                        title="Match Base Color"
                                    >
-                                       <span className="text-xs font-bold uppercase text-white drop-shadow-md">Base Color</span>
+                                       <span className="text-xs font-bold uppercase text-white drop-shadow-md">Base</span>
                                    </button>
                                    <button
                                        onClick={() => setSelectedColor('transparent')}
