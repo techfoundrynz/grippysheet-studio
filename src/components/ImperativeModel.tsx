@@ -510,7 +510,8 @@ const ImperativeModel = React.forwardRef<THREE.Group, ImperativeModelProps>(({
       patternColor, wireframePattern, patternOpacity, 
       patternScale, patternScaleZ, 
       isTiled, tileSpacing, patternMargin, tilingDistribution, tilingOrientation, tilingDirection,
-      clipToOutline, displayMode, inlayShapes, inlayScale, inlayRotation, baseRotation
+      clipToOutline, displayMode, inlayShapes, inlayScale, inlayRotation, baseRotation,
+      thickness, cutoutShapes, patternShapes, size
   ]);
 
   return <group ref={localGroupRef} />;
