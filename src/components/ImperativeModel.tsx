@@ -27,6 +27,7 @@ interface ImperativeModelProps {
   inlayScale?: number;
   inlayRotation?: number;
   inlayExtend?: number;
+  inlayMirror?: boolean;
   wireframeBase?: boolean;
   wireframeInlay?: boolean;
   wireframePattern?: boolean;
@@ -42,7 +43,6 @@ const ImperativeModel = React.forwardRef<THREE.Group, ImperativeModelProps>(({
   patternColor,
   cutoutShapes,
   patternShapes,
-  patternType,
   patternScale,
   patternScaleZ,
   isTiled,
@@ -58,6 +58,7 @@ const ImperativeModel = React.forwardRef<THREE.Group, ImperativeModelProps>(({
   inlayScale = 1,
   inlayRotation = 0,
   inlayExtend = 0,
+  inlayMirror = false,
   wireframeBase = false,
   wireframeInlay = false,
   wireframePattern = false,
@@ -178,14 +179,16 @@ const ImperativeModel = React.forwardRef<THREE.Group, ImperativeModelProps>(({
         const mesh = new THREE.Mesh(geo, mat);
         mesh.name = `Inlay_${i}`;
         mesh.position.set(0, 0, thickness - inlayDepth);
-        mesh.scale.set(inlayScale, inlayScale, 1);
+        // Apply mirror to X scale if enabled
+        const scaleX = inlayMirror ? -inlayScale : inlayScale;
+        mesh.scale.set(scaleX, inlayScale, 1);
         mesh.rotation.z = inlayRotation * (Math.PI / 180);
         mesh.castShadow = true;
         mesh.receiveShadow = true;
         group.add(mesh);
     });
 
-  }, [inlayShapes, inlayDepth, inlayScale, inlayRotation, inlayExtend, thickness, color, wireframeInlay, displayMode]);
+  }, [inlayShapes, inlayDepth, inlayScale, inlayRotation, inlayExtend, inlayMirror, thickness, color, wireframeInlay, displayMode]);
 
 
   // --- 3. Pattern Construction (The Heavy Lifter) ---
@@ -284,8 +287,8 @@ const ImperativeModel = React.forwardRef<THREE.Group, ImperativeModelProps>(({
         const sin = Math.sin(rad);
 
         const transform = (p: THREE.Vector2) => {
-            // 1. Scale
-            const sx = p.x * inlayScale;
+            // 1. Scale (Mirror X if needed)
+            const sx = p.x * (inlayMirror ? -inlayScale : inlayScale);
             const sy = p.y * inlayScale;
             // 2. Rotate
             const rx = sx * cos - sy * sin;
@@ -293,10 +296,17 @@ const ImperativeModel = React.forwardRef<THREE.Group, ImperativeModelProps>(({
             return new THREE.Vector2(rx, ry);
         };
         
-        shape.getPoints().forEach((p: THREE.Vector2, i: number) => {
-            const tp = transform(p);
-            if (i === 0) newShape.moveTo(tp.x, tp.y);
-            else newShape.lineTo(tp.x, tp.y);
+        // If mirroring, we might need to reverse winding order?
+        // ThreeJS standard: CCW = solid.
+        // If we flip X, CCW becomes CW.
+        // So if mirrored, we should reverse the point order to maintain CCW winding.
+        
+        const pts = shape.getPoints().map(transform);
+        if (inlayMirror) pts.reverse();
+
+        pts.forEach((p: THREE.Vector2, i: number) => {
+            if (i === 0) newShape.moveTo(p.x, p.y);
+            else newShape.lineTo(p.x, p.y);
         });
         
         if (shape.holes && shape.holes.length > 0) {
@@ -323,7 +333,7 @@ const ImperativeModel = React.forwardRef<THREE.Group, ImperativeModelProps>(({
 
     const positions = isTiled ? generateTilePositions(
         bounds, pWidth, pHeight, tileSpacing, 
-        cutoutShapes, patternMargin, 
+        cutoutShapes || null, patternMargin, 
         clipToOutline, // Allow Partial?
         tilingDistribution, tilingOrientation,
         tilingDirection,
@@ -510,7 +520,7 @@ const ImperativeModel = React.forwardRef<THREE.Group, ImperativeModelProps>(({
       patternColor, wireframePattern, patternOpacity, 
       patternScale, patternScaleZ, 
       isTiled, tileSpacing, patternMargin, tilingDistribution, tilingOrientation, tilingDirection,
-      clipToOutline, displayMode, inlayShapes, inlayScale, inlayRotation, baseRotation,
+      clipToOutline, displayMode, inlayShapes, inlayScale, inlayRotation, inlayMirror, baseRotation,
       thickness, cutoutShapes, patternShapes, size
   ]);
 

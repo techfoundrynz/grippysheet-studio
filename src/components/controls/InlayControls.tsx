@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { InlaySettings } from '../../types/schemas';
-import { Palette, BookOpen, Maximize } from 'lucide-react';
+import { Palette, BookOpen, Maximize, FlipHorizontal } from 'lucide-react';
 import ShapeUploader from '../ShapeUploader';
 import ControlField from '../ui/ControlField';
 import DebouncedInput from '../DebouncedInput';
+import ToggleButton from '../ui/ToggleButton';
 import PatternLibraryModal from '../PatternLibraryModal';
 import SVGPaintModal from '../SVGPaintModal';
 import { useAlert } from '../../context/AlertContext';
@@ -27,7 +28,7 @@ const InlayControls: React.FC<InlayControlsProps> = ({
   baseColor
 }) => {
   const { showAlert } = useAlert();
-  const { inlayShapes, inlayDepth, inlayScale, inlayRotation, inlayExtend } = settings;
+  const { inlayShapes, inlayDepth, inlayScale, inlayRotation, inlayExtend, inlayMirror } = settings;
 
   const [showPaintModal, setShowPaintModal] = useState(false);
   const [showInlayLibrary, setShowInlayLibrary] = useState(false);
@@ -197,6 +198,16 @@ const InlayControls: React.FC<InlayControlsProps> = ({
                     value={inlayRotation}
                     onChange={(val) => updateSettings({ inlayRotation: Number(val) })}
                     className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none"
+                    />
+                </ControlField>
+              </div>
+              <div className="flex-1 min-w-0">
+                <ControlField label="Mirror" tooltip="Flip the inlay horizontally">
+                     <ToggleButton
+                        label={inlayMirror ? "Enabled" : "Disabled"}
+                        isToggled={!!inlayMirror}
+                        onToggle={() => updateSettings({ inlayMirror: !inlayMirror })}
+                        icon={<FlipHorizontal size={16} />}
                     />
                 </ControlField>
               </div>

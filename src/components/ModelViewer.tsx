@@ -31,7 +31,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
   // So baseSettings doesn't have patternColor.
   
   const { 
-      inlayShapes, inlayDepth, inlayScale, inlayRotation, inlayExtend 
+      inlayShapes, inlayDepth, inlayScale, inlayRotation, inlayExtend, inlayMirror 
   } = inlaySettings;
 
   const {
@@ -334,7 +334,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
                 patternType={patternType}
                 // extrusionAngle and patternHeight removed for STL-only mode
                 patternScale={patternScale}
-                patternScaleZ={patternScaleZ === '' ? undefined : patternScaleZ}
+                patternScaleZ={patternScaleZ === '' ? undefined : Number(patternScaleZ)}
                 isTiled={isTiled}
                 tileSpacing={tileSpacing}
                 patternMargin={patternMargin}
@@ -348,6 +348,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
                 inlayScale={inlayScale}
                 inlayRotation={inlayRotation}
                 inlayExtend={inlayExtend}
+                inlayMirror={inlayMirror}
                 wireframeBase={wireframeState.base}
                 wireframeInlay={wireframeState.inlay}
                 wireframePattern={wireframeState.pattern}
@@ -367,17 +368,25 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
             />
         )}
 
-        {outlineState.inlay && inlayShapes && inlayShapes.length > 0 && inlayShapes.map((shape, i) => (
+        {outlineState.inlay && inlayShapes && inlayShapes.length > 0 && inlayShapes.map((shape, i) => {
+            const rawPoints = shape.shape ? shape.shape.getPoints() : shape.getPoints();
+            // Apply mirror to points directly if needed
+            const points = inlayMirror 
+                ? rawPoints.map((p: THREE.Vector2) => new THREE.Vector2(-p.x, p.y)) 
+                : rawPoints;
+
+            return (
             <Line
                 key={`inlay-outline-${i}`}
-                points={shape.shape ? shape.shape.getPoints() : shape.getPoints()} 
+                points={points} 
                 color="#4ade80"
                 lineWidth={2}
                 position={[0, 0, thickness + 0.1 + ((i + 1) * 0.001)]}
                 scale={[inlayScale, inlayScale, 1]}
                 rotation={[0, 0, inlayRotation * (Math.PI / 180)]}
             />
-        ))}
+            );
+        })}
 
         {outlineState.pattern && patternShapes && patternShapes.length > 0 && patternShapes[0] instanceof THREE.Shape && (
              <Line

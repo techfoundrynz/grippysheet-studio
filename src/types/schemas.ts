@@ -21,7 +21,7 @@ export const InlaySettingsSchema = z.object({
     inlayScale: z.number(),
     inlayRotation: z.number(),
     inlayExtend: z.number(),
-
+    inlayMirror: z.boolean().default(false),
 });
 
 export const GeometrySettingsSchema = z.object({
