@@ -12,10 +12,13 @@ interface PatternPreset {
 
 const PRESETS: PatternPreset[] = [
     { name: 'Pyramid', file: 'pyramid.stl', type: 'stl', category: 'patterns' },
-    // { name: 'Cube', file: 'cube.stl', type: 'stl', category: 'patterns' },
-    // { name: 'Dome', file: 'dome.stl', type: 'stl', category: 'patterns' },
-    { name: 'Tri-Pyramid', file: 'triangular-pyramid.stl', type: 'stl', category: 'patterns' },
-    { name: 'Climbing Hold', file: 'climbing-hold.stl', type: 'stl', category: 'patterns' },
+    { name: 'GrippySheet V1', file: 'grippysheet-v1.stl', type: 'stl', category: 'patterns' },
+    { name: 'Dome', file: 'dome.stl', type: 'stl', category: 'patterns' },
+    { name: 'Stud', file: 'stud.stl', type: 'stl', category: 'patterns' },
+    { name: 'Tryramid', file: 'tryramid.stl', type: 'stl', category: 'patterns' },
+    { name: 'Hexyramid', file: 'hexyramid.stl', type: 'stl', category: 'patterns' },
+    { name: 'Bevelled Cube', file: 'bevelled-cube.stl', type: 'stl', category: 'patterns' },
+    { name: 'Skewed Pyramid', file: 'pyramid-skewed.stl', type: 'stl', category: 'patterns' },
     
     // Inlays
     { name: 'Pubmote', file: 'pubmote.svg', type: 'svg', category: 'inlays', keepOriginalColors: true },
