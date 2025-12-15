@@ -7,6 +7,7 @@ interface PathSegment {
     start: THREE.Vector2;
     end: THREE.Vector2;
     createPathAction: (path: THREE.Path, offset: THREE.Vector2) => void;
+    createReversePathAction: (path: THREE.Path, offset: THREE.Vector2) => void;
     type: string;
 }
 
@@ -38,6 +39,7 @@ export const parseDxfToShapes = (dxfString: string): THREE.Shape[] => {
                     start: new THREE.Vector2(line.vertices[0].x, -line.vertices[0].y),
                     end: new THREE.Vector2(line.vertices[1].x, -line.vertices[1].y),
                     createPathAction: (path, offset) => path.lineTo(line.vertices[1].x - offset.x, -line.vertices[1].y - offset.y),
+                    createReversePathAction: (path, offset) => path.lineTo(line.vertices[0].x - offset.x, -line.vertices[0].y - offset.y),
                     type: 'LINE'
                 });
             }
@@ -46,39 +48,47 @@ export const parseDxfToShapes = (dxfString: string): THREE.Shape[] => {
             const cx = arc.center.x;
             const cy = -arc.center.y; // Flip center Y
             const r = arc.radius;
-            // Angles need to be mirrored or just CCW/CW swap? 
-            // Inverting Y means angles are mirrored across X axis.
-            // Angle A becomes -A.
-            let startAngle = -arc.startAngle;
-            let endAngle = -arc.endAngle;
+            // Angles: 
+            // In DXF, angles are CCW from X-axis. 
+            // We flip Y, which mirrors the coordinate system.
+            // A CCW arc (0 to 90) in +Y becomes a CW arc (0 to -90) visually if simply projected?
+            // Or rather: Angle theta in +Y is (cos, sin). In -Y it is (cos, -sin) = (cos, sin(-theta)).
+            // So angle becomes -theta.
+            const startAngle = -arc.startAngle;
+            const endAngle = -arc.endAngle;
 
             const startX = cx + r * Math.cos(startAngle);
-            const startY = cy + r * Math.sin(startAngle); // sin(-a) = -sin(a). Consistent with flipping cy and y.
+            const startY = cy + r * Math.sin(startAngle);
             const endX = cx + r * Math.cos(endAngle);
             const endY = cy + r * Math.sin(endAngle);
 
             segments.push({
                 start: new THREE.Vector2(startX, startY),
                 end: new THREE.Vector2(endX, endY),
-                createPathAction: (path, offset) => path.absarc(cx - offset.x, cy - offset.y, r, startAngle, endAngle, true), // Flip CCW boolean?
-                // Standard arc is CCW. Flipped Y makes it CW?
-                // If we flip Y, standard CCW (positive angle) becomes CW visually?
-                // Visual consistency:
-                // If I draw a circle CCW in +Y up.
-                // In -Y down (flipped), traversing angles 0 -> 2PI is still "CCW" relative to the new axes?
-                // Actually absarc takes boolean `clockwise`. default false (CCW).
-                // Let's stick to default first. We fix winding later anyway.
-                // But start/end angles MUST be negated.
+                // Forward: startAngle -> endAngle. Since we flipped Y and negated angles, the winding direction in the new coord system...
+                // absarc(..., clockwise).
+                // If original was CCW (increasing angle), new is decreasing angle (-start > -end)? No.
+                // 0 -> 90. New: 0 -> -90. Decreasing. So Clockwise is TRUE?
+                // Let's rely on standard ThreeJS behavior: absarc goes from aStart to aEnd.
+                // Boolean 'clockwise': default false (CCW).
+                // If we want 0 -> -90. That is CW. So set true.
+                createPathAction: (path, offset) => path.absarc(cx - offset.x, cy - offset.y, r, startAngle, endAngle, true),
+                // Reverse: endAngle -> startAngle. -90 -> 0. Increasing. CCW. So set false.
+                createReversePathAction: (path, offset) => path.absarc(cx - offset.x, cy - offset.y, r, endAngle, startAngle, false),
                 type: 'ARC'
             });
         } else if (entity.type === 'LWPOLYLINE' || entity.type === 'POLYLINE') {
             const poly = entity as any;
             if (poly.vertices && poly.vertices.length > 1) {
+                // Break polyline into individual segments to allow for partial stitching if needed, 
+                // OR treat as pre-stitched blocks. 
+                // Treat as individual segments is safer for mixed garbage input.
                 for (let i = 0; i < poly.vertices.length - 1; i++) {
                     segments.push({
                         start: new THREE.Vector2(poly.vertices[i].x, -poly.vertices[i].y),
                         end: new THREE.Vector2(poly.vertices[i + 1].x, -poly.vertices[i + 1].y),
                         createPathAction: (path, offset) => path.lineTo(poly.vertices[i + 1].x - offset.x, -poly.vertices[i + 1].y - offset.y),
+                        createReversePathAction: (path, offset) => path.lineTo(poly.vertices[i].x - offset.x, -poly.vertices[i].y - offset.y),
                         type: 'POLYSEGMENT'
                     });
                 }
@@ -88,6 +98,7 @@ export const parseDxfToShapes = (dxfString: string): THREE.Shape[] => {
                         start: new THREE.Vector2(poly.vertices[last].x, -poly.vertices[last].y),
                         end: new THREE.Vector2(poly.vertices[0].x, -poly.vertices[0].y),
                         createPathAction: (path, offset) => path.lineTo(poly.vertices[0].x - offset.x, -poly.vertices[0].y - offset.y),
+                        createReversePathAction: (path, offset) => path.lineTo(poly.vertices[last].x - offset.x, -poly.vertices[last].y - offset.y),
                         type: 'POLYSEGMENT'
                     });
                 }
@@ -100,10 +111,75 @@ export const parseDxfToShapes = (dxfString: string): THREE.Shape[] => {
                         start: new THREE.Vector2(spline.controlPoints[i].x, -spline.controlPoints[i].y),
                         end: new THREE.Vector2(spline.controlPoints[i + 1].x, -spline.controlPoints[i + 1].y),
                         createPathAction: (path, offset) => path.lineTo(spline.controlPoints[i + 1].x - offset.x, -spline.controlPoints[i + 1].y - offset.y),
+                        createReversePathAction: (path, offset) => path.lineTo(spline.controlPoints[i].x - offset.x, -spline.controlPoints[i].y - offset.y),
                         type: 'SPLINE_APPROX'
                     });
                 }
             }
+        } else if (entity.type === 'CIRCLE') {
+            const circle = entity as any;
+            const cx = circle.center.x;
+            const cy = -circle.center.y;
+            const r = circle.radius;
+            // Circle is a closed loop. Start/End are same.
+            // Start at 0 radians.
+            const startEnd = new THREE.Vector2(cx + r, cy);
+
+            segments.push({
+                start: startEnd,
+                end: startEnd,
+                createPathAction: (path, offset) => path.absarc(cx - offset.x, cy - offset.y, r, 0, 2 * Math.PI, true),
+                createReversePathAction: (path, offset) => path.absarc(cx - offset.x, cy - offset.y, r, 2 * Math.PI, 0, false),
+                type: 'CIRCLE'
+            });
+        } else if (entity.type === 'ELLIPSE') {
+            const ellipse = entity as any;
+            const cx = ellipse.center.x;
+            const cy = -ellipse.center.y;
+
+            // Major axis vector
+            const mx = ellipse.majorAxisEndPoint.x;
+            const my = -ellipse.majorAxisEndPoint.y; // Flip Y
+
+            const majorRadius = Math.sqrt(mx * mx + my * my);
+            const minorRadius = majorRadius * ellipse.axisRatio;
+
+            const rotation = Math.atan2(my, mx);
+
+            // Params are in radians? DXF spec says radians 0..2PI
+            let startParam = ellipse.startAngle;
+            let endParam = ellipse.endAngle;
+            // If full ellipse, standard is 0 to 2PI
+            if (Math.abs(endParam - startParam) < EPSILON) {
+                endParam = startParam + 2 * Math.PI;
+            }
+
+            // Calculate start/end points for stitching
+            // Ellipse parametric eq: 
+            // x = cx + a*cos(t)*cos(rot) - b*sin(t)*sin(rot)
+            // y = cy + a*cos(t)*sin(rot) + b*sin(t)*cos(rot)
+
+            const getEllipsePoint = (t: number) => {
+                const cosT = Math.cos(t);
+                const sinT = Math.sin(t);
+                const cosR = Math.cos(rotation);
+                const sinR = Math.sin(rotation);
+                return new THREE.Vector2(
+                    cx + majorRadius * cosT * cosR - minorRadius * sinT * sinR,
+                    cy + majorRadius * cosT * sinR + minorRadius * sinT * cosR
+                );
+            };
+
+            const startPoint = getEllipsePoint(startParam);
+            const endPoint = getEllipsePoint(endParam);
+
+            segments.push({
+                start: startPoint,
+                end: endPoint,
+                createPathAction: (path, offset) => path.absellipse(cx - offset.x, cy - offset.y, majorRadius, minorRadius, startParam, endParam, true, rotation),
+                createReversePathAction: (path, offset) => path.absellipse(cx - offset.x, cy - offset.y, majorRadius, minorRadius, endParam, startParam, false, rotation),
+                type: 'ELLIPSE'
+            });
         }
     });
 
@@ -121,36 +197,40 @@ export const parseDxfToShapes = (dxfString: string): THREE.Shape[] => {
         bMax.y = Math.max(bMax.y, s.start.y, s.end.y);
     });
 
-    // ... (rest is stitching logic)
-
     const center = new THREE.Vector2((bMin.x + bMax.x) / 2, (bMin.y + bMax.y) / 2);
     console.log('Centering offset:', center);
 
-    // 3. Stitch Segments with Offset
+    // 3. Stitch Segments (Bidirectional)
     const shapes: THREE.Shape[] = [];
     const used = new Set<number>();
-
     const isSamePoint = (v1: THREE.Vector2, v2: THREE.Vector2) => v1.distanceToSquared(v2) < EPSILON * EPSILON;
 
     for (let i = 0; i < segments.length; i++) {
         if (used.has(i)) continue;
 
         const shape = new THREE.Shape();
-        let currentSegment = segments[i];
+        const startSeg = segments[i];
         used.add(i);
 
-        // Move to start point relative to center
-        shape.moveTo(currentSegment.start.x - center.x, currentSegment.start.y - center.y);
-        currentSegment.createPathAction(shape, center);
+        // Start path
+        shape.moveTo(startSeg.start.x - center.x, startSeg.start.y - center.y);
+        startSeg.createPathAction(shape, center);
 
-        let currentEnd = currentSegment.end;
+        let currentEnd = startSeg.end;
         let loopClosed = false;
         let foundNext = true;
 
-        while (foundNext && !loopClosed) {
-            foundNext = false;
+        // Safety break to prevent infinite loops in weird cases
+        let iterations = 0;
+        const maxIterations = segments.length * 2;
+        let segmentCount = 1;
 
-            if (isSamePoint(currentEnd, segments[i].start)) {
+        while (foundNext && !loopClosed && iterations < maxIterations) {
+            foundNext = false;
+            iterations++;
+
+            // Check if closed loop with self (simple case) or back to original start
+            if (isSamePoint(currentEnd, startSeg.start)) {
                 loopClosed = true;
                 break;
             }
@@ -159,18 +239,28 @@ export const parseDxfToShapes = (dxfString: string): THREE.Shape[] => {
                 if (used.has(j)) continue;
                 const nextSeg = segments[j];
 
+                // Forward connection: current end matches next start
                 if (isSamePoint(currentEnd, nextSeg.start)) {
                     used.add(j);
                     nextSeg.createPathAction(shape, center);
                     currentEnd = nextSeg.end;
                     foundNext = true;
+                    segmentCount++;
                     break;
-                } else if (isSamePoint(currentEnd, nextSeg.end)) {
-                    // Reverse connection logic would go here if needed
+                }
+                // Reverse connection: current end matches next end
+                else if (isSamePoint(currentEnd, nextSeg.end)) {
+                    used.add(j);
+                    nextSeg.createReversePathAction(shape, center);
+                    currentEnd = nextSeg.start; // New end is the start of the reversed segment
+                    foundNext = true;
+                    segmentCount++;
+                    break;
                 }
             }
         }
 
+        console.log(`Loop ${shapes.length}: segments=${segmentCount}, closed=${loopClosed}`);
         if (loopClosed) {
             shape.closePath();
             shapes.push(shape);
@@ -181,27 +271,87 @@ export const parseDxfToShapes = (dxfString: string): THREE.Shape[] => {
         }
     }
 
-    console.log(`Stitched ${shapes.length} shapes.`);
+    console.log(`Stitched ${shapes.length} loops.`);
 
-    // 4. Enforce CCW winding (Solid)
-    const correctedShapes = shapes.map(shape => {
+    // 4. Hole Detection using Raycasting / Parent-Child
+    // Prepare shapes with computed properties for containment checks
+    const shapeInfos = shapes.map((shape, index) => {
         const points = shape.getPoints();
-        const area = THREE.ShapeUtils.area(points);
-        if (area < 0) { // Clockwise
-            // Reverse points to make it CCW
+        let area = THREE.ShapeUtils.area(points);
+        if (area < 0) {
+            points.reverse();
+            area = Math.abs(area);
             const newShape = new THREE.Shape();
-            const reversed = points.reverse();
-            newShape.moveTo(reversed[0].x, reversed[0].y);
-            for (let k = 1; k < reversed.length; k++) {
-                newShape.lineTo(reversed[k].x, reversed[k].y);
-            }
+            newShape.moveTo(points[0].x, points[0].y);
+            for (let k = 1; k < points.length; k++) newShape.lineTo(points[k].x, points[k].y);
             newShape.closePath();
-            return newShape;
+            return { shape: newShape, area, points, isHole: false, id: index, parent: null as any };
         }
-        return shape;
+        return { shape, area, points, isHole: false, id: index, parent: null as any };
     });
 
-    return correctedShapes;
+    // Helper for point in polygon (Ray casting algorithm)
+    const isPointInPolygon = (p: THREE.Vector2, points: THREE.Vector2[]) => {
+        let inside = false;
+        for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+            const xi = points[i].x, yi = points[i].y;
+            const xj = points[j].x, yj = points[j].y;
+
+            const intersect = ((yi > p.y) !== (yj > p.y))
+                && (p.x < (xj - xi) * (p.y - yi) / (yj - yi) + xi);
+            if (intersect) inside = !inside;
+        }
+        return inside;
+    };
+
+    // Sort by area descending. Largest shapes can contain smaller ones.
+    shapeInfos.sort((a, b) => b.area - a.area);
+
+    // Filter out degenerate shapes (lines or noise)
+    const validShapes = shapeInfos.filter(s => s.area > EPSILON);
+
+    const finalShapes: THREE.Shape[] = [];
+
+    // O(N^2) but N is usually small for DXF imports
+    for (let i = 0; i < validShapes.length; i++) {
+        const current = validShapes[i];
+        let parent = null;
+
+        // Scan for the smallest parent that contains this shape
+        for (let j = i - 1; j >= 0; j--) {
+            const potentialParent = validShapes[j];
+            // Check containment. Test multiple points for robustness.
+            const indicesToTest = [0, Math.floor(current.points.length / 2), current.points.length - 1];
+            let insideCount = 0;
+
+            for (const idx of indicesToTest) {
+                if (isPointInPolygon(current.points[idx], potentialParent.points)) {
+                    insideCount++;
+                }
+            }
+
+            if (insideCount > 0) {
+                parent = potentialParent;
+                break;
+            }
+        }
+
+        if (parent) {
+            if (!parent.isHole) {
+                current.isHole = true;
+                parent.shape.holes.push(current.shape);
+            } else {
+                // Parent is a hole -> current is a solid island inside a hole.
+                finalShapes.push(current.shape);
+            }
+        } else {
+            // No parent, it's a root solid
+            current.isHole = false;
+            finalShapes.push(current.shape);
+        }
+    }
+
+    return finalShapes;
 };
 
 export const generateSVGPath = (shapes: THREE.Shape[]): string => {
@@ -209,88 +359,26 @@ export const generateSVGPath = (shapes: THREE.Shape[]): string => {
     shapes.forEach(shape => {
         const points = shape.getPoints();
         if (points.length > 0) {
-            // Since shapes are now "correct" (Y-up for 3D), to display in SVG (Y-down) we must FLIP Y.
-            // Previously we flipped Y because data was Y-up. Now data is...
-            // Wait.
-            // DXF is Y-up standard.
-            // SVG is Y-down standard.
-            // Browser SVG: Positive Y is down.
-            // Three.js: Positive Y is up.
-            // If user says "it is flipped", and we see upside down triangle.
-            // Triangle defined as (0,0), (1,1), (-1,1). Pointing Up.
-            // In ThreeJS (Y-up): Points Up.
-            // User sees it Points Down?
-            // "Flipped on Y axis".
-            // If I import a DXF drawn in CAD (Y-up) with a triangle pointing up.
-            // My code reads X, Y. Puts it in Three Scene.
-            // If checking in ModelViewer, user sees it.
-            // Maybe the `extrudeGeometry` or `rotations` in ModelViewer are doing something?
-            // `rotation={[-Math.PI / 2, 0, 0]}` implies X-axis rotation -90deg.
-            // Initial: Z is up. Y is back. X is right.
-            // Rotate -90 on X:
-            // New Y is Old Z (Up).
-            // New Z is Old -Y (Forward).
-            // So on the screen (XY plane relative to camera top view):
-            // Camera Top View: `camera.position.set(0, 1000, 0); camera.lookAt(0, 0, 0);`
-            // Looking down Y axis? No, Standard Top view looks down Y? Or Z?
-            // Standard ThreeJS Y is Up. Top view looks down -Y?
-            // `camera.position.set(0, 1000, 0)` is highly positive Y.
-            // `lookAt(0,0,0)`. Direction is (0, -1, 0).
-            // The mesh `rotation={[-Math.PI / 2, 0, 0]}`.
-            // Local Z becomes World Y.
-            // Local Y becomes World -Z.
-            // Local X stays World X.
-            // Shape defined on XY plane.
-            // Extruded along Z.
-            // After rotation:
-            // Extrusion (Z) points Up (World Y).
-            // Shape X points Right (World X).
-            // Shape Y points Back (World -Z).
-            // Viewer Top View sees X and Z?
-            // If camera is at (0, 1000, 0), it sees X and Z plane.
-            // Z increases "Down" the screen in standard 3D mapping?
-            // Actually in Top View:
-            // X is Horizontal.
-            // Z is Vertical.
-            // Positive Z usually "Towards" viewer in Front view. In Top view...
-            // It depends on camera up vector. Default camera up is (0,1,0).
-            // If cam is at (0,1000,0) looking at (0,0,0). Up vector is parallel to view direction... singularity.
-            // OrbitControls handles this.
-            // Use Front View. `camera.position.set(0, 0, 1000)`.
-            // Sees X and Y.
-            // Mesh is rotated -90 X.
-            // Mesh Up (Extrusion) is Y.
-            // Mesh "Y" is -Z.
-            // So Front view sees X and ...?
-            // Front view looks -Z.
-            // Mesh Y axis points -Z.
-            // So Shape Y aligns with View depth?
-            // This is confusing.
-
-            // Simpler: Use the User's report.
-            // "Flipped on Y axis".
-            // Means +Y and -Y are swapped.
-            // My proposed fix: Negate Y in parsing.
-            // s.start.y -> -s.start.y
-            // This mirrors the shape vertically.
-
-            // SVG Path Generation for Preview:
-            // Preview is 2D SVG.
-            // SVG coords: 0,0 top left. Y increases down.
-            // ThreeJS Shape: 0,0 center. Y increases up.
-            // To show ThreeJS Shape in SVG:
-            // path y = - shape.y.
-            // If shape.y is 10 (up). SVG y is -10 (up).
-            // This maintains visual orientation (Up is Up).
-            // So `pathData += ... ${-points[i].y}` is correct for preserving visual orientation.
-            // I will keep this `-points[i].y` logic as it correctly maps "Up" to "Up".
-
-            pathData += `M ${points[0].x} ${points[0].y} `; // Removed Flip Y
+            pathData += `M ${points[0].x} ${points[0].y} `;
             for (let i = 1; i < points.length; i++) {
                 pathData += `L ${points[i].x} ${points[i].y} `;
+            }
+            // Add holes to path? SVG paths can have multiple Move commands for holes (nonzero rule usually handles it)
+            if (shape.holes && shape.holes.length > 0) {
+                shape.holes.forEach(hole => {
+                    const holePoints = hole.getPoints();
+                    if (holePoints.length > 0) {
+                        pathData += `M ${holePoints[0].x} ${holePoints[0].y} `;
+                        for (let k = 1; k < holePoints.length; k++) {
+                            pathData += `L ${holePoints[k].x} ${holePoints[k].y} `;
+                        }
+                        pathData += "Z ";
+                    }
+                });
             }
             pathData += "Z ";
         }
     });
     return pathData;
 };
+
