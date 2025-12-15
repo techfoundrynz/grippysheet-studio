@@ -17,12 +17,14 @@ interface ImperativeModelProps {
   isTiled: boolean;
   tileSpacing: number;
   patternMargin: number;
-  tilingDistribution?: 'grid' | 'offset' | 'hex' | 'radial' | 'random' | 'wave-v' | 'wave-h' | 'zigzag-v' | 'zigzag-h' | 'warped-grid';
+  tilingDistribution?: 'grid' | 'offset' | 'hex' | 'radial' | 'random' | 'wave' | 'zigzag' | 'warped-grid';
+  tilingDirection?: 'horizontal' | 'vertical';
   tilingRotation?: 'none' | 'alternate' | 'random' | 'aligned';
   clipToOutline?: boolean;
   inlayShapes?: any[] | null;
   inlayDepth?: number;
   inlayScale?: number;
+  inlayRotation?: number;
   inlayExtend?: number;
   wireframeBase?: boolean;
   wireframeInlay?: boolean;
@@ -46,11 +48,13 @@ const ImperativeModel = React.forwardRef<THREE.Group, ImperativeModelProps>(({
   tileSpacing,
   patternMargin,
   tilingDistribution = 'hex',
+  tilingDirection = 'horizontal',
   tilingRotation = 'none',
   clipToOutline = false,
   inlayShapes,
   inlayDepth = 0.6,
   inlayScale = 1,
+  inlayRotation = 0,
   inlayExtend = 0,
   wireframeBase = false,
   wireframeInlay = false,
@@ -173,12 +177,13 @@ const ImperativeModel = React.forwardRef<THREE.Group, ImperativeModelProps>(({
         mesh.name = `Inlay_${i}`;
         mesh.position.set(0, 0, thickness - inlayDepth);
         mesh.scale.set(inlayScale, inlayScale, 1);
+        mesh.rotation.z = inlayRotation * (Math.PI / 180);
         mesh.castShadow = true;
         mesh.receiveShadow = true;
         group.add(mesh);
     });
 
-  }, [inlayShapes, inlayDepth, inlayScale, inlayExtend, thickness, color, wireframeInlay, displayMode]);
+  }, [inlayShapes, inlayDepth, inlayScale, inlayRotation, inlayExtend, thickness, color, wireframeInlay, displayMode]);
 
 
   // --- 3. Pattern Construction (The Heavy Lifter) ---
@@ -258,13 +263,27 @@ const ImperativeModel = React.forwardRef<THREE.Group, ImperativeModelProps>(({
         pHeight = (unitGeo.boundingBox.max.y - unitGeo.boundingBox.min.y) * patternScale;
     }
 
-    // Helper to scale shapes
+    // Helper to scale and rotate shapes
     const scaleShape = (original: any) => {
         const shape = original.shape || original;
-        if (inlayScale === 1) return shape;
+        if (inlayScale === 1 && inlayRotation === 0) return shape;
         
         const newShape = new THREE.Shape();
-        const transform = (p: THREE.Vector2) => new THREE.Vector2(p.x * inlayScale, p.y * inlayScale);
+        
+        // Pre-calc rotation
+        const rad = inlayRotation * (Math.PI / 180);
+        const cos = Math.cos(rad);
+        const sin = Math.sin(rad);
+
+        const transform = (p: THREE.Vector2) => {
+            // 1. Scale
+            const sx = p.x * inlayScale;
+            const sy = p.y * inlayScale;
+            // 2. Rotate
+            const rx = sx * cos - sy * sin;
+            const ry = sx * sin + sy * cos;
+            return new THREE.Vector2(rx, ry);
+        };
         
         shape.getPoints().forEach((p: THREE.Vector2, i: number) => {
             const tp = transform(p);
@@ -299,6 +318,7 @@ const ImperativeModel = React.forwardRef<THREE.Group, ImperativeModelProps>(({
         cutoutShapes, patternMargin, 
         clipToOutline, // Allow Partial?
         tilingDistribution, tilingRotation,
+        tilingDirection,
         finalExclusionShapes,
         finalInclusionShapes
     ) : [{ position: new THREE.Vector2(0,0), rotation: 0, scale: 1 }];
@@ -482,8 +502,8 @@ const ImperativeModel = React.forwardRef<THREE.Group, ImperativeModelProps>(({
       patternShapes, patternType, cutoutShapes, size, thickness, 
       patternColor, wireframePattern, patternOpacity, 
       patternScale, patternScaleZ, 
-      isTiled, tileSpacing, patternMargin, tilingDistribution, tilingRotation, 
-      clipToOutline, displayMode, inlayShapes, inlayScale
+      isTiled, tileSpacing, patternMargin, tilingDistribution, tilingRotation, tilingDirection,
+      clipToOutline, displayMode, inlayShapes, inlayScale, inlayRotation
   ]);
 
   return <group ref={localGroupRef} />;

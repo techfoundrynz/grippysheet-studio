@@ -21,13 +21,15 @@ interface ModelViewerProps {
   isTiled: boolean;
   tileSpacing: number;
   patternMargin: number;
-  tilingDistribution?: 'grid' | 'offset' | 'hex' | 'radial' | 'random' | 'wave-v' | 'wave-h' | 'zigzag-v' | 'zigzag-h' | 'warped-grid';
+  tilingDistribution?: 'grid' | 'offset' | 'hex' | 'radial' | 'random' | 'wave' | 'zigzag' | 'warped-grid';
+  tilingDirection?: 'horizontal' | 'vertical';
   tilingRotation?: 'none' | 'alternate' | 'random' | 'aligned';
   clipToOutline?: boolean;
   debugMode?: boolean;
   inlayShapes?: any[] | null;
   inlayDepth?: number;
   inlayScale?: number;
+  inlayRotation?: number;
   inlayExtend?: number;
 }
 
@@ -52,12 +54,14 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
   tileSpacing,
   patternMargin,
   tilingDistribution = 'hex',
+  tilingDirection = 'horizontal',
   tilingRotation = 'none',
   clipToOutline = false,
   debugMode = false,
   inlayShapes,
   inlayDepth = 0.6,
   inlayScale = 1,
+  inlayRotation = 0,
   inlayExtend = 0
 }) => {
 
@@ -359,11 +363,13 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
                 tileSpacing={tileSpacing}
                 patternMargin={patternMargin}
                 tilingDistribution={tilingDistribution}
+                tilingDirection={tilingDirection}
                 tilingRotation={tilingRotation}
                 clipToOutline={clipToOutline}
                 inlayShapes={inlayShapes}
                 inlayDepth={inlayDepth}
                 inlayScale={inlayScale}
+                inlayRotation={inlayRotation}
                 inlayExtend={inlayExtend}
                 wireframeBase={wireframeState.base}
                 wireframeInlay={wireframeState.inlay}
@@ -392,6 +398,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
                 lineWidth={2}
                 position={[0, 0, thickness + 0.1 + ((i + 1) * 0.001)]}
                 scale={[inlayScale, inlayScale, 1]}
+                rotation={[0, 0, inlayRotation * (Math.PI / 180)]}
             />
         ))}
 

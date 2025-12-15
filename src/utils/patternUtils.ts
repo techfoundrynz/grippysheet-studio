@@ -125,8 +125,9 @@ export const generateTilePositions = (
     boundaryShapes: THREE.Shape[] | null,
     margin: number = 0,
     allowPartial: boolean = false,
-    distribution: 'grid' | 'offset' | 'hex' | 'radial' | 'random' | 'wave-v' | 'wave-h' | 'zigzag-v' | 'zigzag-h' | 'warped-grid' = 'grid',
+    distribution: 'grid' | 'offset' | 'hex' | 'radial' | 'random' | 'wave' | 'zigzag' | 'warped-grid' = 'grid',
     rotationMode: 'none' | 'alternate' | 'random' | 'aligned' = 'none',
+    direction: 'horizontal' | 'vertical' = 'horizontal',
     exclusionShapes: THREE.Shape[] | null = null,
     inclusionShapes: THREE.Shape[] | null = null
 ): TileInstance[] => {
@@ -479,6 +480,19 @@ export const generateTilePositions = (
                 if (distribution === 'offset') {
                     if (r % 2 !== 0) cx += fullWidth / 2;
                 }
+                else if (distribution === 'wave') {
+                    // Replaced wave-v / wave-h logic
+                    const freq = 0.6;
+                    if (direction === 'vertical') {
+                        const amp = fullWidth * 0.35;
+                        cx += Math.sin(r * freq) * amp;
+                    } else {
+                        const amp = fullHeight * 0.35;
+                        cy += Math.sin(c * freq) * amp;
+                    }
+                }
+                // OLD LOGIC PRESERVED FOR REFERENCE IF NEEDED
+                /*
                 else if (distribution === 'wave-v') {
                     const amp = fullWidth * 0.35;
                     const freq = 0.6;
@@ -489,6 +503,25 @@ export const generateTilePositions = (
                     const freq = 0.6;
                     cy += Math.sin(c * freq) * amp;
                 }
+                */
+                else if (distribution === 'zigzag') { // Combined zigzag-v/h
+                    const period = 8;
+
+                    if (direction === 'vertical') {
+                        // zigzag-v logic
+                        const scalar = r % period;
+                        const tri = (scalar < period / 2) ? scalar : period - scalar;
+                        const norm = tri - period / 4;
+                        cx += norm * (fullWidth * 0.3);
+                    } else {
+                        // zigzag-h logic
+                        const scalar = c % period;
+                        const tri = (scalar < period / 2) ? scalar : period - scalar;
+                        const norm = tri - period / 4;
+                        cy += norm * (fullHeight * 0.3);
+                    }
+                }
+                /*
                 else if (distribution === 'zigzag-v') {
                     // Zigzag columns
                     // Create a linear back-and-forth offset based on row index
@@ -507,6 +540,7 @@ export const generateTilePositions = (
                     const norm = tri - period / 4;
                     cy += norm * (fullHeight * 0.3);
                 }
+                */
                 else if (distribution === 'warped-grid') {
                     // Dual wave distortion
                     // Distort X based on Y, and Y based on X.
@@ -551,8 +585,9 @@ export const tileShapes = (
     margin: number = 0,
     patternType?: 'dxf' | 'svg' | 'stl' | null,
     allowPartial: boolean = false,
-    distribution: 'grid' | 'offset' | 'hex' | 'radial' | 'random' | 'wave-v' | 'wave-h' | 'zigzag-v' | 'zigzag-h' | 'warped-grid' = 'grid',
+    distribution: 'grid' | 'offset' | 'hex' | 'radial' | 'random' | 'wave' | 'zigzag' | 'warped-grid' = 'grid',
     rotationMode: 'none' | 'alternate' | 'random' | 'aligned' = 'none',
+    direction: 'horizontal' | 'vertical' = 'horizontal',
     exclusionShapes: THREE.Shape[] | null = null,
     inclusionShapes: THREE.Shape[] | null = null
 ): any[] => {
@@ -585,6 +620,7 @@ export const tileShapes = (
         allowPartial,
         distribution,
         rotationMode,
+        direction,
         exclusionShapes,
         inclusionShapes
     );

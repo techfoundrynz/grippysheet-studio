@@ -19,12 +19,13 @@ const App = () => {
   const [patternHeight, setPatternHeight] = useState<number | ''>(''); // Empty string for "Auto"
   const [patternScale, setPatternScale] = useState(1);
   const [patternScaleZ, setPatternScaleZ] = useState<number | ''>('');
-  const [isTiled, setIsTiled] = useState(false);
+  const [isTiled, setIsTiled] = useState(true);
   const [tileSpacing, setTileSpacing] = useState(10);
   const [patternMargin, setPatternMargin] = useState(3);
   const [patternColor, setPatternColor] = useState(DEFAULT_PATTERN_COLOR);
   const [clipToOutline, setClipToOutline] = useState(false);
-  const [tilingDistribution, setTilingDistribution] = useState<'grid' | 'offset' | 'hex' | 'radial' | 'random' | 'wave-v' | 'wave-h' | 'zigzag-v' | 'zigzag-h'>('hex');
+  const [tilingDistribution, setTilingDistribution] = useState<'grid' | 'offset' | 'hex' | 'radial' | 'random' | 'wave' | 'zigzag' | 'warped-grid'>('hex');
+  const [tilingDirection, setTilingDirection] = useState<'horizontal' | 'vertical'>('horizontal');
   const [tilingRotation, setTilingRotation] = useState<'none' | 'alternate' | 'random' | 'aligned'>('random');
 
   const [debugMode, setDebugMode] = useState(false);
@@ -33,6 +34,7 @@ const App = () => {
   const [inlayShapes, setInlayShapes] = useState<any[] | null>(null);
   const [inlayDepth, setInlayDepth] = useState(0.6);
   const [inlayScale, setInlayScale] = useState(1);
+  const [inlayRotation, setInlayRotation] = useState(0);
   const [inlayExtend, setInlayExtend] = useState(0);
 
   // Welcome Modal State
@@ -80,11 +82,13 @@ const App = () => {
                   tileSpacing={tileSpacing}
                   patternMargin={patternMargin}
                   tilingDistribution={tilingDistribution}
+                  tilingDirection={tilingDirection}
                   tilingRotation={tilingRotation}
                   clipToOutline={clipToOutline}
                   inlayShapes={inlayShapes}
                   inlayDepth={inlayDepth}
                   inlayScale={inlayScale}
+                  inlayRotation={inlayRotation}
                   inlayExtend={inlayExtend}
                   debugMode={debugMode}
                 />
@@ -111,10 +115,7 @@ const App = () => {
               patternShapes={patternShapes}
               patternType={patternType}
               setPatternType={setPatternType}
-              extrusionAngle={extrusionAngle}
-              setExtrusionAngle={setExtrusionAngle}
-              patternHeight={patternHeight}
-              setPatternHeight={setPatternHeight}
+
               patternScale={patternScale}
               setPatternScale={setPatternScale}
               patternScaleZ={patternScaleZ}
@@ -129,6 +130,8 @@ const App = () => {
               setClipToOutline={setClipToOutline}
               tilingDistribution={tilingDistribution}
               setTilingDistribution={setTilingDistribution}
+              tilingDirection={tilingDirection}
+              setTilingDirection={setTilingDirection}
               tilingRotation={tilingRotation}
               setTilingRotation={setTilingRotation}
 
@@ -139,6 +142,8 @@ const App = () => {
               setInlayDepth={setInlayDepth}
               inlayScale={inlayScale}
               setInlayScale={setInlayScale}
+              inlayRotation={inlayRotation}
+              setInlayRotation={setInlayRotation}
               inlayExtend={inlayExtend}
               setInlayExtend={setInlayExtend}
               onReset={() => {
@@ -156,11 +161,14 @@ const App = () => {
                   setPatternMargin(3);
                   setPatternColor(DEFAULT_PATTERN_COLOR);
                   setClipToOutline(true);
+
                   setTilingDistribution('offset');
+                  setTilingDirection('horizontal');
                   setTilingRotation('random');
                   setInlayShapes(null);
                   setInlayDepth(0.6);
                   setInlayScale(1);
+                  setInlayRotation(0);
                   setInlayExtend(0);
                }}
                onOpenWelcome={() => setShowWelcome(true)}

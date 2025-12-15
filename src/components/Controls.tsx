@@ -29,8 +29,10 @@ interface ControlsProps {
   setPatternColor: (val: string) => void;
   clipToOutline?: boolean;
   setClipToOutline?: (val: boolean) => void;
-  tilingDistribution: 'grid' | 'offset' | 'hex' | 'radial' | 'random' | 'wave-v' | 'wave-h' | 'zigzag-v' | 'zigzag-h' | 'warped-grid';
-  setTilingDistribution: (val: 'grid' | 'offset' | 'hex' | 'radial' | 'random' | 'wave-v' | 'wave-h' | 'zigzag-v' | 'zigzag-h' | 'warped-grid') => void;
+  tilingDistribution: 'grid' | 'offset' | 'hex' | 'radial' | 'random' | 'wave' | 'zigzag' | 'warped-grid';
+  setTilingDistribution: (val: 'grid' | 'offset' | 'hex' | 'radial' | 'random' | 'wave' | 'zigzag' | 'warped-grid') => void;
+  tilingDirection: 'horizontal' | 'vertical';
+  setTilingDirection: (val: 'horizontal' | 'vertical') => void;
   tilingRotation: 'none' | 'alternate' | 'random' | 'aligned';
   setTilingRotation: (v: 'none' | 'alternate' | 'random' | 'aligned') => void;
   debugMode?: boolean;
@@ -40,6 +42,8 @@ interface ControlsProps {
   setInlayDepth: (depth: number) => void;
   inlayScale: number;
   setInlayScale: (scale: number) => void;
+  inlayRotation?: number;
+  setInlayRotation?: (val: number) => void;
   inlayExtend: number;
   setInlayExtend: (val: number) => void;
   onReset?: () => void;
@@ -84,6 +88,8 @@ const Controls: React.FC<ControlsProps> = ({
   setClipToOutline,
   tilingDistribution,
   setTilingDistribution,
+  tilingDirection,
+  setTilingDirection,
   tilingRotation,
   setTilingRotation,
 
@@ -92,8 +98,8 @@ const Controls: React.FC<ControlsProps> = ({
   setInlayShapes,
   inlayDepth,
   setInlayDepth,
-  inlayScale,
-  setInlayScale,
+  inlayScale, setInlayScale,
+  inlayRotation = 0, setInlayRotation,
   inlayExtend,
   setInlayExtend,
   onReset,
@@ -124,35 +130,57 @@ const Controls: React.FC<ControlsProps> = ({
       });
   };
 
+  // Helper Helper: Calculate Auto Scale
+  const calculateAutoPatternScale = (shapes: any[], type: string | null, tiled: boolean, baseSize: number, margin: number): number | null => {
+      if (!shapes || shapes.length === 0) return null;
+
+      let width = 0;
+      let height = 0;
+
+      if (type === 'stl') {
+            const geometry = shapes[0];
+            if (geometry.boundingBox === null) geometry.computeBoundingBox();
+            const bounds = geometry.boundingBox;
+            width = bounds.max.x - bounds.min.x;
+            height = bounds.max.y - bounds.min.y;
+      } else {
+            const bounds = getShapesBounds(shapes);
+            width = bounds.size.x;
+            height = bounds.size.y;
+      }
+
+      if (width <= 0 || height <= 0) return null;
+
+      if (tiled) {
+           // Tiled: Target ~5mm width
+           const targetWidth = 5; 
+           const rawScale = targetWidth / width;
+           const scale = Math.round(rawScale * 100) / 100;
+           return scale > 0 ? scale : 1;
+      } else {
+           if (type === 'dxf') {
+               // DXF defaults to 1.0
+               return 1;
+           }
+           // Place: Target 50% of base size minus margin
+           const maxSize = Math.max(width, height);
+           if (maxSize > 0) {
+               const availableSize = Math.max(0, baseSize - (margin * 2));
+               // Target 50% coverage of the available area
+               const scale = (availableSize * 0.5) / maxSize;
+               return scale > 0 ? scale : 1;
+           }
+      }
+      return 1;
+  };
+
   const handlePatternLoaded = (shapes: any[], type?: 'dxf' | 'svg' | 'stl') => {
       setPatternShapes(shapes);
       setPatternType(type || null);
       
-      if (shapes && shapes.length > 0) {
-          if (type === 'dxf') {
-              // DXF defaults to 1.0 (assuming mm 1:1)
-              setPatternScale(1);
-          } else {
-              // Auto-scale SVG, STL or unknown to ~10% of base size
-              let width = 0;
-              
-              if (type === 'stl') {
-                   const bounds = getGeometryBounds(shapes[0]);
-                   width = bounds.size.x;
-              } else {
-                   const bounds = getShapesBounds(shapes);
-                   width = bounds.size.x;
-              }
-              
-              if (width > 0) {
-                  const targetWidth = size * 0.1; 
-                  // nice round number
-                  const rawScale = targetWidth / width;
-                  // Round to 2 decimals for cleaner UI
-                  const scale = Math.round(rawScale * 100) / 100;
-                  setPatternScale(scale > 0 ? scale : 1);
-              }
-          }
+      const newScale = calculateAutoPatternScale(shapes, type || null, isTiled, size, patternMargin);
+      if (newScale !== null) {
+          setPatternScale(newScale);
       }
   };
   
@@ -468,6 +496,19 @@ const Controls: React.FC<ControlsProps> = ({
 
               <div className="flex gap-4">
                   <div className="flex-1 min-w-0">
+                    <ControlField label="Rotation (deg)" tooltip="Rotate the inlay pattern">
+                        <DebouncedInput
+                        type="number"
+                        value={inlayRotation}
+                        onChange={(val) => setInlayRotation?.(Number(val))}
+                        className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none"
+                        />
+                    </ControlField>
+                  </div>
+              </div>
+
+              <div className="flex gap-4">
+                  <div className="flex-1 min-w-0">
                     <ControlField label="Inlay Depth (mm)" tooltip="How deep the inlay cuts into the base">
                         <DebouncedInput
                         type="number"
@@ -572,21 +613,9 @@ const Controls: React.FC<ControlsProps> = ({
                         const newIsTiled = val === 'tile';
                         setIsTiled(newIsTiled);
                         
-                        if (newIsTiled && patternShapes && patternShapes.length > 0) {
-                            let width = 0;
-                            if (patternType === 'stl' && patternShapes.length > 0) {
-                                const geometry = patternShapes[0];
-                                if (geometry.boundingBox === null) geometry.computeBoundingBox();
-                                const bounds = geometry.boundingBox;
-                                if (bounds) width = bounds.max.x - bounds.min.x;
-                            }
-
-                            if (width > 0) {
-                                const targetWidth = size * 0.1;
-                                const rawScale = targetWidth / width;
-                                const scale = Math.round(rawScale * 100) / 100;
-                                setPatternScale(scale > 0 ? scale : 1);
-                            }
+                        const newScale = calculateAutoPatternScale(patternShapes, patternType, newIsTiled, size, patternMargin);
+                        if (newScale !== null) {
+                            setPatternScale(newScale);
                         }
                     }}
                     options={[
@@ -604,31 +633,9 @@ const Controls: React.FC<ControlsProps> = ({
                             patternShapes && patternShapes.length > 0 && (
                                 <button
                                     onClick={() => {
-                                        let width = 0;
-                                        let height = 0;
-                                        
-                                        if (patternType === 'stl' && patternShapes.length > 0) {
-                                            const geometry = patternShapes[0];
-                                            if (geometry.boundingBox === null) geometry.computeBoundingBox();
-                                            const bounds = geometry.boundingBox;
-                                            if (bounds) {
-                                                width = bounds.max.x - bounds.min.x;
-                                                height = bounds.max.y - bounds.min.y;
-                                            }
-                                        }
-                                        
-                                        if (width > 0 && height > 0) {
-                                        if (isTiled) {
-                                            // Tile Mode: Scale to ~10% of base size
-                                            const targetWidth = size * 0.1;
-                                            const rawScale = targetWidth / width;
-                                            const scale = Math.round(rawScale * 100) / 100;
-                                            setPatternScale(scale > 0 ? scale : 1);
-                                        } else {
-                                            // Place Mode: Scale to fit base size
-                                            const maxSize = Math.max(width, height);
-                                            setPatternScale(size / maxSize);
-                                        }
+                                        const newScale = calculateAutoPatternScale(patternShapes, patternType, isTiled, size, patternMargin);
+                                        if (newScale !== null) {
+                                            setPatternScale(newScale);
                                         }
                                     }}
                                     className="text-gray-400 hover:text-purple-400 transition-colors"
@@ -699,10 +706,8 @@ const Controls: React.FC<ControlsProps> = ({
                       <option value="offset">Offset</option>
                       <option value="hex">Hex</option>
                       <option value="radial">Radial</option>
-                      <option value="wave-v">Wave (Vertical)</option>
-                      <option value="wave-h">Wave (Horizontal)</option>
-                      <option value="zigzag-v">Zigzag (Vertical)</option>
-                      <option value="zigzag-h">Zigzag (Horizontal)</option>
+                      <option value="wave">Wave</option>
+                      <option value="zigzag">Zigzag</option>
                       <option value="warped-grid">Warped Grid</option>
                       <option value="random">Random</option>
                       </select>
@@ -711,6 +716,24 @@ const Controls: React.FC<ControlsProps> = ({
                       </div>
                   </div>
                 </ControlField>
+
+                {(tilingDistribution === 'wave' || tilingDistribution === 'zigzag') && (
+                    <ControlField label="Direction">
+                    <div className="relative">
+                        <select
+                        value={tilingDirection}
+                        onChange={(e) => setTilingDirection(e.target.value as any)}
+                        className="w-full bg-gray-800 border border-gray-700 rounded-lg pl-3 pr-10 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none appearance-none truncate"
+                        >
+                        <option value="horizontal">Horizontal</option>
+                        <option value="vertical">Vertical</option>
+                        </select>
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
+                            <ChevronDown size={16} />
+                        </div>
+                    </div>
+                    </ControlField>
+                )}
 
                 <ControlField label="Rotation">
                   <div className="relative">
