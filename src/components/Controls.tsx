@@ -210,9 +210,9 @@ const Controls: React.FC<ControlsProps> = ({
             value={activeTab}
             onChange={(val) => setActiveTab(val as any)}
             options={[
-              { value: 'base', label: 'BASE' },
-              { value: 'inlay', label: 'INLAY' },
-              { value: 'geometry', label: 'GEOMETRY' }
+              { value: 'base', label: 'Base' },
+              { value: 'inlay', label: 'Inlay' },
+              { value: 'geometry', label: 'Geometry' }
             ]}
           />
         </div>

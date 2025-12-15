@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { GeometrySettings } from '../../types/schemas';
 import { BookOpen, Grid3x3, MousePointer2, Maximize, ChevronDown, Scissors } from 'lucide-react';
+import { COLORS } from '../../constants/colors';
 import ShapeUploader from '../ShapeUploader';
 import ControlField from '../ui/ControlField';
 import DebouncedInput from '../DebouncedInput';
@@ -26,7 +27,8 @@ const GeometryControls: React.FC<GeometryControlsProps> = ({
   const { 
     patternShapes, patternType, patternScale, patternScaleZ, 
     isTiled, tileSpacing, patternMargin, clipToOutline, 
-    tilingDistribution, tilingDirection, tilingRotation 
+    tilingDistribution, tilingDirection, tilingOrientation,
+    baseRotation, patternColor 
   } = settings;
 
   const [showPatternLibrary, setShowPatternLibrary] = useState(false);
@@ -213,7 +215,7 @@ const GeometryControls: React.FC<GeometryControlsProps> = ({
                 </ControlField>
               </div>
 
-              <div className="space-y-2 flex-1 min-w-0">
+               <div className="space-y-2 flex-1 min-w-0">
                    <ControlField label="Scale Z" tooltip="Leave empty to match X/Y scale">
                        <DebouncedInput
                            type="number"
@@ -227,19 +229,31 @@ const GeometryControls: React.FC<GeometryControlsProps> = ({
                    </ControlField>
                </div>
 
-              {isTiled && (
-                <div className="flex-1 min-w-0">
-                    <ControlField label="Spacing" tooltip="Distance between tiled patterns">
-                    <DebouncedInput
-                        type="number"
-                        value={tileSpacing}
-                        onChange={(val) => updateSettings({ tileSpacing: Number(val) })}
-                        className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none"
-                    />
-                    </ControlField>
-                </div>
-              )}
+               <div className="space-y-2 flex-1 min-w-0">
+                   <ControlField label="Rotate" tooltip="Base rotation in degrees">
+                       <DebouncedInput
+                           type="number"
+                           value={baseRotation ?? 0}
+                           onChange={(val) => updateSettings({ baseRotation: Number(val) })}
+                           step="15"
+                           className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none"
+                       />
+                   </ControlField>
+               </div>
           </div>
+          
+          {isTiled && (
+            <div className="flex-1 min-w-0 pt-2 border-t border-gray-800">
+                <ControlField label="Spacing" tooltip="Distance between tiled patterns">
+                <DebouncedInput
+                    type="number"
+                    value={tileSpacing}
+                    onChange={(val) => updateSettings({ tileSpacing: Number(val) })}
+                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none"
+                />
+                </ControlField>
+            </div>
+          )}
 
           {isTiled && (
             <>
@@ -283,16 +297,16 @@ const GeometryControls: React.FC<GeometryControlsProps> = ({
                 </ControlField>
             )}
 
-            <ControlField label="Rotation">
+            <ControlField label="Orientation">
               <div className="relative">
                   <select
-                  value={tilingRotation}
-                  onChange={(e) => updateSettings({ tilingRotation: e.target.value as any })}
+                  value={tilingOrientation}
+                  onChange={(e) => updateSettings({ tilingOrientation: e.target.value as any })}
                   className="w-full bg-gray-800 border border-gray-700 rounded-lg pl-3 pr-10 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none appearance-none truncate"
                   >
                   <option value="none">None</option>
-                  <option value="alternate">Alternate (Checker)</option>
-                  <option value="aligned">Aligned (Tangential)</option>
+                  <option value="alternate">Alternate</option>
+                  <option value="aligned">Aligned</option>
                   <option value="random">Random</option>
                   </select>
                   <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
@@ -328,6 +342,21 @@ const GeometryControls: React.FC<GeometryControlsProps> = ({
                     />
                 </ControlField>
               </div>
+          </div>
+
+          <div className="space-y-2 pt-2 border-t border-gray-800">
+             <label className="text-sm font-medium text-gray-300">Color</label>
+             <div className="grid grid-cols-7 gap-y-2 p-1.5 bg-gray-800 rounded-lg border border-gray-700 w-full justify-items-center">
+                {Object.entries(COLORS).map(([name, value]) => (
+                  <button
+                    key={value}
+                    onClick={() => updateSettings({ patternColor: value })}
+                    className={`w-6 h-6 rounded-md transition-all hover:scale-110 active:scale-95 ${patternColor === value ? 'ring-2 ring-white' : 'hover:ring-1 hover:ring-white/50'}`}
+                    style={{ backgroundColor: value }}
+                    title={name}
+                  />
+                ))}
+             </div>
           </div>
         </>
       )}

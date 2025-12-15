@@ -9,8 +9,8 @@ interface ImperativeModelProps {
   thickness: number;
   color: string;
   patternColor: string;
-  cutoutShapes: THREE.Shape[] | null;
-  patternShapes: any[] | null;
+  cutoutShapes: THREE.Shape[] | null | undefined;
+  patternShapes: any[] | null | undefined;
   patternType: 'dxf' | 'svg' | 'stl' | null;
   patternScale: number;
   patternScaleZ?: number;
@@ -19,9 +19,10 @@ interface ImperativeModelProps {
   patternMargin: number;
   tilingDistribution?: 'grid' | 'offset' | 'hex' | 'radial' | 'random' | 'wave' | 'zigzag' | 'warped-grid';
   tilingDirection?: 'horizontal' | 'vertical';
-  tilingRotation?: 'none' | 'alternate' | 'random' | 'aligned';
+  tilingOrientation?: 'none' | 'alternate' | 'random' | 'aligned';
+  baseRotation?: number;
   clipToOutline?: boolean;
-  inlayShapes?: any[] | null;
+  inlayShapes?: any[] | null | undefined;
   inlayDepth?: number;
   inlayScale?: number;
   inlayRotation?: number;
@@ -49,7 +50,8 @@ const ImperativeModel = React.forwardRef<THREE.Group, ImperativeModelProps>(({
   patternMargin,
   tilingDistribution = 'hex',
   tilingDirection = 'horizontal',
-  tilingRotation = 'none',
+  tilingOrientation = 'aligned',
+  baseRotation = 0,
   clipToOutline = false,
   inlayShapes,
   inlayDepth = 0.6,
@@ -241,6 +243,12 @@ const ImperativeModel = React.forwardRef<THREE.Group, ImperativeModelProps>(({
     if (unitGeo.boundingBox) unitGeo.boundingBox.getCenter(center);
     unitGeo.translate(-center.x, -center.y, -center.z);
 
+    // Apply Base Rotation
+    if (baseRotation !== 0) {
+        unitGeo.rotateZ(baseRotation * (Math.PI / 180));
+        unitGeo.computeBoundingBox(); // Recompute bounds after rotation
+    }
+
     // Apply scaling to geometry if it's instanced, usually we scale via Matrix, 
     // but for Merge fallback, we need it. 
     // Ideally, for InstancedMesh, we set scale in the instance matrix.
@@ -317,7 +325,7 @@ const ImperativeModel = React.forwardRef<THREE.Group, ImperativeModelProps>(({
         bounds, pWidth, pHeight, tileSpacing, 
         cutoutShapes, patternMargin, 
         clipToOutline, // Allow Partial?
-        tilingDistribution, tilingRotation,
+        tilingDistribution, tilingOrientation,
         tilingDirection,
         finalExclusionShapes,
         finalInclusionShapes
@@ -499,11 +507,10 @@ const ImperativeModel = React.forwardRef<THREE.Group, ImperativeModelProps>(({
     };
 
   }, [
-      patternShapes, patternType, cutoutShapes, size, thickness, 
       patternColor, wireframePattern, patternOpacity, 
       patternScale, patternScaleZ, 
-      isTiled, tileSpacing, patternMargin, tilingDistribution, tilingRotation, tilingDirection,
-      clipToOutline, displayMode, inlayShapes, inlayScale, inlayRotation
+      isTiled, tileSpacing, patternMargin, tilingDistribution, tilingOrientation, tilingDirection,
+      clipToOutline, displayMode, inlayShapes, inlayScale, inlayRotation, baseRotation
   ]);
 
   return <group ref={localGroupRef} />;

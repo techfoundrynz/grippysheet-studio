@@ -33,7 +33,8 @@ const App = () => {
       clipToOutline: false,
       tilingDistribution: 'hex',
       tilingDirection: 'horizontal',
-      tilingRotation: 'aligned',
+      tilingOrientation: 'aligned',
+      baseRotation: 0,
       debugMode: false
   });
 

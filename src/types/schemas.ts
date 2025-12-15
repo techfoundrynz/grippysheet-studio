@@ -39,7 +39,8 @@ export const GeometrySettingsSchema = z.object({
     clipToOutline: z.boolean(),
     tilingDistribution: z.enum(['grid', 'offset', 'hex', 'radial', 'random', 'wave', 'zigzag', 'warped-grid']),
     tilingDirection: z.enum(['horizontal', 'vertical']),
-    tilingRotation: z.enum(['none', 'alternate', 'random', 'aligned']),
+    tilingOrientation: z.enum(['none', 'alternate', 'random', 'aligned']),
+    baseRotation: z.number().default(0),
     debugMode: z.boolean().optional(),
 });
 

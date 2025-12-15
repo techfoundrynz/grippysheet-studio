@@ -37,7 +37,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
   const {
       patternShapes, patternType, patternScale, patternScaleZ,
       isTiled, tileSpacing, patternMargin, 
-      tilingDistribution, tilingDirection, tilingRotation,
+      tilingDistribution, tilingDirection, tilingOrientation,
       clipToOutline, debugMode, patternColor: geomPatternColor
   } = geometrySettings;
 
@@ -340,7 +340,8 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
                 patternMargin={patternMargin}
                 tilingDistribution={tilingDistribution}
                 tilingDirection={tilingDirection}
-                tilingRotation={tilingRotation}
+                tilingOrientation={tilingOrientation}
+                baseRotation={geometrySettings.baseRotation}
                 clipToOutline={clipToOutline}
                 inlayShapes={inlayShapes}
                 inlayDepth={inlayDepth}

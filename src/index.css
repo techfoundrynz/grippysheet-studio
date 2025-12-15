@@ -2,7 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
-html, body, #root {
+html,
+body,
+#root {
   height: 100%;
   width: 100%;
   overflow: hidden;
@@ -23,4 +25,8 @@ body {
 
 ::-webkit-scrollbar-thumb {
   @apply rounded bg-gray-700 hover:bg-gray-600;
+}
+
+.custom-scrollbar {
+  scrollbar-gutter: stable;
 }

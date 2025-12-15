@@ -126,7 +126,7 @@ export const generateTilePositions = (
     margin: number = 0,
     allowPartial: boolean = false,
     distribution: 'grid' | 'offset' | 'hex' | 'radial' | 'random' | 'wave' | 'zigzag' | 'warped-grid' = 'grid',
-    rotationMode: 'none' | 'alternate' | 'random' | 'aligned' = 'none',
+    orientation: 'none' | 'alternate' | 'random' | 'aligned' = 'none',
     direction: 'horizontal' | 'vertical' = 'horizontal',
     exclusionShapes: THREE.Shape[] | null = null,
     inclusionShapes: THREE.Shape[] | null = null
@@ -238,12 +238,12 @@ export const generateTilePositions = (
 
     // --- Helper for Rotation ---
     const getRotation = (c: number, r: number, x: number, y: number): number => {
-        if (rotationMode === 'random') return Math.random() * Math.PI * 2;
-        if (rotationMode === 'alternate') {
+        if (orientation === 'random') return Math.random() * Math.PI * 2;
+        if (orientation === 'alternate') {
             // Checkerboard
             return ((c + r) % 2 !== 0) ? Math.PI / 2 : 0;
         }
-        if (rotationMode === 'aligned') {
+        if (orientation === 'aligned') {
             // Tangential to Center
             const center = new THREE.Vector2();
             bounds.getCenter(center);
@@ -428,7 +428,7 @@ export const generateTilePositions = (
 
                     if (checkPosition(px, py)) {
                         let rot = 0;
-                        if (rotationMode === 'aligned') {
+                        if (orientation === 'aligned') {
                             // Tangential to CLUSTER center
                             rot = Math.atan2(py - cy, px - cx) + Math.PI / 2;
                         } else {
@@ -586,7 +586,7 @@ export const tileShapes = (
     patternType?: 'dxf' | 'svg' | 'stl' | null,
     allowPartial: boolean = false,
     distribution: 'grid' | 'offset' | 'hex' | 'radial' | 'random' | 'wave' | 'zigzag' | 'warped-grid' = 'grid',
-    rotationMode: 'none' | 'alternate' | 'random' | 'aligned' = 'none',
+    orientation: 'none' | 'alternate' | 'random' | 'aligned' = 'none',
     direction: 'horizontal' | 'vertical' = 'horizontal',
     exclusionShapes: THREE.Shape[] | null = null,
     inclusionShapes: THREE.Shape[] | null = null
@@ -619,7 +619,7 @@ export const tileShapes = (
         margin,
         allowPartial,
         distribution,
-        rotationMode,
+        orientation,
         direction,
         exclusionShapes,
         inclusionShapes
