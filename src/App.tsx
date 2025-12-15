@@ -18,6 +18,7 @@ const App = () => {
   const [extrusionAngle, setExtrusionAngle] = useState(45); // Default to 45 degree taper
   const [patternHeight, setPatternHeight] = useState<number | ''>(''); // Empty string for "Auto"
   const [patternScale, setPatternScale] = useState(1);
+  const [patternScaleZ, setPatternScaleZ] = useState<number | ''>('');
   const [isTiled, setIsTiled] = useState(false);
   const [tileSpacing, setTileSpacing] = useState(10);
   const [patternMargin, setPatternMargin] = useState(3);
@@ -74,6 +75,7 @@ const App = () => {
                   extrusionAngle={extrusionAngle}
                   patternHeight={patternHeight === '' ? 0 : patternHeight}
                   patternScale={patternScale}
+                  patternScaleZ={patternScaleZ === '' ? undefined : patternScaleZ}
                   isTiled={isTiled}
                   tileSpacing={tileSpacing}
                   patternMargin={patternMargin}
@@ -84,6 +86,7 @@ const App = () => {
                   inlayDepth={inlayDepth}
                   inlayScale={inlayScale}
                   inlayExtend={inlayExtend}
+                  debugMode={debugMode}
                 />
             </div>
         </div>
@@ -114,6 +117,8 @@ const App = () => {
               setPatternHeight={setPatternHeight}
               patternScale={patternScale}
               setPatternScale={setPatternScale}
+              patternScaleZ={patternScaleZ}
+              setPatternScaleZ={setPatternScaleZ}
               isTiled={isTiled}
               setIsTiled={setIsTiled}
               tileSpacing={tileSpacing}

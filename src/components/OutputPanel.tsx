@@ -37,13 +37,14 @@ const OutputPanel: React.FC<OutputPanelProps> = ({ meshRef, debugMode = false, c
   };
 
   const prepareForExport = (source: THREE.Object3D): THREE.Object3D | null => {
+      // Check for InstancedMesh FIRST to ensure it gets expanded
+      if (source instanceof THREE.InstancedMesh) {
+          return expandInstancedMesh(source as THREE.InstancedMesh);
+      }
+
       // Special handling for Base and Pattern (CSG results) - clone shallow to drop CSG children
       if (source.name === 'Base' || source.name === 'Pattern') {
           return source.clone(false);
-      }
-      
-      if (source instanceof THREE.InstancedMesh) {
-          return expandInstancedMesh(source);
       }
       
       if (source instanceof THREE.Group) {
@@ -91,7 +92,8 @@ const OutputPanel: React.FC<OutputPanelProps> = ({ meshRef, debugMode = false, c
              showAlert({ title: "Export Error", message: "Pattern mesh not found!", type: "error" });
              return;
         }
-        objectToExport = patternMesh.clone(false);
+        // Use prepareForExport to handle InstancedMesh expansion if needed
+        objectToExport = prepareForExport(patternMesh); 
         filename = 'grippysheet-pattern.stl';
     } else {
         // Merged

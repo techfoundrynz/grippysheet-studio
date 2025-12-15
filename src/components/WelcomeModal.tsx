@@ -99,7 +99,7 @@ const WelcomeModal: React.FC<WelcomeModalProps> = ({ onClose }) => {
                                     <li className="pl-1"><span className="text-gray-300 font-medium">Set the thickness</span> of your grip tape. 1mm or 3mm is recommended but 1mm is recommended if you have not used 3D printed grip before.</li>
                                     <li className="pl-1"><span className="text-gray-300 font-medium">Optional - Upload a SVG file for your inlay.</span> This allows for custom backgrounds on your grip tape underneath the actual grip pattern and each color will be exported as a separate mesh for printing with multicolor printers.</li>
                                     <li className="pl-1">
-                                        <span className="text-gray-300 font-medium">Configure your grip pattern</span>. You can use a 2D (DXF/SVG) or 3D (STL) file here. There are various options for how these are distributed.
+                                        <span className="text-gray-300 font-medium">Configure your grip pattern</span>. You can use a 3D (STL) file here. There are various options for how these are distributed.
                                         <p className="mt-1 text-xs text-amber-500/80 italic">Please note that operations with complex geometries may take up to a minute to process.</p>
                                     </li>
                                     <li className="pl-1"><span className="text-gray-300 font-medium">Export your grip file</span> as 3MF and open in your slicer.</li>

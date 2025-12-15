@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useMemo } from 'react';
 import * as THREE from 'three';
 import { Brush, Evaluator, SUBTRACTION, INTERSECTION } from 'three-bvh-csg';
-import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { generateTilePositions, getShapesBounds, getGeometryBounds } from '../utils/patternUtils';
+import { mergeGeometries, mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { generateTilePositions, getShapesBounds } from '../utils/patternUtils';
 
 interface ImperativeModelProps {
   size: number;
@@ -12,21 +12,24 @@ interface ImperativeModelProps {
   cutoutShapes: THREE.Shape[] | null;
   patternShapes: any[] | null;
   patternType: 'dxf' | 'svg' | 'stl' | null;
-  extrusionAngle: number;
-  patternHeight: number | string;
   patternScale: number;
+  patternScaleZ?: number;
   isTiled: boolean;
   tileSpacing: number;
   patternMargin: number;
-  tilingDistribution?: 'grid' | 'offset' | 'hex' | 'radial' | 'random' | 'wave-v' | 'wave-h' | 'zigzag-v' | 'zigzag-h';
+  tilingDistribution?: 'grid' | 'offset' | 'hex' | 'radial' | 'random' | 'wave-v' | 'wave-h' | 'zigzag-v' | 'zigzag-h' | 'warped-grid';
   tilingRotation?: 'none' | 'alternate' | 'random' | 'aligned';
   clipToOutline?: boolean;
   inlayShapes?: any[] | null;
   inlayDepth?: number;
   inlayScale?: number;
   inlayExtend?: number;
-  wireframe?: boolean;
-  isPatternTransparent?: boolean;
+  wireframeBase?: boolean;
+  wireframeInlay?: boolean;
+  wireframePattern?: boolean;
+  patternOpacity?: number;
+  displayMode?: 'normal' | 'toon';
+  onProcessingChange?: (isProcessing: boolean) => void;
 }
 
 const ImperativeModel = React.forwardRef<THREE.Group, ImperativeModelProps>(({
@@ -37,9 +40,8 @@ const ImperativeModel = React.forwardRef<THREE.Group, ImperativeModelProps>(({
   cutoutShapes,
   patternShapes,
   patternType,
-  extrusionAngle,
-  patternHeight,
   patternScale,
+  patternScaleZ,
   isTiled,
   tileSpacing,
   patternMargin,
@@ -50,13 +52,52 @@ const ImperativeModel = React.forwardRef<THREE.Group, ImperativeModelProps>(({
   inlayDepth = 0.6,
   inlayScale = 1,
   inlayExtend = 0,
-  wireframe = false,
-  isPatternTransparent = false,
+  wireframeBase = false,
+  wireframeInlay = false,
+  wireframePattern = false,
+  patternOpacity = 1.0,
+  displayMode = 'normal',
+  onProcessingChange,
 }, ref) => {
   const localGroupRef = useRef<THREE.Group>(null);
   
   // Expose ref
   React.useImperativeHandle(ref, () => localGroupRef.current!, []);
+
+  // --- Gradient Map for Toon Shading ---
+  const gradientMap = useMemo(() => {
+    // 3-step grayscale gradient for toon effect
+    const colors = new Uint8Array([
+      50, 50, 50, 255,
+      150, 150, 150, 255,
+      255, 255, 255, 255
+    ]);
+    const texture = new THREE.DataTexture(colors, 3, 1, THREE.RGBAFormat);
+    texture.minFilter = THREE.NearestFilter;
+    texture.magFilter = THREE.NearestFilter;
+    texture.needsUpdate = true;
+    return texture;
+  }, []);
+
+  // Helper to create material based on mode
+  const createMaterial = (color: string | number | THREE.Color, transparent: boolean = false, opacity: number = 1.0, isWireframe: boolean = false) => {
+      if (displayMode === 'toon') {
+          return new THREE.MeshToonMaterial({
+              color: color,
+              gradientMap: gradientMap,
+              wireframe: isWireframe,
+              transparent: transparent,
+              opacity: opacity,
+          });
+      } else {
+          return new THREE.MeshStandardMaterial({
+              color: color,
+              wireframe: isWireframe,
+              transparent: transparent,
+              opacity: opacity,
+          });
+      }
+  };
 
   // --- 1. Base Mesh Construction ---
   useEffect(() => {
@@ -89,10 +130,7 @@ const ImperativeModel = React.forwardRef<THREE.Group, ImperativeModelProps>(({
         geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
     }
 
-    const material = new THREE.MeshStandardMaterial({ 
-        color, 
-        wireframe: wireframe 
-    });
+    const material = createMaterial(color, false, 1.0, wireframeBase);
 
     const mesh = new THREE.Mesh(geometry, material);
     mesh.name = 'Base';
@@ -100,7 +138,7 @@ const ImperativeModel = React.forwardRef<THREE.Group, ImperativeModelProps>(({
     mesh.castShadow = true;
     group.add(mesh);
 
-  }, [size, thickness, color, cutoutShapes, wireframe]);
+  }, [size, thickness, color, cutoutShapes, wireframeBase, displayMode]);
 
 
   // --- 2. Inlays Construction ---
@@ -129,10 +167,7 @@ const ImperativeModel = React.forwardRef<THREE.Group, ImperativeModelProps>(({
         const totalDepth = inlayDepth + Number(inlayExtend || 0) + ((i + 1) * 0.001);
         const geo = new THREE.ExtrudeGeometry(item.shape, { depth: totalDepth, bevelEnabled: false });
         
-        const mat = new THREE.MeshStandardMaterial({ 
-            color: item.color === 'base' ? color : item.color, 
-            wireframe: wireframe 
-        });
+        const mat = createMaterial(item.color === 'base' ? color : item.color, false, 1.0, wireframeInlay);
 
         const mesh = new THREE.Mesh(geo, mat);
         mesh.name = `Inlay_${i}`;
@@ -143,84 +178,57 @@ const ImperativeModel = React.forwardRef<THREE.Group, ImperativeModelProps>(({
         group.add(mesh);
     });
 
-  }, [inlayShapes, inlayDepth, inlayScale, inlayExtend, thickness, color, wireframe]);
+  }, [inlayShapes, inlayDepth, inlayScale, inlayExtend, thickness, color, wireframeInlay, displayMode]);
 
 
   // --- 3. Pattern Construction (The Heavy Lifter) ---
   useEffect(() => {
     const group = localGroupRef.current;
+// ... (rest of function implicit)
     if (!group) return;
 
-    // Cleanup old Pattern
-    const existingPattern = group.getObjectByName('Pattern');
-    if (existingPattern) {
-         if (existingPattern instanceof THREE.Mesh || existingPattern instanceof THREE.InstancedMesh) {
-            existingPattern.geometry.dispose();
-            if (Array.isArray(existingPattern.material)) {
-                existingPattern.material.forEach(m => m.dispose());
-            } else {
-                (existingPattern.material as THREE.Material).dispose();
+    // Signal start of processing
+    onProcessingChange?.(true);
+
+    // Use setTimeout to allow the UI to render the loading state (spinner)
+    // before locking the main thread with heavy geometry generation.
+    const timer = setTimeout(() => {
+        try {
+            // Cleanup old Pattern
+            const existingPattern = group.getObjectByName('Pattern');
+            if (existingPattern) {
+                 if (existingPattern instanceof THREE.Mesh || existingPattern instanceof THREE.InstancedMesh) {
+                    existingPattern.geometry.dispose();
+                    if (Array.isArray(existingPattern.material)) {
+                        existingPattern.material.forEach(m => m.dispose());
+                    } else {
+                        (existingPattern.material as THREE.Material).dispose();
+                    }
+                 }
+                 group.remove(existingPattern);
             }
-         }
-         group.remove(existingPattern);
-    }
 
     if (!patternShapes || patternShapes.length === 0) return;
 
     // ---------------------------------------------------------
     // A. Prepare Unit Geometry
     // ---------------------------------------------------------
-    const isStl = patternType === 'stl' || (patternShapes[0] instanceof THREE.BufferGeometry);
+
+    // We now assume patternShapes[0] is always a BufferGeometry (STL)
+    // as we've removed SVG/DXF support for patterns.
     let unitGeo: THREE.BufferGeometry | null = null;
-    let unitShapes: THREE.Shape[] | null = null;
-
-    // Extrude Settings Calculation
-    let activePatternHeight = Number(patternHeight === '' ? 1 : patternHeight);
-    const angleRad = (Math.abs(extrusionAngle) * Math.PI) / 180;
-    let extrudeSettings: any = { depth: activePatternHeight, bevelEnabled: false };
-
-    // Standardize shapes and calculate advanced bevels if needed
-    if (!isStl) {
-        unitShapes = (patternShapes as THREE.Shape[]).map(s => {
-            const ns = new THREE.Shape();
-            const pts = s.getPoints();
-            if (THREE.ShapeUtils.area(pts) < 0) pts.reverse();
-            ns.setFromPoints(pts);
-            s.holes?.forEach(h => ns.holes.push(new THREE.Path(h.getPoints())));
-            return ns;
-        });
-
-        // Bevel Logic for "Pyramid" effect
-        if (Math.abs(extrusionAngle) > 0 && unitShapes.length > 0) {
-            const shpBounds = getShapesBounds(unitShapes);
-            const radius = Math.min(shpBounds.size.x, shpBounds.size.y) / 2;
-            const scaledRadius = radius * patternScale;
-            let autoHeight = scaledRadius / Math.tan(angleRad);
-            
-            if (patternHeight !== '' && Number(patternHeight) > 0) {
-                autoHeight = Math.min(autoHeight, Number(patternHeight));
-            }
-            activePatternHeight = autoHeight;
-
-            extrudeSettings = {
-                depth: 0.05,
-                bevelEnabled: true,
-                bevelThickness: autoHeight,
-                bevelSize: -radius + 0.1, // Approximate convergence
-                bevelSegments: 1,
-                bevelOffset: 0
-            };
-        }
-
-        unitGeo = new THREE.ExtrudeGeometry(unitShapes, extrudeSettings);
+    
+    if (patternShapes[0] instanceof THREE.BufferGeometry) {
+        unitGeo = patternShapes[0].clone();
     } else {
-        // STL
-        unitGeo = (patternShapes[0] as THREE.BufferGeometry).clone();
-        // Compute bounding box to center it?
-        // Usually STLs come in "as is". 
+        // Fallback or error if somehow non-STL passed (though Controls restricts it)
+        console.warn("Non-STL pattern shape received in STL-only mode");
+        return; 
     }
 
     if (!unitGeo) return;
+
+
 
     // Center the Geometry locally
     unitGeo.computeBoundingBox();
@@ -250,11 +258,49 @@ const ImperativeModel = React.forwardRef<THREE.Group, ImperativeModelProps>(({
         pHeight = (unitGeo.boundingBox.max.y - unitGeo.boundingBox.min.y) * patternScale;
     }
 
+    // Helper to scale shapes
+    const scaleShape = (original: any) => {
+        const shape = original.shape || original;
+        if (inlayScale === 1) return shape;
+        
+        const newShape = new THREE.Shape();
+        const transform = (p: THREE.Vector2) => new THREE.Vector2(p.x * inlayScale, p.y * inlayScale);
+        
+        shape.getPoints().forEach((p: THREE.Vector2, i: number) => {
+            const tp = transform(p);
+            if (i === 0) newShape.moveTo(tp.x, tp.y);
+            else newShape.lineTo(tp.x, tp.y);
+        });
+        
+        if (shape.holes && shape.holes.length > 0) {
+            shape.holes.forEach((h: THREE.Path) => {
+                const newHole = new THREE.Path();
+                h.getPoints().forEach((p: THREE.Vector2, i: number) => {
+                    const tp = transform(p);
+                    if (i === 0) newHole.moveTo(tp.x, tp.y);
+                    else newHole.lineTo(tp.x, tp.y);
+                });
+                newShape.holes.push(newHole);
+            });
+        }
+        return newShape;
+    };
+
+    const finalExclusionShapes = inlayShapes 
+        ? inlayShapes.filter(s => (s.gripMode === 'exclude' || (!s.gripMode && s.excludePattern))).map(scaleShape)
+        : [];
+
+    const finalInclusionShapes = inlayShapes
+        ? inlayShapes.filter(s => s.gripMode === 'include').map(scaleShape)
+        : [];
+
     const positions = isTiled ? generateTilePositions(
         bounds, pWidth, pHeight, tileSpacing, 
         cutoutShapes, patternMargin, 
         clipToOutline, // Allow Partial?
-        tilingDistribution, tilingRotation 
+        tilingDistribution, tilingRotation,
+        finalExclusionShapes,
+        finalInclusionShapes
     ) : [{ position: new THREE.Vector2(0,0), rotation: 0, scale: 1 }];
 
 
@@ -265,18 +311,26 @@ const ImperativeModel = React.forwardRef<THREE.Group, ImperativeModelProps>(({
     // ---------------------------------------------------------
     
     // Material
-    const mat = new THREE.MeshStandardMaterial({
-        color: patternColor,
-        wireframe: wireframe,
-        transparent: isPatternTransparent,
-        opacity: isPatternTransparent ? 0.3 : 1.0
-    });
+    const mat = createMaterial(patternColor, patternOpacity < 1.0, patternOpacity, wireframePattern);
 
     // STRATEGY: 
     // If NOT cutting to outline -> InstancedMesh (Fastest)
     // If cutting to outline -> Merged Geometry -> CSG Intersection (Accurate)
 
-    if (!clipToOutline || !cutoutShapes || cutoutShapes.length === 0) {
+    // Determine Z Scale (default to XY scale if auto/undefined)
+    const actualScaleZ = (patternScaleZ !== undefined && patternScaleZ > 0) ? patternScaleZ : patternScale;
+    
+    // Scale Unit Geometry if needed (Merged Path only - Instanced path scales the instance)
+    // InstancedMesh handles scale via matrix, so we don't modify unitGeo there.
+    // However, for Merged Path, we modify the dummy object.
+    
+    
+    // Position/Scale Handling
+    const hasExclusions = finalExclusionShapes && finalExclusionShapes.length > 0;
+    const hasClipping = clipToOutline && cutoutShapes && cutoutShapes.length > 0;
+    const useCSG = hasClipping || hasExclusions;
+
+    if (!useCSG) {
         // --- INSTANCED MESH PATH ---
         const iMesh = new THREE.InstancedMesh(unitGeo, mat, positions.length);
         iMesh.name = 'Pattern';
@@ -287,11 +341,9 @@ const ImperativeModel = React.forwardRef<THREE.Group, ImperativeModelProps>(({
         
         positions.forEach((p, i) => {
             // Apply scale first to determine height
-            if (!isStl) {
-                dummy.scale.set(patternScale, patternScale, -1); 
-            } else {
-                dummy.scale.set(patternScale * p.scale, patternScale * p.scale, patternScale * p.scale);
-            }
+
+            // Apply scale (XY = patternScale, Z = actualScaleZ)
+            dummy.scale.set(patternScale * p.scale, patternScale * p.scale, actualScaleZ * p.scale);
 
             // Calculate exact height of the instance
             const instH = (unitGeo!.boundingBox!.max.z - unitGeo!.boundingBox!.min.z) * Math.abs(dummy.scale.z);
@@ -317,11 +369,9 @@ const ImperativeModel = React.forwardRef<THREE.Group, ImperativeModelProps>(({
 
         positions.forEach(p => {
              // Scale
-             if (!isStl) {
-                 dummy.scale.set(patternScale, patternScale, -1);
-             } else {
-                 dummy.scale.set(patternScale * p.scale, patternScale * p.scale, patternScale * p.scale);
-             }
+             
+             // Apply scale (XY = patternScale, Z = actualScaleZ)
+             dummy.scale.set(patternScale * p.scale, patternScale * p.scale, actualScaleZ * p.scale);
 
              // Position
              const instH = (unitGeo!.boundingBox!.max.z - unitGeo!.boundingBox!.min.z) * Math.abs(dummy.scale.z);
@@ -337,64 +387,103 @@ const ImperativeModel = React.forwardRef<THREE.Group, ImperativeModelProps>(({
         });
 
         if (geometries.length === 0) return;
-        const rawMergedGeo = BufferGeometryUtils.mergeGeometries(geometries);
+        const rawMergedGeo = mergeGeometries(geometries);
         // Optimize and ensure index
-        const mergedGeo = BufferGeometryUtils.mergeVertices(rawMergedGeo);
+        const mergedGeo = mergeVertices(rawMergedGeo);
         rawMergedGeo.dispose();
         
-        // 2. Prepare Cutter (The Outline)
-        // We need a big volume that matches the cutout shape
-        const cutterGeo = new THREE.ExtrudeGeometry(cutoutShapes, {
-            depth: 1000, 
-            bevelEnabled: true, 
-            bevelThickness: 0.1, 
-            bevelSize: -patternMargin,
-            bevelSegments: 1, 
-            bevelOffset: 0
-        });
-
-        // Safety check
-        if (!mergedGeo.attributes.position || mergedGeo.attributes.position.count === 0 || 
-            !cutterGeo.attributes.position || cutterGeo.attributes.position.count === 0) {
-            console.warn("Skipping CSG: Invalid geometry");
-            return;
-        }
-
         // 3. Perform CSG
-        const patternBrush = new Brush(mergedGeo);
-        const cutterBrush = new Brush(cutterGeo);
-        
-        patternBrush.updateMatrixWorld();
-        cutterBrush.updateMatrixWorld();
-        
-        // We want INTERSECTION
         const evaluator = new Evaluator();
         // Avoid attribute mismatch errors (e.g. missing UVs on STL)
         evaluator.attributes = ['position', 'normal'];
-        const result = evaluator.evaluate(patternBrush, cutterBrush, INTERSECTION);
+
+        let resultBrush = new Brush(mergedGeo);
+        resultBrush.updateMatrixWorld();
+
+        // 3a. Subtraction (Exclusions)
+        if (hasExclusions) {
+            const exclusionGeo = new THREE.ExtrudeGeometry(finalExclusionShapes, {
+                depth: 1000, 
+                bevelEnabled: false
+            });
+            
+            let effectiveExclusionBrush = new Brush(exclusionGeo);
+            // Move it down so it starts below pattern and goes way up
+            effectiveExclusionBrush.position.z = -100;
+            effectiveExclusionBrush.updateMatrixWorld();
+
+            // Handle Inclusions (Islands inside Exclusion)
+            if (finalInclusionShapes && finalInclusionShapes.length > 0) {
+                 const inclusionGeo = new THREE.ExtrudeGeometry(finalInclusionShapes, {
+                    depth: 1000, 
+                    bevelEnabled: false
+                });
+                const inclusionBrush = new Brush(inclusionGeo);
+                inclusionBrush.position.z = -100; // Same space as exclusion
+                inclusionBrush.updateMatrixWorld();
+
+                // Subtract Inclusions FROM Exclusion
+                // Result = Exclusion - Inclusion (The "Donut")
+                // When we Subtract "Donut" from "Pattern", the "Hole" (Inclusion) remains as Pattern.
+                effectiveExclusionBrush = evaluator.evaluate(effectiveExclusionBrush, inclusionBrush, SUBTRACTION);
+                
+                inclusionGeo.dispose();
+            }
+            
+            resultBrush = evaluator.evaluate(resultBrush, effectiveExclusionBrush, SUBTRACTION);
+            
+            // Clean up exclusion geometry
+            exclusionGeo.dispose();
+        }
+
+        // 3b. Intersection (Outline)
+        if (hasClipping) {
+            const cutterGeo = new THREE.ExtrudeGeometry(cutoutShapes, {
+                depth: 1000, 
+                bevelEnabled: true, 
+                bevelThickness: 0.1, 
+                bevelSize: -patternMargin,
+                bevelSegments: 1, 
+                bevelOffset: 0
+            });
+            
+            const cutterBrush = new Brush(cutterGeo);
+            cutterBrush.updateMatrixWorld();
+
+            resultBrush = evaluator.evaluate(resultBrush, cutterBrush, INTERSECTION);
+            
+            // Clean up cutter geometry
+            cutterGeo.dispose();
+        }
         
         // 4. Result Mesh
-        result.name = 'Pattern';
-        result.material = mat;
-        result.castShadow = true;
-        result.receiveShadow = true;
-        group.add(result);
+        resultBrush.name = 'Pattern';
+        resultBrush.material = mat;
+        resultBrush.castShadow = true;
+        resultBrush.receiveShadow = true;
+        group.add(resultBrush);
         
         // Cleanup intermediates?
-        // Geometries in `geometries` are clones, need dispose? 
-        // BufferGeometryUtils.merge... creates new one?
-        // Yes, good practice to dispose if possible, but JS GC handles transient objects.
         geometries.forEach(g => g.dispose());
         mergedGeo.dispose();
-        cutterGeo.dispose();
     }
+    
+    } finally {
+        // Signal end of processing
+        onProcessingChange?.(false);
+    }
+    }, 10);
+
+    return () => {
+        clearTimeout(timer);
+    };
 
   }, [
       patternShapes, patternType, cutoutShapes, size, thickness, 
-      patternColor, wireframe, isPatternTransparent, 
-      extrusionAngle, patternHeight, patternScale, 
+      patternColor, wireframePattern, patternOpacity, 
+      patternScale, patternScaleZ, 
       isTiled, tileSpacing, patternMargin, tilingDistribution, tilingRotation, 
-      clipToOutline
+      clipToOutline, displayMode, inlayShapes, inlayScale
   ]);
 
   return <group ref={localGroupRef} />;

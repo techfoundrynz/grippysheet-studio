@@ -1,6 +1,6 @@
 import React from 'react';
 import ShapeUploader from './ShapeUploader';
-import { getShapesBounds, getGeometryBounds, centerShapes } from '../utils/patternUtils';
+import { getShapesBounds, getGeometryBounds, centerShapes, calculateInlayScale } from '../utils/patternUtils';
 
 interface ControlsProps {
   size: number;
@@ -15,12 +15,10 @@ interface ControlsProps {
   setPatternShapes: (shapes: any[]) => void;
   patternType: 'dxf' | 'svg' | 'stl' | null;
   setPatternType: (type: 'dxf' | 'svg' | 'stl' | null) => void;
-  extrusionAngle: number;
-  setExtrusionAngle: (angle: number) => void;
-  patternHeight: number | '';
-  setPatternHeight: (height: number | '') => void;
   patternScale: number;
   setPatternScale: (scale: number) => void;
+  patternScaleZ: number | '';
+  setPatternScaleZ: (val: number | '') => void;
   isTiled: boolean;
   setIsTiled: (val: boolean) => void;
   tileSpacing: number;
@@ -31,8 +29,8 @@ interface ControlsProps {
   setPatternColor: (val: string) => void;
   clipToOutline?: boolean;
   setClipToOutline?: (val: boolean) => void;
-  tilingDistribution: 'grid' | 'offset' | 'hex' | 'radial' | 'random' | 'wave-v' | 'wave-h' | 'zigzag-v' | 'zigzag-h';
-  setTilingDistribution: (val: 'grid' | 'offset' | 'hex' | 'radial' | 'random' | 'wave-v' | 'wave-h' | 'zigzag-v' | 'zigzag-h') => void;
+  tilingDistribution: 'grid' | 'offset' | 'hex' | 'radial' | 'random' | 'wave-v' | 'wave-h' | 'zigzag-v' | 'zigzag-h' | 'warped-grid';
+  setTilingDistribution: (val: 'grid' | 'offset' | 'hex' | 'radial' | 'random' | 'wave-v' | 'wave-h' | 'zigzag-v' | 'zigzag-h' | 'warped-grid') => void;
   tilingRotation: 'none' | 'alternate' | 'random' | 'aligned';
   setTilingRotation: (v: 'none' | 'alternate' | 'random' | 'aligned') => void;
   debugMode?: boolean;
@@ -77,9 +75,8 @@ const Controls: React.FC<ControlsProps> = ({
   setPatternShapes,
   patternType,
   setPatternType,
-  extrusionAngle, setExtrusionAngle,
-  patternHeight, setPatternHeight,
   patternScale, setPatternScale,
+  patternScaleZ, setPatternScaleZ,
   isTiled, setIsTiled,
   tileSpacing, setTileSpacing,
   patternMargin, setPatternMargin,
@@ -181,6 +178,32 @@ const Controls: React.FC<ControlsProps> = ({
       </div>
   );
 
+  // Helper to auto-scale Inlay
+  const handleInlayLoaded = (shapes: any[], name: string | null = null) => {
+      // 1. Calculate Scale
+      const scale = calculateInlayScale(shapes, cutoutShapes, size);
+      
+      // 2. Set State
+      setInlayScale(scale);
+      setOriginalInlayShapes(shapes);
+      setInlayShapes(shapes);
+      setLibraryInlayName(name);
+  };
+
+  // Helper to handle Outline (and resize Inlay if exists)
+  const handleOutlineLoaded = (shapes: any[]) => {
+      // 1. Set Outline
+      setCutoutShapes(shapes);
+
+      // 2. Check if we need to resize existing inlay
+      if (inlayShapes && inlayShapes.length > 0) {
+           // We need to use the NEW shapes for calculation.
+           // Assumes cutoutShapes are Shape objects, which they are from uploader.
+           const scale = calculateInlayScale(inlayShapes, shapes as THREE.Shape[], size);
+           setInlayScale(scale);
+      }
+  };
+
   return (
     <div className="bg-gray-800 rounded-lg border border-gray-700 shadow-lg flex-1 min-h-0 flex flex-col transition-all relative overflow-hidden">
       <div className="md:sticky md:top-0 z-10 bg-gray-800 p-6 pb-4 border-b border-gray-700/50 mb-0">
@@ -239,14 +262,14 @@ const Controls: React.FC<ControlsProps> = ({
           <div className="space-y-2">
             <ShapeUploader 
                 label="Upload Outline" 
-                onShapesLoaded={(shapes) => setCutoutShapes(shapes)}
+                onShapesLoaded={handleOutlineLoaded}
                 onClear={() => setCutoutShapes([])}
                 allowedTypes={['dxf']}
             />
           </div>
           
           {(!cutoutShapes || cutoutShapes.length === 0) && (
-            <ControlField label="Size (mm)" tooltip="Width/Height of the base sheet square">
+            <ControlField label="Size (mm)" tooltip="Width/Height of the base sheet square" helperText="Unused when outline is uploaded">
               <DebouncedInput
                 type="number"
                 value={size}
@@ -290,11 +313,7 @@ const Controls: React.FC<ControlsProps> = ({
         <section className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
           <ShapeUploader 
               label="Upload Inlay Pattern" 
-              onShapesLoaded={(shapes) => {
-                  setOriginalInlayShapes(shapes); // Store original
-                  setInlayShapes(shapes);
-                  setLibraryInlayName(null);
-              }}
+              onShapesLoaded={(shapes) => handleInlayLoaded(shapes)}
               onClear={() => {
                   setOriginalInlayShapes([]);
                   setInlayShapes([]);
@@ -382,9 +401,7 @@ const Controls: React.FC<ControlsProps> = ({
                              // SAFE APPROACH: fetch arrayBuffer. If SVG/DXF, decoder.decode(). If STL, pass buffer.
                         }
                         
-                        setOriginalInlayShapes(shapes);
-                        setInlayShapes(shapes);
-                        setLibraryInlayName(preset.name);
+                        handleInlayLoaded(shapes, preset.name);
                         
                     } catch (error) {
                         console.error("Failed to load pattern:", error);
@@ -404,15 +421,15 @@ const Controls: React.FC<ControlsProps> = ({
               baseColor={color}
               onSave={(newShapes) => {
                   // If standalone mode (no original shapes), center the drawing
+                  let finalShapes = newShapes;
                   if (!originalInlayShapes || originalInlayShapes.length === 0) {
                        // newShapes is array of objects { shape, color }
                        const rawShapes = newShapes.map((s: any) => s.shape || s);
                        const centered = centerShapes(rawShapes, false); // FlipY false to prevent mirroring on reload
-                       const centeredObjs = newShapes.map((s: any, i: number) => ({ ...s, shape: centered[i] }));
-                       setInlayShapes(centeredObjs);
-                  } else {
-                       setInlayShapes(newShapes);
+                       finalShapes = newShapes.map((s: any, i: number) => ({ ...s, shape: centered[i] }));
                   }
+                  
+                  handleInlayLoaded(finalShapes);
               }}
           />
           
@@ -424,32 +441,8 @@ const Controls: React.FC<ControlsProps> = ({
                 action={
                   <button
                       onClick={() => {
-                          // Extract shapes if they are objects (which they are for inlayShapes)
-                          const shapes = inlayShapes.map((s: any) => s.shape || s);
-                          const bounds = getShapesBounds(shapes);
-                          const width = bounds.size.x;
-                          const height = bounds.size.y;
-                          
-                          if (width > 0 && height > 0) {
-                              let targetScale = 1;
-
-                              if (cutoutShapes && cutoutShapes.length > 0) {
-                                  // Fit within Outline Bounds
-                                  const outlineBounds = getShapesBounds(cutoutShapes);
-                                  const outlineW = outlineBounds.size.x;
-                                  const outlineH = outlineBounds.size.y;
-                                  
-                                  const scaleX = (outlineW * 0.8) / width;
-                                  const scaleY = (outlineH * 0.8) / height;
-                                  targetScale = Math.min(scaleX, scaleY);
-                              } else {
-                                  // Fit within Default Square Size
-                                  const maxSize = Math.max(width, height);
-                                  targetScale = (size * 0.8) / maxSize;
-                              }
-                              
-                              setInlayScale(targetScale);
-                          }
+                          const scale = calculateInlayScale(inlayShapes, cutoutShapes, size);
+                          setInlayScale(scale);
                       }}
                       className="text-gray-400 hover:text-purple-400 transition-colors"
                       title="Auto Scale to Fit"
@@ -508,7 +501,7 @@ const Controls: React.FC<ControlsProps> = ({
         {activeTab === 'geometry' && (
         <section className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
             <ShapeUploader 
-                label="Upload Pattern/Geometry" 
+                label="Upload Grip Geometry" 
                 onShapesLoaded={(shapes, type) => {
                     handlePatternLoaded(shapes, type);
                     setLibraryPatternName(null); // Clear library name on manual upload
@@ -518,7 +511,7 @@ const Controls: React.FC<ControlsProps> = ({
                   setPatternType(null);
                   setLibraryPatternName(null);
                 }}
-                allowedTypes={['dxf', 'svg', 'stl']}
+                allowedTypes={['stl']}
                 externalFileName={libraryPatternName}
                 externalShapes={patternShapes && patternShapes.length > 0 ? patternShapes : undefined}
                 adornment={
@@ -545,23 +538,7 @@ const Controls: React.FC<ControlsProps> = ({
                         
                         let shapes: any[] = [];
                         
-                        if (preset.type === 'svg') {
-                            const text = new TextDecoder().decode(buffer);
-                            const loader = new SVGLoader();
-                            const data = loader.parse(text);
-                            data.paths.forEach((path) => {
-                                const subShapes = path.toShapes(true);
-                                subShapes.forEach(s => shapes.push(s));
-                            });
-                             const centered = centerShapes(shapes as THREE.Shape[], true);
-                             shapes = centered;
-
-                        } else if (preset.type === 'dxf') {
-                            const text = new TextDecoder().decode(buffer);
-                            shapes = parseDxfToShapes(text);
-                             const centered = centerShapes(shapes as THREE.Shape[], true);
-                             shapes = centered;
-                        } else if (preset.type === 'stl') {
+                        if (preset.type === 'stl') {
                             const loader = new STLLoader();
                             const geometry = loader.parse(buffer);
                             geometry.center(); // Auto-center STLs
@@ -597,12 +574,11 @@ const Controls: React.FC<ControlsProps> = ({
                         
                         if (newIsTiled && patternShapes && patternShapes.length > 0) {
                             let width = 0;
-                            if (patternType === 'stl') {
-                                const bounds = getGeometryBounds(patternShapes[0]);
-                                width = bounds.size.x;
-                            } else {
-                                const bounds = getShapesBounds(patternShapes);
-                                width = bounds.size.x;
+                            if (patternType === 'stl' && patternShapes.length > 0) {
+                                const geometry = patternShapes[0];
+                                if (geometry.boundingBox === null) geometry.computeBoundingBox();
+                                const bounds = geometry.boundingBox;
+                                if (bounds) width = bounds.max.x - bounds.min.x;
                             }
 
                             if (width > 0) {
@@ -623,7 +599,7 @@ const Controls: React.FC<ControlsProps> = ({
               <div className="flex gap-4">
                   <div className="space-y-2 flex-1 min-w-0">
                     <ControlField 
-                        label="Scale" 
+                        label="Scale X/Y" 
                         action={
                             patternShapes && patternShapes.length > 0 && (
                                 <button
@@ -631,14 +607,14 @@ const Controls: React.FC<ControlsProps> = ({
                                         let width = 0;
                                         let height = 0;
                                         
-                                        if (patternType === 'stl') {
-                                            const bounds = getGeometryBounds(patternShapes[0]);
-                                            width = bounds.size.x;
-                                            height = bounds.size.y;
-                                        } else {
-                                            const bounds = getShapesBounds(patternShapes);
-                                            width = bounds.size.x;
-                                            height = bounds.size.y;
+                                        if (patternType === 'stl' && patternShapes.length > 0) {
+                                            const geometry = patternShapes[0];
+                                            if (geometry.boundingBox === null) geometry.computeBoundingBox();
+                                            const bounds = geometry.boundingBox;
+                                            if (bounds) {
+                                                width = bounds.max.x - bounds.min.x;
+                                                height = bounds.max.y - bounds.min.y;
+                                            }
                                         }
                                         
                                         if (width > 0 && height > 0) {
@@ -666,12 +642,35 @@ const Controls: React.FC<ControlsProps> = ({
                         <DebouncedInput
                         type="number"
                         value={patternScale}
-                        onChange={(val) => setPatternScale(Number(val))}
+                        onChange={(val) => {
+                            const newScale = Number(val);
+                            // Proportional Z Scaling
+                            if (patternScaleZ !== '' && patternScale > 0) {
+                                const ratio = newScale / patternScale;
+                                const newZ = Number(patternScaleZ) * ratio;
+                                setPatternScaleZ(Math.round(newZ * 1000) / 1000); // 3 decimals
+                            }
+                            setPatternScale(newScale);
+                        }}
                         step="0.1"
                         className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none"
                         />
                     </ControlField>
                   </div>
+
+                  <div className="space-y-2 flex-1 min-w-0">
+                       <ControlField label="Scale Z" tooltip="Leave empty to match X/Y scale">
+                           <DebouncedInput
+                               type="number"
+                               value={patternScaleZ}
+                               onChange={(val) => setPatternScaleZ(val === '' ? '' : Number(val))}
+                               placeholder="Auto"
+                               min={0.1}
+                               step={0.05}
+                               className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none"
+                           />
+                       </ControlField>
+                   </div>
 
                   {isTiled && (
                     <div className="flex-1 min-w-0">
@@ -696,14 +695,15 @@ const Controls: React.FC<ControlsProps> = ({
                       onChange={(e) => setTilingDistribution(e.target.value as any)}
                       className="w-full bg-gray-800 border border-gray-700 rounded-lg pl-3 pr-10 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none appearance-none truncate"
                       >
-                      <option value="grid">Grid (Rectangular)</option>
-                      <option value="offset">Offset (Brick)</option>
-                      <option value="hex">Hex (Clusters)</option>
+                      <option value="grid">Grid</option>
+                      <option value="offset">Offset</option>
+                      <option value="hex">Hex</option>
                       <option value="radial">Radial</option>
                       <option value="wave-v">Wave (Vertical)</option>
                       <option value="wave-h">Wave (Horizontal)</option>
                       <option value="zigzag-v">Zigzag (Vertical)</option>
                       <option value="zigzag-h">Zigzag (Horizontal)</option>
+                      <option value="warped-grid">Warped Grid</option>
                       <option value="random">Random</option>
                       </select>
                       <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
@@ -763,36 +763,7 @@ const Controls: React.FC<ControlsProps> = ({
 
 
 
-              {patternType !== 'stl' && (
-                <div className="flex gap-4">
-                   <div className="flex-1 min-w-0">
-                    <ControlField label="Extrusion Angle" tooltip="Taper angle for the grip pattern">
-                       <div className="relative">
-                           <DebouncedInput
-                             type="number"
-                             value={extrusionAngle}
-                             onChange={(val) => setExtrusionAngle(Number(val))}
-                             className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none"
-                           />
-                           <div className="absolute right-3 top-2 text-gray-500 text-xs pointer-events-none">deg</div>
-                       </div>
-                     </ControlField>
-                   </div>
-
-                   <div className="flex-1 min-w-0">
-                    <ControlField label="Max Height" helperText="Leave empty for Auto" tooltip="Maximum height of the grip pattern">
-                        <DebouncedInput
-                            type="number"
-                            value={patternHeight}
-                            onChange={(val) => setPatternHeight(val === '' ? '' : Number(val))}
-                            placeholder="Auto"
-                            className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none placeholder-gray-600"
-                        />
-                        </ControlField>
-                   </div>
-                </div>
-              )}
-
+              {/* Extrusion controls removed as we only support STL now */}
 
 
               <div className="space-y-2">

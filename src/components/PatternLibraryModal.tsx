@@ -12,20 +12,10 @@ interface PatternPreset {
 
 const PRESETS: PatternPreset[] = [
     { name: 'Pyramid', file: 'pyramid.stl', type: 'stl', category: 'patterns' },
-    { name: 'Cube', file: 'cube.stl', type: 'stl', category: 'patterns' },
-    { name: 'Dome', file: 'dome.stl', type: 'stl', category: 'patterns' },
+    // { name: 'Cube', file: 'cube.stl', type: 'stl', category: 'patterns' },
+    // { name: 'Dome', file: 'dome.stl', type: 'stl', category: 'patterns' },
     { name: 'Tri-Pyramid', file: 'triangular-pyramid.stl', type: 'stl', category: 'patterns' },
     { name: 'Climbing Hold', file: 'climbing-hold.stl', type: 'stl', category: 'patterns' },
-    { name: 'Honeycomb', file: 'honeycomb.svg', type: 'svg', category: 'patterns' },
-    { name: 'Circles', file: 'circles.svg', type: 'svg', category: 'patterns' },
-    { name: 'Trapezoid', file: 'trapezoid.svg', type: 'svg', category: 'patterns' },
-    { name: 'Parallelogram', file: 'parallelogram.svg', type: 'svg', category: 'patterns' },
-    { name: 'Square', file: 'square.svg', type: 'svg', category: 'patterns' },
-    { name: 'Triangle', file: 'triangle.svg', type: 'svg', category: 'patterns' },
-    { name: 'Wavy Circle', file: 'wavy-circle.svg', type: 'svg', category: 'patterns' },
-    { name: 'Star', file: 'star.svg', type: 'svg', category: 'patterns' },
-    { name: 'Heart', file: 'heart.svg', type: 'svg', category: 'patterns' },
-    { name: 'Lightning', file: 'lightning.svg', type: 'svg', category: 'patterns' },
     
     // Inlays
     { name: 'Pubmote', file: 'pubmote.svg', type: 'svg', category: 'inlays', keepOriginalColors: true },

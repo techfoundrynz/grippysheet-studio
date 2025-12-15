@@ -125,8 +125,10 @@ export const generateTilePositions = (
     boundaryShapes: THREE.Shape[] | null,
     margin: number = 0,
     allowPartial: boolean = false,
-    distribution: 'grid' | 'offset' | 'hex' | 'radial' | 'random' | 'wave-v' | 'wave-h' | 'zigzag-v' | 'zigzag-h' = 'grid',
-    rotationMode: 'none' | 'alternate' | 'random' | 'aligned' = 'none'
+    distribution: 'grid' | 'offset' | 'hex' | 'radial' | 'random' | 'wave-v' | 'wave-h' | 'zigzag-v' | 'zigzag-h' | 'warped-grid' = 'grid',
+    rotationMode: 'none' | 'alternate' | 'random' | 'aligned' = 'none',
+    exclusionShapes: THREE.Shape[] | null = null,
+    inclusionShapes: THREE.Shape[] | null = null
 ): TileInstance[] => {
     // Safety check
     if (!bounds) return [];
@@ -134,19 +136,41 @@ export const generateTilePositions = (
     const positions: TileInstance[] = [];
 
     // Buffer for edge checking
-    const buffer = allowPartial ? Math.max(tileWidth + spacing, tileHeight + spacing) : 0;
-    const startX = bounds.min.x - buffer;
-    const startY = bounds.min.y - buffer;
-    const endX = bounds.max.x + buffer;
-    const endY = bounds.max.y + buffer;
+    // Unused variables removed for cleanup
 
     // Bounds Size (for random)
-    const spanW = (endX - startX);
-    const spanH = (endY - startY);
+    // const spanW = (endX - startX);
+    // const spanH = (endY - startY);
 
     // --- Helper for Validity Check (Shape/Bounds) ---
     const checkPosition = (px: number, py: number): boolean => {
         const center = new THREE.Vector2(px, py);
+
+        // 1. Check Exclusion Zones
+        if (exclusionShapes && exclusionShapes.length > 0) {
+            let isExcluded = false;
+
+            // Check if inside ANY exclusion zone
+            for (const shape of exclusionShapes) {
+                if (isPointInShape(center, shape)) {
+                    isExcluded = true;
+                    break;
+                }
+            }
+
+            // If excluded, check if rescued by inclusion zone
+            if (isExcluded && inclusionShapes && inclusionShapes.length > 0) {
+                for (const shape of inclusionShapes) {
+                    if (isPointInShape(center, shape)) {
+                        isExcluded = false; // Is inside an Inclusion Zone (Island)
+                        break;
+                    }
+                }
+            }
+
+            if (isExcluded) return false;
+        }
+
         if (boundaryShapes && boundaryShapes.length > 0) {
             const halfW = tileWidth / 2;
             const halfH = tileHeight / 2;
@@ -444,6 +468,8 @@ export const generateTilePositions = (
         const gridOriginX = boundsCenter.x - (grossGridWidth / 2) + (fullWidth / 2);
         const gridOriginY = boundsCenter.y - (grossGridHeight / 2) + (effectiveFullHeight / 2);
 
+        // Random factors removed for revert
+
         for (let r = 0; r <= rows; r++) {
             for (let c = 0; c <= cols; c++) {
                 // Offset Logic
@@ -481,6 +507,22 @@ export const generateTilePositions = (
                     const norm = tri - period / 4;
                     cy += norm * (fullHeight * 0.3);
                 }
+                else if (distribution === 'warped-grid') {
+                    // Dual wave distortion
+                    // Distort X based on Y, and Y based on X.
+                    // This creates a warped grid effect.
+
+                    // Normalize coords for frequency consistency regardless of size
+                    const nx = c * 0.5;
+                    const ny = r * 0.5;
+
+                    // Apply Sine Wave offsets
+                    const xOff = Math.sin(ny) * (fullWidth * 0.4);
+                    const yOff = Math.cos(nx) * (fullHeight * 0.4);
+
+                    cx += xOff;
+                    cy += yOff;
+                }
 
                 if (checkPosition(cx, cy)) {
                     positions.push({
@@ -509,8 +551,10 @@ export const tileShapes = (
     margin: number = 0,
     patternType?: 'dxf' | 'svg' | 'stl' | null,
     allowPartial: boolean = false,
-    distribution: 'grid' | 'offset' | 'hex' | 'radial' | 'random' | 'wave-v' | 'wave-h' | 'zigzag-v' | 'zigzag-h' = 'grid',
-    rotationMode: 'none' | 'alternate' | 'random' | 'aligned' = 'none'
+    distribution: 'grid' | 'offset' | 'hex' | 'radial' | 'random' | 'wave-v' | 'wave-h' | 'zigzag-v' | 'zigzag-h' | 'warped-grid' = 'grid',
+    rotationMode: 'none' | 'alternate' | 'random' | 'aligned' = 'none',
+    exclusionShapes: THREE.Shape[] | null = null,
+    inclusionShapes: THREE.Shape[] | null = null
 ): any[] => {
     if (!patternShapes || patternShapes.length === 0) return [];
 
@@ -540,7 +584,9 @@ export const tileShapes = (
         margin,
         allowPartial,
         distribution,
-        rotationMode
+        rotationMode,
+        exclusionShapes,
+        inclusionShapes
     );
 
     const tiledShapes: any[] = [];
@@ -687,4 +733,41 @@ export const centerShapes = (shapes: THREE.Shape[], flipY: boolean = false): THR
         return newShape;
     });
 };
+
+
+/**
+ * Calculates the optimal scale for an inlay pattern to fit within the base outline or default size.
+ * Targeting ~80% coverage.
+ */
+export const calculateInlayScale = (
+    inlayShapes: any[],
+    cutoutShapes: THREE.Shape[] | null,
+    defaultSize: number,
+    coverage: number = 0.8
+): number => {
+    // Extract shapes if they are objects (which they are for inlayShapes often: {shape, color})
+    const shapes = inlayShapes.map((s: any) => s.shape || s);
+    const bounds = getShapesBounds(shapes);
+    const width = bounds.size.x;
+    const height = bounds.size.y;
+
+    if (width > 0 && height > 0) {
+        if (cutoutShapes && cutoutShapes.length > 0) {
+            // Fit within Outline Bounds
+            const outlineBounds = getShapesBounds(cutoutShapes);
+            const outlineW = outlineBounds.size.x;
+            const outlineH = outlineBounds.size.y;
+
+            const scaleX = (outlineW * coverage) / width;
+            const scaleY = (outlineH * coverage) / height;
+            return Math.min(scaleX, scaleY);
+        } else {
+            // Fit within Default Square Size
+            const maxSize = Math.max(width, height);
+            return (defaultSize * coverage) / maxSize;
+        }
+    }
+    return 1;
+};
+
 
