@@ -12,6 +12,8 @@ export const BaseSettingsSchema = z.object({
     thickness: z.number(),
     color: z.string().default(DEFAULT_BASE_COLOR),
     cutoutShapes: ThreeShapeSchema.nullable().optional(),
+    baseOutlineRotation: z.number().default(0),
+    baseOutlineMirror: z.boolean().default(false),
 
 });
 

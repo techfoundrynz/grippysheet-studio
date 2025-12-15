@@ -1,9 +1,11 @@
 import React from 'react';
 import { BaseSettings } from '../../types/schemas';
 import { COLORS } from '../../constants/colors';
+import { FlipHorizontal } from 'lucide-react';
 import ShapeUploader from '../ShapeUploader';
 import ControlField from '../ui/ControlField';
 import DebouncedInput from '../DebouncedInput';
+import ToggleButton from '../ui/ToggleButton';
 
 interface BaseControlsProps {
   settings: BaseSettings;
@@ -48,6 +50,31 @@ const BaseControls: React.FC<BaseControlsProps> = ({
           className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none"
         />
       </ControlField>
+
+      {cutoutShapes && cutoutShapes.length > 0 && (
+          <div className="flex gap-4">
+              <div className="flex-1 min-w-0">
+                <ControlField label="Rotation (deg)" tooltip="Rotate the base outline">
+                    <DebouncedInput
+                    type="number"
+                    value={settings.baseOutlineRotation || 0}
+                    onChange={(val) => updateSettings({ baseOutlineRotation: Number(val) })}
+                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none"
+                    />
+                </ControlField>
+              </div>
+              <div className="flex-1 min-w-0">
+                <ControlField label="Mirror" tooltip="Flip the base outline horizontally">
+                     <ToggleButton
+                        label={settings.baseOutlineMirror ? "Enabled" : "Disabled"}
+                        isToggled={!!settings.baseOutlineMirror}
+                        onToggle={() => updateSettings({ baseOutlineMirror: !settings.baseOutlineMirror })}
+                        icon={<FlipHorizontal size={16} />}
+                    />
+                </ControlField>
+              </div>
+          </div>
+      )}
 
       <div className="space-y-2">
          <label className="text-sm font-medium text-gray-300">Color</label>

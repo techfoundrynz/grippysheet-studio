@@ -24,7 +24,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
   geometrySettings,
   meshRef, 
 }) => {
-  const { size, thickness, color, cutoutShapes } = baseSettings;
+  const { size, thickness, color, cutoutShapes, baseOutlineRotation, baseOutlineMirror } = baseSettings;
   // Note: patternColor is in GeometrySettings in my new schema, but strict prop definition in ImperativeModel might expect it.
   // Wait, in previous App.tsx, patternColor was state constant passed to ModelViewer.
   // In new Schema, patternColor is in GeometrySettings.
@@ -329,6 +329,8 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
                 thickness={thickness}
                 color={color}
                 cutoutShapes={cutoutShapes}
+                baseOutlineRotation={baseOutlineRotation}
+                baseOutlineMirror={baseOutlineMirror}
                 patternColor={geomPatternColor}
                 patternShapes={patternShapes}
                 patternType={patternType}
@@ -358,14 +360,33 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
             />
         
         {outlineState.base && cutoutShapes && cutoutShapes.length > 0 && (
-            <Line
-            points={cutoutShapes[0].getPoints()} 
-            color="#4ade80"
-            lineWidth={2}
-            position={[0, 0, thickness + 0.1]}
-            // No rotation. Points are XY.
-            scale={[1, 1, 1]}
-            />
+             (() => {
+                const shape = cutoutShapes[0];
+                const rawPoints = shape.getPoints();
+                 // 1. Mirror
+                let pts = baseOutlineMirror ? rawPoints.map(p => new THREE.Vector2(-p.x, p.y)) : rawPoints;
+                
+                 // 2. Rotate
+                if (baseOutlineRotation) {
+                    const rad = baseOutlineRotation * (Math.PI / 180);
+                    const cos = Math.cos(rad);
+                    const sin = Math.sin(rad);
+                    pts = pts.map(p => new THREE.Vector2(
+                        p.x * cos - p.y * sin,
+                        p.x * sin + p.y * cos
+                    ));
+                }
+
+                return (
+                    <Line
+                    points={pts} 
+                    color="#4ade80"
+                    lineWidth={2}
+                    position={[0, 0, thickness + 0.1]}
+                    scale={[1, 1, 1]}
+                    />
+                );
+             })()
         )}
 
         {outlineState.inlay && inlayShapes && inlayShapes.length > 0 && inlayShapes.map((shape, i) => {
