@@ -1,0 +1,70 @@
+import React from 'react';
+import { BaseSettings } from '../../types/schemas';
+import { COLORS } from '../../constants/colors';
+import ShapeUploader from '../ShapeUploader';
+import ControlField from '../ui/ControlField';
+import DebouncedInput from '../DebouncedInput';
+
+interface BaseControlsProps {
+  settings: BaseSettings;
+  updateSettings: (updates: Partial<BaseSettings>) => void;
+  onOutlineLoaded: (shapes: any[]) => void;
+}
+
+const BaseControls: React.FC<BaseControlsProps> = ({
+  settings,
+  updateSettings,
+  onOutlineLoaded
+}) => {
+  const { size, thickness, color, cutoutShapes } = settings;
+
+  return (
+    <section className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+      <div className="space-y-2">
+        <ShapeUploader 
+            label="Upload Outline" 
+            onShapesLoaded={onOutlineLoaded}
+            onClear={() => updateSettings({ cutoutShapes: [] })}
+            allowedTypes={['dxf']}
+        />
+      </div>
+      
+      {(!cutoutShapes || cutoutShapes.length === 0) && (
+        <ControlField label="Size (mm)" tooltip="Width/Height of the base sheet square" helperText="Unused when outline is uploaded">
+          <DebouncedInput
+            type="number"
+            value={size}
+            onChange={(val) => updateSettings({ size: Number(val) })}
+            className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none"
+          />
+        </ControlField>
+      )}
+
+      <ControlField label="Thickness (mm)" tooltip="Total thickness (height) of the base sheet">
+        <DebouncedInput
+          type="number"
+          value={thickness}
+          onChange={(val) => updateSettings({ thickness: Number(val) })}
+          className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none"
+        />
+      </ControlField>
+
+      <div className="space-y-2">
+         <label className="text-sm font-medium text-gray-300">Color</label>
+         <div className="grid grid-cols-7 gap-y-2 p-1.5 bg-gray-800 rounded-lg border border-gray-700 w-full justify-items-center">
+            {Object.entries(COLORS).map(([name, value]) => (
+              <button
+                key={value}
+                onClick={() => updateSettings({ color: value })}
+                className={`w-6 h-6 rounded-md transition-all hover:scale-110 active:scale-95 ${color === value ? 'ring-2 ring-white' : 'hover:ring-1 hover:ring-white/50'}`}
+                style={{ backgroundColor: value }}
+                title={name}
+              />
+            ))}
+         </div>
+      </div>
+    </section>
+  );
+};
+
+export default BaseControls;

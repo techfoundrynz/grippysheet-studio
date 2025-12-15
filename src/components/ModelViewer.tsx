@@ -6,64 +6,40 @@ import * as THREE from 'three';
 import ScreenshotModal from './ScreenshotModal';
 import ImperativeModel from './ImperativeModel';
 import Spinner from './Spinner';
-
-interface ModelViewerProps {
-  size: number;
-  thickness: number;
-  color: string;
-  patternColor: string;
-  meshRef: React.RefObject<THREE.Group>;
-  cutoutShapes: THREE.Shape[] | null;
-  patternShapes: any[] | null;
-  patternType: 'dxf' | 'svg' | 'stl' | null;
-  patternScale: number;
-  patternScaleZ?: number;
-  isTiled: boolean;
-  tileSpacing: number;
-  patternMargin: number;
-  tilingDistribution?: 'grid' | 'offset' | 'hex' | 'radial' | 'random' | 'wave' | 'zigzag' | 'warped-grid';
-  tilingDirection?: 'horizontal' | 'vertical';
-  tilingRotation?: 'none' | 'alternate' | 'random' | 'aligned';
-  clipToOutline?: boolean;
-  debugMode?: boolean;
-  inlayShapes?: any[] | null;
-  inlayDepth?: number;
-  inlayScale?: number;
-  inlayRotation?: number;
-  inlayExtend?: number;
-}
-
+import { BaseSettings, InlaySettings, GeometrySettings } from '../types/schemas';
 import CameraRig, { ViewState } from './CameraRig';
 import FpsTracker from './FpsTracker';
 import ScreenshotManager from './ScreenshotManager';
 
-
+interface ModelViewerProps {
+  baseSettings: BaseSettings;
+  inlaySettings: InlaySettings;
+  geometrySettings: GeometrySettings;
+  meshRef: React.RefObject<THREE.Group | null>;
+}
 
 const ModelViewer: React.FC<ModelViewerProps> = ({ 
-  size, 
-  thickness, 
-  color, 
-  patternColor,
+  baseSettings,
+  inlaySettings,
+  geometrySettings,
   meshRef, 
-  cutoutShapes,
-  patternShapes,
-  patternType,
-  patternScale,
-  patternScaleZ,
-  isTiled,
-  tileSpacing,
-  patternMargin,
-  tilingDistribution = 'hex',
-  tilingDirection = 'horizontal',
-  tilingRotation = 'none',
-  clipToOutline = false,
-  debugMode = false,
-  inlayShapes,
-  inlayDepth = 0.6,
-  inlayScale = 1,
-  inlayRotation = 0,
-  inlayExtend = 0
 }) => {
+  const { size, thickness, color, cutoutShapes } = baseSettings;
+  // Note: patternColor is in GeometrySettings in my new schema, but strict prop definition in ImperativeModel might expect it.
+  // Wait, in previous App.tsx, patternColor was state constant passed to ModelViewer.
+  // In new Schema, patternColor is in GeometrySettings.
+  // So baseSettings doesn't have patternColor.
+  
+  const { 
+      inlayShapes, inlayDepth, inlayScale, inlayRotation, inlayExtend 
+  } = inlaySettings;
+
+  const {
+      patternShapes, patternType, patternScale, patternScaleZ,
+      isTiled, tileSpacing, patternMargin, 
+      tilingDistribution, tilingDirection, tilingRotation,
+      clipToOutline, debugMode, patternColor: geomPatternColor
+  } = geometrySettings;
 
   const [viewState, setViewState] = useState<ViewState>({ type: 'ortho', timestamp: Date.now() });
   const [cameraType, setCameraType] = useState<'perspective' | 'orthographic'>('orthographic');
@@ -352,13 +328,13 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
                 size={size}
                 thickness={thickness}
                 color={color}
-                patternColor={patternColor}
                 cutoutShapes={cutoutShapes}
+                patternColor={geomPatternColor}
                 patternShapes={patternShapes}
                 patternType={patternType}
                 // extrusionAngle and patternHeight removed for STL-only mode
                 patternScale={patternScale}
-                patternScaleZ={patternScaleZ}
+                patternScaleZ={patternScaleZ === '' ? undefined : patternScaleZ}
                 isTiled={isTiled}
                 tileSpacing={tileSpacing}
                 patternMargin={patternMargin}
