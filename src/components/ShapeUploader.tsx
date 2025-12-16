@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { X, Upload, Box } from 'lucide-react';
 import { parseDxfToShapes, generateSVGPath } from '../utils/dxfUtils';
 import { centerShapes } from '../utils/patternUtils';
@@ -8,30 +8,65 @@ import ControlField from './ui/ControlField';
 
 interface ShapeUploaderProps {
   label: string;
-  onShapesLoaded: (shapes: any[], type?: 'dxf' | 'svg' | 'stl') => void;
+  shapes: any[] | null;
+  fileName: string | null;
+  onUpload: (shapes: any[], fileName: string, type: 'dxf' | 'svg' | 'stl') => void;
   onClear: () => void;
   className?: string;
   allowedTypes?: ('dxf' | 'svg' | 'stl')[];
   extractColors?: boolean;
   adornment?: React.ReactNode;
-  externalShapes?: any[];
-  externalFileName?: string | null;
 }
 
 const ShapeUploader: React.FC<ShapeUploaderProps> = (props) => {
   const { 
       label, 
-      onShapesLoaded, 
+      shapes,
+      fileName,
+      onUpload, 
       onClear, 
       className,
       allowedTypes = ['dxf', 'svg', 'stl'],
       adornment,
-      externalShapes,
-      externalFileName
   } = props;
-  const [fileName, setFileName] = React.useState<string | null>(null);
-  const [previewPath, setPreviewPath] = React.useState<string | null>(null);
-  const [svgViewBox, setSvgViewBox] = React.useState<string>("0 0 100 100");
+
+  // Derived state for preview
+  const { previewPath, svgViewBox } = useMemo(() => {
+    if (!shapes || shapes.length === 0) {
+        return { previewPath: null, svgViewBox: "0 0 100 100" };
+    }
+
+    // Filter valid 2D shapes
+    const shapesToRender = shapes
+        .map(s => s.shape || s)
+        .filter(s => s && typeof s.getPoints === 'function');
+
+    if (shapesToRender.length === 0) {
+        return { previewPath: null, svgViewBox: "0 0 100 100" };
+    }
+
+    const path = generateSVGPath(shapesToRender);
+    
+    // Bounds calculation
+    const bounds = new THREE.Box2();
+    shapesToRender.forEach(s => {
+        s.getPoints().forEach((p: THREE.Vector2) => {
+            bounds.expandByPoint(p);
+        });
+    });
+
+    let box = "0 0 100 100";
+    if (!bounds.isEmpty()) {
+        const min = bounds.min;
+        const max = bounds.max;
+        const padding = Math.max((max.x - min.x), (max.y - min.y)) * 0.1;
+        // Flip Y for ViewBox calculation because we use scale(1, -1) in SVG
+        box = `${min.x - padding} ${-max.y - padding} ${max.x - min.x + padding * 2} ${max.y - min.y + padding * 2}`;
+    }
+
+    return { previewPath: path, svgViewBox: box };
+  }, [shapes]);
+
 
   const processFile = (file: File) => {
     const isSvg = file.name.toLowerCase().endsWith('.svg');
@@ -51,7 +86,10 @@ const ShapeUploader: React.FC<ShapeUploaderProps> = (props) => {
         return;
     }
 
-    setFileName(file.name);
+    // Helper to emit
+    const emit = (loadedShapes: any[], type: 'dxf'|'svg'|'stl') => {
+        onUpload(loadedShapes, file.name, type);
+    };
 
     if (isStl) {
         const reader = new FileReader();
@@ -60,11 +98,8 @@ const ShapeUploader: React.FC<ShapeUploaderProps> = (props) => {
             if (buffer) {
                 const loader = new STLLoader();
                 const geometry = loader.parse(buffer);
-                geometry.center(); // Center the geometry
-                // Pass as array of 1 geometry, marked as 'stl'
-                onShapesLoaded([geometry], 'stl');
-                setPreviewPath(null); // No preview for STL
-                setSvgViewBox("0 0 100 100");
+                geometry.center(); 
+                emit([geometry], 'stl');
             }
         };
         reader.readAsArrayBuffer(file);
@@ -72,121 +107,50 @@ const ShapeUploader: React.FC<ShapeUploaderProps> = (props) => {
     }
 
     const reader = new FileReader();
-    
     reader.onload = (e) => {
       const text = e.target?.result as string;
       if (text) {
-           let shapes: any[] = []; // Changed to any[] to support { shape, color }
+           let loadedShapes: any[] = []; 
            
            if (isSvg) {
                const loader = new SVGLoader();
                const data = loader.parse(text);
                
-               // Flatten SVG paths to Shapes
                data.paths.forEach((path) => {
                    const fillColor = path.userData?.style?.fill;
-                   const color = (fillColor && fillColor !== 'none') ? fillColor : (path.color && path.color.getStyle()); // fallback to path color
+                   const color = (fillColor && fillColor !== 'none') ? fillColor : (path.color && path.color.getStyle());
                    
-                   const subShapes = path.toShapes(true); // isCCW
-                   
+                   const subShapes = path.toShapes(true);
                    subShapes.forEach(s => {
                        if (props.extractColors) {
-                           shapes.push({ shape: s, color: color || '#000000' });
+                           loadedShapes.push({ shape: s, color: color || '#000000' });
                        } else {
-                           shapes.push(s);
+                           loadedShapes.push(s);
                        }
                    });
                });
                
-               // Center shapes logic needs to handle objects or shapes
                if (props.extractColors) {
-                   // Separate shapes for centering calculation
-                   const rawShapes = shapes.map(item => item.shape);
+                   const rawShapes = loadedShapes.map(item => item.shape);
                    const centered = centerShapes(rawShapes, true);
-                   // Re-attach centerd shapes
-                   shapes = shapes.map((item, i) => ({ ...item, shape: centered[i] }));
+                   loadedShapes = loadedShapes.map((item, i) => ({ ...item, shape: centered[i] }));
                } else {
-                   shapes = centerShapes(shapes as THREE.Shape[], true);
+                   loadedShapes = centerShapes(loadedShapes as THREE.Shape[], true);
                }
                
            } else {
                // DXF
-               shapes = parseDxfToShapes(text); if (props.extractColors) { shapes = shapes.map(s => ({ shape: s, color: '#000000' })); }
+               loadedShapes = parseDxfToShapes(text); 
+               if (props.extractColors) { 
+                   loadedShapes = loadedShapes.map(s => ({ shape: s, color: '#000000' })); 
+               }
            }
            
-           // If returning objects, map to shapes for preview generation
-           const previewShapes = props.extractColors ? shapes.map(s => s.shape) : shapes;
-
-           onShapesLoaded(shapes, isSvg ? 'svg' : 'dxf');
-           
-           if (previewShapes.length > 0) {
-               const path = generateSVGPath(previewShapes as THREE.Shape[]);
-               setPreviewPath(path);
-               
-               // Calculate bounds for ViewBox
-               const min = new THREE.Vector2(Infinity, Infinity);
-               const max = new THREE.Vector2(-Infinity, -Infinity);
-               (previewShapes as THREE.Shape[]).forEach(shape => {
-                   shape.getPoints().forEach((p: THREE.Vector2) => {
-                       // Match generateSVGPath (no flip)
-                       const y = p.y;
-                       if (p.x < min.x) min.x = p.x;
-                       if (y < min.y) min.y = y;
-                       if (p.x > max.x) max.x = p.x;
-                       if (y > max.y) max.y = y;
-                   });
-               });
-               
-               const padding = Math.max((max.x - min.x), (max.y - min.y)) * 0.1;
-               // Flip Y for ViewBox calculation because we use scale(1, -1)
-               // The transformed Y range is [-max.y, -min.y]
-               setSvgViewBox(`${min.x - padding} ${-max.y - padding} ${max.x - min.x + padding * 2} ${max.y - min.y + padding * 2}`);
-           } else {
-               setPreviewPath(null);
-           }
+           emit(loadedShapes, isSvg ? 'svg' : 'dxf');
       }
     };
     reader.readAsText(file);
   };
-
-  // Effect to update preview if externalShapes change
-  React.useEffect(() => {
-     if (externalShapes && externalShapes.length > 0) {
-         // Generate preview from external edits
-         // Ensure we only try to generate SVG paths from valid 2D Shapes (which have .getPoints)
-         const shapesToRender = externalShapes
-            .map(s => s.shape || s)
-            .filter(s => s && typeof s.getPoints === 'function');
-
-         if (shapesToRender.length > 0) {
-             const path = generateSVGPath(shapesToRender);
-             setPreviewPath(path);
-             
-             const bounds = new THREE.Box2();
-             shapesToRender.forEach(s => {
-                 s.getPoints().forEach((p: THREE.Vector2) => {
-                     bounds.expandByPoint(p);
-                 });
-             });
-             
-             if (!bounds.isEmpty()) {
-                 const min = bounds.min;
-                 const max = bounds.max;
-                 const padding = Math.max((max.x - min.x), (max.y - min.y)) * 0.1;
-                 setSvgViewBox(`${min.x - padding} ${-max.y - padding} ${max.x - min.x + padding * 2} ${max.y - min.y + padding * 2}`);
-             }
-         } else {
-             // If we have external shapes but no valid 2D shapes (e.g. 3D geometry), 
-             // we can't show a 2D path preview.
-             setPreviewPath(null);
-         }
-     } else if (!fileName) {
-         // Reset if no file and no external shapes
-         setPreviewPath(null);
-     }
-  }, [externalShapes, fileName]);
-
-
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -198,9 +162,6 @@ const ShapeUploader: React.FC<ShapeUploaderProps> = (props) => {
   const handleRemoveFile = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setFileName(null);
-    onShapesLoaded([]); // Clear shapes
-    setPreviewPath(null);
     onClear();
   };
 
@@ -219,18 +180,18 @@ const ShapeUploader: React.FC<ShapeUploaderProps> = (props) => {
   };
 
   const inputId = `file-upload-${label.replace(/\s+/g, '-').toLowerCase()}`;
-  
   const acceptString = allowedTypes.map(t => `.${t}`).join(',');
   const typeLabel = allowedTypes.map(t => t.toUpperCase()).join('/');
-
-
+  
+  const hasContent = shapes && shapes.length > 0;
+  const displayLabel = fileName || "Custom Drawing";
 
   return (
       <ControlField label={label} action={adornment} className={className}>
         <div className="flex items-center justify-center w-full">
             <label 
                 htmlFor={inputId}
-                className={`flex flex-col items-center justify-center w-full h-[150px] border-2 border-dashed rounded-lg cursor-pointer transition-colors ${(fileName || externalFileName) ? 'border-green-500 bg-gray-700/50 py-2' : 'border-gray-600 bg-gray-700 hover:bg-gray-600'}`}
+                className={`flex flex-col items-center justify-center w-full h-[150px] border-2 border-dashed rounded-lg cursor-pointer transition-colors ${hasContent ? 'border-green-500 bg-gray-700/50 py-2' : 'border-gray-600 bg-gray-700 hover:bg-gray-600'}`}
                 onDragOver={handleDragOver}
                 onDrop={handleDrop}
             >
@@ -243,16 +204,16 @@ const ShapeUploader: React.FC<ShapeUploaderProps> = (props) => {
                         </div>
                     )}
 
-                    {!previewPath && (fileName || externalFileName) && (
+                    {!previewPath && hasContent && (
                          <div className="h-[65px] w-full flex items-center justify-center mb-2 pointer-events-none text-green-500">
                              <Box size={64} strokeWidth={1} />
                          </div>
                     )}
                     
-                    {(fileName || (externalShapes && externalShapes.length > 0)) ? (
+                    {hasContent ? (
                         <div className="flex items-center gap-2 bg-gray-800/80 px-4 py-2 rounded-full backdrop-blur-sm shadow-sm border border-gray-600">
-                            <span className={`text-sm font-medium truncate max-w-[180px] ${(fileName || externalFileName) ? 'text-green-400' : 'text-purple-400'}`}>
-                                {fileName || externalFileName || "Custom Drawing"}
+                            <span className={`text-sm font-medium truncate max-w-[180px] text-green-400`}>
+                                {displayLabel}
                             </span>
                             <button 
                                 onClick={handleRemoveFile}
@@ -269,7 +230,7 @@ const ShapeUploader: React.FC<ShapeUploaderProps> = (props) => {
                         </>
                     )}
                 </div>
-                {!fileName && !(externalShapes && externalShapes.length > 0) && <input id={inputId} type="file" className="hidden" accept={acceptString} onChange={handleFileChange} />}
+                {!hasContent && <input id={inputId} type="file" className="hidden" accept={acceptString} onChange={handleFileChange} />}
             </label>
         </div> 
       </ControlField>

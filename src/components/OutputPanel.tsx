@@ -47,6 +47,11 @@ const OutputPanel: React.FC<OutputPanelProps> = ({ meshRef, debugMode = false, c
           return source.clone(false);
       }
       
+      // Filter out Debug and Waste meshes
+      if (source.name.startsWith('Debug_')) {
+          return null;
+      }
+      
       if (source instanceof THREE.Group) {
           const newGroup = new THREE.Group();
           newGroup.name = source.name;

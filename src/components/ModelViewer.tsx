@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, OrthographicCamera, PerspectiveCamera, Line } from '@react-three/drei';
-import { Box, Layers, ScanLine, Activity, Ghost, RotateCcw, Camera as CameraIcon, Palette } from 'lucide-react';
+import { Box, Layers, ScanLine, Activity, Ghost, RotateCcw, Camera as CameraIcon, Palette, Scissors } from 'lucide-react';
 import * as THREE from 'three';
 import ScreenshotModal from './ScreenshotModal';
 import ImperativeModel from './ImperativeModel';
@@ -57,10 +57,14 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
   const [showWireframeMenu, setShowWireframeMenu] = useState(false);
   
   const [showFps, setShowFps] = useState(true);
+  const [baseOpacity, setBaseOpacity] = useState(1.0);
+  const [inlayOpacity, setInlayOpacity] = useState(1.0);
   const [patternOpacity, setPatternOpacity] = useState(1.0);
   const [showOpacityMenu, setShowOpacityMenu] = useState(false);
   const [displayMode, setDisplayMode] = useState<'normal' | 'toon'>('normal');
   const [showDisplayMenu, setShowDisplayMenu] = useState(false);
+  const [debugState, setDebugState] = useState({ pattern: false, holes: false, inlay: false });
+  const [showDebugMenu, setShowDebugMenu] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const fpsRef = React.useRef<HTMLDivElement>(null);
   const [showScreenshotModal, setShowScreenshotModal] = useState(false);
@@ -69,6 +73,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
   const displayMenuRef = React.useRef<HTMLDivElement>(null);
   const outlinesMenuRef = React.useRef<HTMLDivElement>(null);
   const wireframeMenuRef = React.useRef<HTMLDivElement>(null);
+  const debugMenuRef = React.useRef<HTMLDivElement>(null);
 
   const handleCapture = (bgColor: string | null) => {
       if (captureRef.current) {
@@ -91,13 +96,16 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
       if (wireframeMenuRef.current && !wireframeMenuRef.current.contains(event.target as Node)) {
         setShowWireframeMenu(false);
       }
+      if (debugMenuRef.current && !debugMenuRef.current.contains(event.target as Node)) {
+        setShowDebugMenu(false);
+      }
     }
 
     document.addEventListener("mousedown", handleClickOutside);
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, [opacityMenuRef, displayMenuRef, outlinesMenuRef, wireframeMenuRef]);
+  }, [opacityMenuRef, displayMenuRef, outlinesMenuRef, wireframeMenuRef, debugMenuRef]);
 
 
   return (
@@ -214,6 +222,53 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
                     </div>
                 )}
             </div>
+
+            <div className="relative" ref={debugMenuRef}>
+                <button
+                    onClick={() => setShowDebugMenu(!showDebugMenu)}
+                    className={`p-2 rounded hover:bg-gray-700 transition-colors ${Object.values(debugState).some(v => v) ? 'bg-red-500/20 text-red-400' : 'text-gray-400'}`}
+                    title="Toggle Cutting Zones"
+                >
+                    <Scissors size={20} />
+                </button>
+
+                {showDebugMenu && (
+                    <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 bg-gray-800 border border-gray-700 rounded shadow-lg p-2 z-50 min-w-[200px] flex flex-col gap-1">
+                        <button
+                            onClick={() => setDebugState(prev => ({...prev, pattern: !prev.pattern}))}
+                            className={`w-full text-left px-3 py-2 rounded transition-colors text-sm flex items-center gap-2 ${
+                                debugState.pattern 
+                                    ? 'bg-blue-500/20 text-blue-400' 
+                                    : 'text-gray-300 hover:bg-gray-700'
+                            }`}
+                        >
+                            <span>Pattern Cutter</span>
+                        </button>
+                        
+                        <button
+                            onClick={() => setDebugState(prev => ({...prev, inlay: !prev.inlay}))}
+                             className={`w-full text-left px-3 py-2 rounded transition-colors text-sm flex items-center gap-2 ${
+                                debugState.inlay 
+                                    ? 'bg-green-500/20 text-green-400' 
+                                    : 'text-gray-300 hover:bg-gray-700'
+                            }`}
+                        >
+                            <span>Inlay Cutter</span>
+                        </button>
+                        
+                        <button
+                            onClick={() => setDebugState(prev => ({...prev, holes: !prev.holes}))}
+                             className={`w-full text-left px-3 py-2 rounded transition-colors text-sm flex items-center gap-2 ${
+                                debugState.holes 
+                                    ? 'bg-red-500/20 text-red-400' 
+                                    : 'text-gray-300 hover:bg-gray-700'
+                            }`}
+                        >
+                            <span>Hole Cutter</span>
+                        </button>
+                    </div>
+                )}
+            </div>
           </>
         )}
         
@@ -236,10 +291,38 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
             </button>
             
             {showOpacityMenu && (
-                <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 bg-gray-800 border border-gray-700 rounded shadow-lg p-4 z-50 min-w-[200px]">
+                <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 bg-gray-800 border border-gray-700 rounded shadow-lg p-4 z-50 min-w-[200px] flex flex-col gap-4">
                     <div className="flex flex-col gap-2">
                         <div className="flex justify-between text-xs text-gray-400">
-                            <span>Opacity</span>
+                            <span>Base Opacity</span>
+                            <span>{Math.round(baseOpacity * 100)}%</span>
+                        </div>
+                        <input 
+                            type="range" 
+                            min="0" 
+                            max="100" 
+                            value={baseOpacity * 100} 
+                            onChange={(e) => setBaseOpacity(parseInt(e.target.value) / 100)}
+                            className="w-full accent-indigo-500 bg-gray-700 rounded-lg appearance-none h-2 cursor-pointer"
+                        />
+                    </div>
+                    <div className="flex flex-col gap-2">
+                        <div className="flex justify-between text-xs text-gray-400">
+                            <span>Inlay Opacity</span>
+                            <span>{Math.round(inlayOpacity * 100)}%</span>
+                        </div>
+                        <input 
+                            type="range" 
+                            min="0" 
+                            max="100" 
+                            value={inlayOpacity * 100} 
+                            onChange={(e) => setInlayOpacity(parseInt(e.target.value) / 100)}
+                            className="w-full accent-indigo-500 bg-gray-700 rounded-lg appearance-none h-2 cursor-pointer"
+                        />
+                    </div>
+                    <div className="flex flex-col gap-2">
+                        <div className="flex justify-between text-xs text-gray-400">
+                            <span>Pattern Opacity</span>
                             <span>{Math.round(patternOpacity * 100)}%</span>
                         </div>
                         <input 
@@ -334,7 +417,6 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
                 patternColor={geomPatternColor}
                 patternShapes={patternShapes}
                 patternType={patternType}
-                // extrusionAngle and patternHeight removed for STL-only mode
                 patternScale={patternScale}
                 patternScaleZ={patternScaleZ === '' ? undefined : Number(patternScaleZ)}
                 isTiled={isTiled}
@@ -345,6 +427,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
                 tilingOrientation={tilingOrientation}
                 baseRotation={geometrySettings.baseRotation}
                 rotationClamp={rotationClamp}
+                patternMaxHeight={geometrySettings.patternMaxHeight === '' ? undefined : Number(geometrySettings.patternMaxHeight)}
                 clipToOutline={clipToOutline}
                 inlayShapes={inlayShapes}
                 inlayDepth={inlayDepth}
@@ -355,9 +438,14 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
                 wireframeBase={wireframeState.base}
                 wireframeInlay={wireframeState.inlay}
                 wireframePattern={wireframeState.pattern}
+                baseOpacity={baseOpacity}
+                inlayOpacity={inlayOpacity}
                 patternOpacity={patternOpacity}
                 displayMode={displayMode}
                 onProcessingChange={setIsProcessing}
+                debugShowPatternCutter={debugState.pattern}
+                debugShowInlayCutter={debugState.inlay}
+                debugShowHoleCutter={debugState.holes}
             />
         
         {outlineState.base && cutoutShapes && cutoutShapes.length > 0 && (

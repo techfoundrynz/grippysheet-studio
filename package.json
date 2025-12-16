@@ -16,6 +16,7 @@
     "@react-three/csg": "^4.0.0",
     "@react-three/drei": "10.7.7",
     "@react-three/fiber": "9.4.2",
+    "clipper-lib": "^6.4.2",
     "clsx": "^2.1.0",
     "dxf-parser": "^1.1.2",
     "jszip": "^3.10.1",

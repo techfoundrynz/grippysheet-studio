@@ -19,14 +19,24 @@ const BaseControls: React.FC<BaseControlsProps> = ({
   onOutlineLoaded
 }) => {
   const { size, thickness, color, cutoutShapes } = settings;
+  const [fileName, setFileName] = React.useState<string | null>(null);
 
   return (
     <section className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
       <div className="space-y-2">
         <ShapeUploader 
             label="Upload Outline" 
-            onShapesLoaded={onOutlineLoaded}
-            onClear={() => updateSettings({ cutoutShapes: [] })}
+            shapes={cutoutShapes || null}
+            fileName={fileName}
+            onUpload={(loadedShapes, name) => {
+                updateSettings({ cutoutShapes: loadedShapes });
+                setFileName(name);
+                onOutlineLoaded(loadedShapes);
+            }}
+            onClear={() => {
+                updateSettings({ cutoutShapes: [] });
+                setFileName(null);
+            }}
             allowedTypes={['dxf']}
         />
       </div>

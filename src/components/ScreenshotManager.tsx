@@ -48,7 +48,12 @@ const ScreenshotManager: React.FC<ScreenshotManagerProps> = ({ triggerRef, size 
                 // 4. Hide Helpers (Grid, Gizmos if any)
                 const hiddenObjects: THREE.Object3D[] = [];
                 scene.traverse((obj) => {
-                    if (obj instanceof THREE.GridHelper || obj.type === 'GridHelper' || obj.type === 'AxesHelper') {
+                    if (
+                        obj instanceof THREE.GridHelper || 
+                        obj.type === 'GridHelper' || 
+                        obj.type === 'AxesHelper' ||
+                        obj.name.startsWith('Debug_')
+                    ) {
                         if (obj.visible) {
                             obj.visible = false;
                             hiddenObjects.push(obj);

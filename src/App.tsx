@@ -7,45 +7,18 @@ import { DEFAULT_BASE_COLOR, DEFAULT_PATTERN_COLOR } from './constants/colors';
 import { AlertProvider } from './context/AlertContext';
 import { BaseSettings, InlaySettings, GeometrySettings } from './types/schemas';
 
+import { defaultBaseSettings, defaultInlaySettings, defaultGeometrySettings } from './utils/schemaDefaults';
 import WelcomeModal from "./components/WelcomeModal";
 
 const App = () => {
   // Base Settings
-  const [baseSettings, setBaseSettings] = useState<BaseSettings>({
-      size: 300,
-      thickness: 3,
-      color: DEFAULT_BASE_COLOR,
-      cutoutShapes: null
-  });
+  const [baseSettings, setBaseSettings] = useState<BaseSettings>(defaultBaseSettings);
 
   // Geometry Settings
-  const [geometrySettings, setGeometrySettings] = useState<GeometrySettings>({
-      patternShapes: null,
-      patternType: null,
-      extrusionAngle: 45,
-      patternHeight: '',
-      patternScale: 1,
-      patternScaleZ: '',
-      isTiled: true,
-      tileSpacing: 5,
-      patternMargin: 3,
-      patternColor: DEFAULT_PATTERN_COLOR,
-      clipToOutline: false,
-      tilingDistribution: 'hex',
-      tilingDirection: 'horizontal',
-      tilingOrientation: 'aligned',
-      baseRotation: 0,
-      debugMode: false
-  });
+  const [geometrySettings, setGeometrySettings] = useState<GeometrySettings>(defaultGeometrySettings);
 
   // Inlay Settings
-  const [inlaySettings, setInlaySettings] = useState<InlaySettings>({
-      inlayShapes: null,
-      inlayDepth: 0.6,
-      inlayScale: 1,
-      inlayRotation: 0,
-      inlayExtend: 0
-  });
+  const [inlaySettings, setInlaySettings] = useState<InlaySettings>(defaultInlaySettings);
 
   // Welcome Modal State
   const [showWelcome, setShowWelcome] = useState(() => {
@@ -70,36 +43,9 @@ const App = () => {
   }, []);
 
   const handleReset = () => {
-      setBaseSettings({
-          size: 300,
-          thickness: 3,
-          color: DEFAULT_BASE_COLOR,
-          cutoutShapes: null
-      });
-      setGeometrySettings({
-          patternShapes: null,
-          patternType: null,
-          extrusionAngle: 45,
-          patternHeight: '',
-          patternScale: 1,
-          patternScaleZ: '',
-          isTiled: true,
-          tileSpacing: 10,
-          patternMargin: 3,
-          patternColor: DEFAULT_PATTERN_COLOR,
-          clipToOutline: true, // Reset default was true in original
-          tilingDistribution: 'offset', // Reset default was offset
-          tilingDirection: 'horizontal',
-          tilingRotation: 'random', // Reset default was random
-          debugMode: false
-      });
-      setInlaySettings({
-          inlayShapes: null,
-          inlayDepth: 0.6,
-          inlayScale: 1,
-          inlayRotation: 0,
-          inlayExtend: 0
-      });
+      setBaseSettings(defaultBaseSettings);
+      setGeometrySettings(defaultGeometrySettings);
+      setInlaySettings(defaultInlaySettings);
   };
 
   return (
