@@ -801,11 +801,13 @@ export const calculateInlayScale = (
 
             const scaleX = (outlineW * coverage) / width;
             const scaleY = (outlineH * coverage) / height;
-            return Math.min(scaleX, scaleY);
+            const scale = Math.min(scaleX, scaleY);
+            return Math.round(scale * 100) / 100;
         } else {
             // Fit within Default Square Size
             const maxSize = Math.max(width, height);
-            return (defaultSize * coverage) / maxSize;
+            const scale = (defaultSize * coverage) / maxSize;
+            return Math.round(scale * 100) / 100;
         }
     }
     return 1;

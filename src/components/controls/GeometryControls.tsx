@@ -100,7 +100,8 @@ const GeometryControls: React.FC<GeometryControlsProps> = ({
         const availableSize = Math.max(0, bSize - margin * 2);
         // Target 50% coverage of the available area
         const scale = (availableSize * 0.5) / maxSize;
-        return scale > 0 ? scale : 1;
+        const roundedScale = Math.round(scale * 100) / 100;
+        return roundedScale > 0 ? roundedScale : 1;
       }
     }
     return 1;
