@@ -1,16 +1,19 @@
 import React from 'react';
-import { X } from 'lucide-react';
+import { X, ExternalLink } from 'lucide-react';
 import STLThumbnail from './STLThumbnail';
+import DXFThumbnail from './DXFThumbnail';
 
-interface PatternPreset {
+export interface PatternPreset {
     name: string;
     file: string;
     type: 'svg' | 'dxf' | 'stl';
-    category: 'patterns' | 'inlays';
+    category: 'patterns' | 'inlays' | 'outlines';
     keepOriginalColors?: boolean;
+    infoUrl?: string;
 }
 
 const PRESETS: PatternPreset[] = [
+    // Patterns
     { name: 'Pyramid', file: 'pyramid.stl', type: 'stl', category: 'patterns' },
     { name: 'GrippySheet V1', file: 'grippysheet-v1.stl', type: 'stl', category: 'patterns' },
     { name: 'Dome', file: 'dome.stl', type: 'stl', category: 'patterns' },
@@ -22,21 +25,33 @@ const PRESETS: PatternPreset[] = [
     
     // Inlays
     { name: 'Pubmote', file: 'pubmote.svg', type: 'svg', category: 'inlays', keepOriginalColors: true },
+    { name: 'Trogdor the Burninator', file: 'trogdor.svg', type: 'svg', category: 'inlays', keepOriginalColors: true },
     { name: 'Spooderman', file: 'spooderman.svg', type: 'svg', category: 'inlays', keepOriginalColors: true },
+    { name: "Dolan Duck", file: "dolan.svg", type: "svg", category: "inlays", keepOriginalColors: true },
+    { name: "Gooby", file: "gooby.svg", type: "svg", category: "inlays", keepOriginalColors: true },
+
+    // Outlines
+    { name: 'Floatwheel', file: 'floatwheel.dxf', type: 'dxf', category: 'outlines', infoUrl: 'https://www.printables.com/model/968803' },
+    { name: 'GT Kush Wide', file: 'gtkushwide.dxf', type: 'dxf', category: 'outlines', infoUrl: 'https://www.printables.com/model/968803' },
+    { name: 'GT Mushies', file: 'gtmushies.dxf', type: 'dxf', category: 'outlines', infoUrl: 'https://www.printables.com/model/968803' },
+    { name: 'Pint', file: 'pint.dxf', type: 'dxf', category: 'outlines', infoUrl: 'https://www.printables.com/model/968803' },
+    { name: 'XR Cobra Viper', file: 'xrcobraviper.dxf', type: 'dxf', category: 'outlines', infoUrl: 'https://www.printables.com/model/968803' },
+    { name: 'XR Kush Wide', file: 'xrkushwide.dxf', type: 'dxf', category: 'outlines', infoUrl: 'https://www.printables.com/model/968803' },
+    { name: 'XR Mushies V2', file: 'xrmushiesv2.dxf', type: 'dxf', category: 'outlines', infoUrl: 'https://www.printables.com/model/968803' }
 ];
 
 interface PatternLibraryModalProps {
     isOpen: boolean;
     onClose: () => void;
     onSelect: (preset: PatternPreset) => void;
-    category?: 'patterns' | 'inlays';
+    category?: 'patterns' | 'inlays' | 'outlines';
 }
 
 const PatternLibraryModal: React.FC<PatternLibraryModalProps> = ({ isOpen, onClose, onSelect, category = 'patterns' }) => {
     if (!isOpen) return null;
 
     const filteredPresets = PRESETS.filter(p => p.category === category);
-    const title = category === 'inlays' ? 'Inlay Library' : 'Pattern Library';
+    const title = category === 'inlays' ? 'Inlay Library' : (category === 'outlines' ? 'Outline Library' : 'Pattern Library');
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
@@ -53,17 +68,35 @@ const PatternLibraryModal: React.FC<PatternLibraryModalProps> = ({ isOpen, onClo
                 
                 <div className="p-6 overflow-y-auto grid grid-cols-2 sm:grid-cols-3 gap-4">
                     {filteredPresets.map((preset) => (
-                        <button
+                        <div
                             key={preset.file}
                             onClick={() => onSelect(preset)}
-                            className="bg-gray-800 hover:bg-gray-700 border border-gray-700 hover:border-purple-500/50 rounded-lg p-4 flex flex-col items-center gap-3 transition-all group"
+                            className="relative bg-gray-800 hover:bg-gray-700 border border-gray-700 hover:border-purple-500/50 rounded-lg p-4 flex flex-col items-center gap-3 transition-all group cursor-pointer"
                         >
+                            {preset.infoUrl && (
+                                <a
+                                    href={preset.infoUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="absolute top-2 right-2 p-1.5 bg-gray-900/50 hover:bg-purple-500 text-gray-400 hover:text-white rounded-md backdrop-blur-sm transition-colors z-10"
+                                    title="View Info"
+                                >
+                                    <ExternalLink size={14} />
+                                </a>
+                            )}
                             <div className="w-full aspect-square bg-gray-900 rounded-md flex items-center justify-center p-4">
                                 {preset.type === 'stl' ? (
                                     <STLThumbnail 
                                         url={`/${preset.category}/${preset.file}`}
                                         alt={preset.name}
                                         className="w-full h-full object-contain"
+                                    />
+                                ) : preset.type === 'dxf' ? (
+                                    <DXFThumbnail
+                                        url={`/${preset.category}/${preset.file}`}
+                                        alt={preset.name}
+                                        className="w-full h-full"
                                     />
                                 ) : (
                                     <img 
@@ -76,7 +109,7 @@ const PatternLibraryModal: React.FC<PatternLibraryModalProps> = ({ isOpen, onClo
                                 )}
                             </div>
                             <span className="text-sm font-medium text-gray-300 group-hover:text-white">{preset.name}</span>
-                        </button>
+                        </div>
                     ))}
                 </div>
             </div>

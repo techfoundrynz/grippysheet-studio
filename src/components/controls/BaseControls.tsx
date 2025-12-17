@@ -1,11 +1,14 @@
 import React from 'react';
 import { BaseSettings } from '../../types/schemas';
 import { COLORS } from '../../constants/colors';
-import { FlipHorizontal } from 'lucide-react';
+import { FlipHorizontal, BookOpen } from 'lucide-react';
 import ShapeUploader from '../ShapeUploader';
 import ControlField from '../ui/ControlField';
 import DebouncedInput from '../DebouncedInput';
 import ToggleButton from '../ui/ToggleButton';
+import PatternLibraryModal, { PatternPreset } from '../PatternLibraryModal';
+import { parseDxfToShapes } from '../../utils/dxfUtils';
+import { useAlert } from '../../context/AlertContext';
 
 interface BaseControlsProps {
   settings: BaseSettings;
@@ -20,6 +23,14 @@ const BaseControls: React.FC<BaseControlsProps> = ({
 }) => {
   const { size, thickness, color, cutoutShapes } = settings;
   const [fileName, setFileName] = React.useState<string | null>(null);
+  const [showLibrary, setShowLibrary] = React.useState(false);
+  const { showAlert } = useAlert();
+
+  const handleOutlineLoaded = (shapes: any[], name: string | null) => {
+      updateSettings({ cutoutShapes: shapes });
+      setFileName(name);
+      onOutlineLoaded(shapes);
+  };
 
   return (
     <section className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
@@ -28,16 +39,51 @@ const BaseControls: React.FC<BaseControlsProps> = ({
             label="Upload Outline" 
             shapes={cutoutShapes || null}
             fileName={fileName}
-            onUpload={(loadedShapes, name) => {
-                updateSettings({ cutoutShapes: loadedShapes });
-                setFileName(name);
-                onOutlineLoaded(loadedShapes);
-            }}
+            onUpload={(loadedShapes, name) => handleOutlineLoaded(loadedShapes, name)}
             onClear={() => {
                 updateSettings({ cutoutShapes: [] });
                 setFileName(null);
             }}
             allowedTypes={['dxf']}
+            adornment={
+                <button
+                    onClick={() => setShowLibrary(true)}
+                    className="p-1 rounded-lg transition-colors border bg-gray-700/50 hover:bg-gray-700 text-gray-400 hover:text-white border-gray-600 hover:border-gray-500"
+                    title="Open Outline Library"
+                >
+                    <BookOpen size={12} />
+                </button>
+            }
+        />
+        
+        <PatternLibraryModal
+            isOpen={showLibrary}
+            onClose={() => setShowLibrary(false)}
+            category="outlines"
+            onSelect={async (preset: PatternPreset) => {
+                setShowLibrary(false);
+                try {
+                    const response = await fetch(`/${preset.category}/${preset.file}`);
+                    if (!response.ok) throw new Error('Failed to fetch');
+                    const text = await response.text();
+                    
+                    if (preset.type === 'dxf') {
+                        const shapes = parseDxfToShapes(text);
+                        // Wrap shapes if needed to match expected structure or pass directly?
+                        // ShapeUploader usually passes arrays of shapes. Inlay controls wraps them. 
+                        // BaseControls `cutoutShapes` usually expects plain shapes or shapes with holes.
+                        // `parseDxfToShapes` returns `THREE.Shape[]`.
+                        handleOutlineLoaded(shapes, preset.name);
+                    }
+                } catch (error) {
+                    console.error("Failed to load outline:", error);
+                    showAlert({
+                        title: "Error Loading Outline",
+                        message: "Failed to load the selected outline preset.",
+                        type: "error"
+                    });
+                }
+            }}
         />
       </div>
       

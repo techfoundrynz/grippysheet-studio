@@ -342,7 +342,16 @@ const ImperativeModel = React.forwardRef<THREE.Group, ImperativeModelProps>(({
         // Apply Transforms (Scale/Rotate)
         // Use POSITIVE scale always, as Mirror is handled by shape transform
         geo.applyMatrix4(new THREE.Matrix4().makeScale(inlayScale, inlayScale, 1));
-        geo.applyMatrix4(new THREE.Matrix4().makeRotationZ(inlayRotation * (Math.PI / 180)));
+        if (inlayRotation !== 0) {
+            geo.applyMatrix4(new THREE.Matrix4().makeRotationZ(inlayRotation * (Math.PI / 180)));
+        }
+
+        // VALIDATION: Check if geometry is valid before proceeding
+        if (!geo.attributes.position || geo.attributes.position.count === 0) {
+             console.warn(`Skipping Inlay ${i}: Invalid geometry generated from shape.`);
+             geo.dispose();
+             return;
+        }
 
         // Check if we need CSG
         // Always clip Inlays to the Base Outline if it exists
@@ -358,77 +367,108 @@ const ImperativeModel = React.forwardRef<THREE.Group, ImperativeModelProps>(({
              group.add(mesh);
         } else {
             // CSG Path
-            // 2. Setup Evaluator
-            const evaluator = new Evaluator();
-            evaluator.attributes = ['position', 'normal'];
+            try {
+                // 2. Setup Evaluator
+                const evaluator = new Evaluator();
+                evaluator.attributes = ['position', 'normal'];
 
-            let resultBrush = new Brush(geo);
-            resultBrush.updateMatrixWorld();
+                let resultBrush = new Brush(geo);
+                resultBrush.updateMatrixWorld();
 
-            // 3. Subtract Holes
-            if (hasHoles) {
-                // Calculate required cutter height: Base + Max Features + Margin
-                const holeDepth = thickness + Math.max(Number(patternScaleZ || 0), Number(inlayExtend || 0)) + 20;
-                
-                const holeGeo = new THREE.ExtrudeGeometry(holeShapes, { depth: holeDepth, bevelEnabled: false });
-                const holeBrush = new Brush(holeGeo);
-                holeBrush.position.z = -10;
-                holeBrush.updateMatrixWorld();
-                
-                // Calculate Waste (The holes being removed)
-                const wasteBrush = evaluator.evaluate(resultBrush, holeBrush, INTERSECTION);
-                
-                // Render Waste Material (Highlighted Red to match tool, 0.5 opacity)
-                const wasteMat = new THREE.MeshBasicMaterial({ color: 0xff0000, opacity: 0.5, transparent: true, side: THREE.DoubleSide, depthWrite: false });
-                const wasteMesh = new THREE.Mesh(wasteBrush.geometry, wasteMat);
-                wasteMesh.name = `Debug_Hole_Waste_Inlay_${i}`;
-                wasteMesh.visible = !!debugShowHoleCutter;
-                group.add(wasteMesh);
+                // 3. Subtract Holes
+                if (hasHoles) {
+                    // Calculate required cutter height: Base + Max Features + Margin
+                    const holeDepth = thickness + Math.max(Number(patternScaleZ || 0), Number(inlayExtend || 0)) + 20;
+                    
+                    const holeGeo = new THREE.ExtrudeGeometry(holeShapes, { depth: holeDepth, bevelEnabled: false });
+                    
+                    if (holeGeo.attributes.position && holeGeo.attributes.position.count > 0) {
+                        const holeBrush = new Brush(holeGeo);
+                        holeBrush.position.z = -10;
+                        holeBrush.updateMatrixWorld();
+                        
+                        // Calculate Waste (The holes being removed)
+                        try {
+                             const wasteBrush = evaluator.evaluate(resultBrush, holeBrush, INTERSECTION);
+                             if (wasteBrush && wasteBrush.geometry && wasteBrush.geometry.attributes.position && wasteBrush.geometry.attributes.position.count > 0) {
+                                // Render Waste Material (Highlighted Red to match tool, 0.5 opacity)
+                                const wasteMat = new THREE.MeshBasicMaterial({ color: 0xff0000, opacity: 0.5, transparent: true, side: THREE.DoubleSide, depthWrite: false });
+                                const wasteMesh = new THREE.Mesh(wasteBrush.geometry, wasteMat);
+                                wasteMesh.name = `Debug_Hole_Waste_Inlay_${i}`;
+                                wasteMesh.visible = !!debugShowHoleCutter;
+                                group.add(wasteMesh);
+                             }
 
-                resultBrush = evaluator.evaluate(resultBrush, holeBrush, SUBTRACTION);
-                holeGeo.dispose();
+                            resultBrush = evaluator.evaluate(resultBrush, holeBrush, SUBTRACTION);
+                        } catch (err) {
+                            console.warn("Error during Inlay Hole subtraction:", err);
+                        }
+                    }
+                    holeGeo.dispose();
+                }
+
+                // 4. Clip to Outline (Intersection)
+                if (needsClipping) {
+                    // Calculate required cutter height: Base + Max Features + Margin
+                    const cutterDepth = thickness + Math.max(Number(patternScaleZ || 0), Number(inlayExtend || 0)) + 5;
+
+                    const cutterGeo = new THREE.ExtrudeGeometry(filledCutoutShapes, { 
+                        depth: cutterDepth, 
+                        bevelEnabled: false,
+                    });
+                    
+                    if (cutterGeo.attributes.position && cutterGeo.attributes.position.count > 0) {
+                        const cutterBrush = new Brush(cutterGeo);
+                        cutterBrush.updateMatrixWorld();
+                        
+                        try {
+                            // Calculate Waste (The part being removed)
+                            const wasteBrush = evaluator.evaluate(resultBrush, cutterBrush, SUBTRACTION);
+                             if (wasteBrush && wasteBrush.geometry && wasteBrush.geometry.attributes.position && wasteBrush.geometry.attributes.position.count > 0) {
+                                // Render Waste Material (Highlighted Green to match tool, 0.5 opacity)
+                                const wasteMat = new THREE.MeshBasicMaterial({ color: 0x00ff00, opacity: 0.5, transparent: true, side: THREE.DoubleSide, depthWrite: false });
+                                const wasteMesh = new THREE.Mesh(wasteBrush.geometry, wasteMat);
+                                wasteMesh.name = `Debug_Inlay_Waste_${i}`;
+                                wasteMesh.visible = !!debugShowInlayCutter;
+                                group.add(wasteMesh);
+                             }
+
+                            // Calculate Result (The part being kept)
+                            resultBrush = evaluator.evaluate(resultBrush, cutterBrush, INTERSECTION);
+                            
+                            // Always create debug mesh (visibility controlled by effect)
+                            const debugMat = new THREE.MeshBasicMaterial({ color: 0x00ff00, opacity: 0.01, transparent: true, side: THREE.DoubleSide, depthWrite: false });
+                            const debugMesh = new THREE.Mesh(cutterGeo.clone(), debugMat);
+                            debugMesh.name = `Debug_Inlay_Cutter_${i}`;
+                            debugMesh.visible = !!debugShowInlayCutter;
+                            group.add(debugMesh);
+                        } catch (err) {
+                            console.warn("Error during Inlay Clipping:", err);
+                        }
+                    }
+                    cutterGeo.dispose();
+                }
+
+                if (resultBrush && resultBrush.geometry && resultBrush.geometry.attributes.position && resultBrush.geometry.attributes.position.count > 0) {
+                    const mesh = new THREE.Mesh(resultBrush.geometry, mat);
+                    mesh.name = `Inlay_${i}`;
+                    mesh.castShadow = true;
+                    mesh.receiveShadow = true;
+                    group.add(mesh);
+                } else {
+                     // If result is empty, dispose geo
+                    //  if (resultBrush.geometry) resultBrush.geometry.dispose(); // Brush likely owns it
+                }
+            } catch (error) {
+                console.error(`CSG Error on Inlay ${i}`, error);
+                
+                // Fallback: Show unclipped if CSG fails? Or show nothing?
+                // Let's show unclipped as fallback but warn user
+                // const mesh = new THREE.Mesh(geo, mat);
+                // mesh.name = `Inlay_${i}_FALLBACK`;
+                // group.add(mesh);
+                geo.dispose();
             }
-
-            // 4. Clip to Outline (Intersection)
-            if (needsClipping) {
-                // Calculate required cutter height: Base + Max Features + Margin
-                const cutterDepth = thickness + Math.max(Number(patternScaleZ || 0), Number(inlayExtend || 0)) + 5;
-
-                const cutterGeo = new THREE.ExtrudeGeometry(filledCutoutShapes, { 
-                    depth: cutterDepth, 
-                    bevelEnabled: false,
-                });
-                const cutterBrush = new Brush(cutterGeo);
-                cutterBrush.updateMatrixWorld();
-                
-                // Calculate Waste (The part being removed)
-                const wasteBrush = evaluator.evaluate(resultBrush, cutterBrush, SUBTRACTION);
-                
-                // Render Waste Material (Highlighted Green to match tool, 0.5 opacity)
-                const wasteMat = new THREE.MeshBasicMaterial({ color: 0x00ff00, opacity: 0.5, transparent: true, side: THREE.DoubleSide, depthWrite: false });
-                const wasteMesh = new THREE.Mesh(wasteBrush.geometry, wasteMat);
-                wasteMesh.name = `Debug_Inlay_Waste_${i}`;
-                wasteMesh.visible = !!debugShowInlayCutter;
-                group.add(wasteMesh);
-
-                // Calculate Result (The part being kept)
-                resultBrush = evaluator.evaluate(resultBrush, cutterBrush, INTERSECTION);
-                
-                // Always create debug mesh (visibility controlled by effect)
-                const debugMat = new THREE.MeshBasicMaterial({ color: 0x00ff00, opacity: 0.01, transparent: true, side: THREE.DoubleSide, depthWrite: false });
-                const debugMesh = new THREE.Mesh(cutterGeo.clone(), debugMat);
-                debugMesh.name = `Debug_Inlay_Cutter_${i}`;
-                debugMesh.visible = !!debugShowInlayCutter;
-                group.add(debugMesh);
-
-                cutterGeo.dispose();
-            }
-
-            const mesh = new THREE.Mesh(resultBrush.geometry, mat);
-            mesh.name = `Inlay_${i}`;
-            mesh.castShadow = true;
-            mesh.receiveShadow = true;
-            group.add(mesh);
         }
     });
 
@@ -721,40 +761,43 @@ const ImperativeModel = React.forwardRef<THREE.Group, ImperativeModelProps>(({
         resultBrush.updateMatrixWorld();
 
         // 3a. Subtraction (Exclusions)
+        // 3a. Subtraction (Exclusions)
         if (hasExclusions) {
             const exclusionGeo = new THREE.ExtrudeGeometry(finalExclusionShapes, { depth: 1000, bevelEnabled: false });
-            let effectiveExclusionBrush = new Brush(exclusionGeo);
-            effectiveExclusionBrush.position.z = -100;
-            effectiveExclusionBrush.updateMatrixWorld();
+            
+            if (exclusionGeo.attributes.position && exclusionGeo.attributes.position.count > 0) {
+                let effectiveExclusionBrush = new Brush(exclusionGeo);
+                effectiveExclusionBrush.position.z = -100;
+                effectiveExclusionBrush.updateMatrixWorld();
 
-            if (finalInclusionShapes && finalInclusionShapes.length > 0) {
-                 const inclusionGeo = new THREE.ExtrudeGeometry(finalInclusionShapes, { depth: 1000, bevelEnabled: false });
-                const inclusionBrush = new Brush(inclusionGeo);
-                inclusionBrush.position.z = -100; 
-                inclusionBrush.updateMatrixWorld();
-                effectiveExclusionBrush = evaluator.evaluate(effectiveExclusionBrush, inclusionBrush, SUBTRACTION);
-                inclusionGeo.dispose();
+                try {
+                    if (finalInclusionShapes && finalInclusionShapes.length > 0) {
+                         const inclusionGeo = new THREE.ExtrudeGeometry(finalInclusionShapes, { depth: 1000, bevelEnabled: false });
+                         if (inclusionGeo.attributes.position && inclusionGeo.attributes.position.count > 0) {
+                            const inclusionBrush = new Brush(inclusionGeo);
+                            inclusionBrush.position.z = -100; 
+                            inclusionBrush.updateMatrixWorld();
+                            effectiveExclusionBrush = evaluator.evaluate(effectiveExclusionBrush, inclusionBrush, SUBTRACTION);
+                         }
+                         inclusionGeo.dispose();
+                    }
+
+                    // Calculate Exclusion Waste (Intersection of Result and Exclusion)
+                    const exclusionWasteBrush = evaluator.evaluate(resultBrush, effectiveExclusionBrush, INTERSECTION);
+                     // Render Waste Material (Highlighted Green to match inlay tool, 0.5 opacity)
+                     if (exclusionWasteBrush && exclusionWasteBrush.geometry && exclusionWasteBrush.geometry.attributes.position && exclusionWasteBrush.geometry.attributes.position.count > 0) {
+                        const wasteMat = new THREE.MeshBasicMaterial({ color: 0x00ff00, opacity: 0.5, transparent: true, side: THREE.DoubleSide, depthWrite: false });
+                        const wasteMesh = new THREE.Mesh(exclusionWasteBrush.geometry, wasteMat);
+                        wasteMesh.name = 'Debug_Pattern_Waste_Exclusion';
+                        wasteMesh.visible = !!debugShowPatternCutter;
+                        group.add(wasteMesh);
+                     }
+
+                    resultBrush = evaluator.evaluate(resultBrush, effectiveExclusionBrush, SUBTRACTION);
+                } catch (err) {
+                    console.warn("Error during Pattern Exclusion CSG:", err);
+                }
             }
-
-            // Calculate Exclusion Waste (Intersection of Result and Exclusion)
-            const exclusionWasteBrush = evaluator.evaluate(resultBrush, effectiveExclusionBrush, INTERSECTION);
-             // Render Waste Material (Highlighted Green to match inlay tool, 0.5 opacity)
-            const wasteMat = new THREE.MeshBasicMaterial({ color: 0x00ff00, opacity: 0.5, transparent: true, side: THREE.DoubleSide, depthWrite: false });
-            const wasteMesh = new THREE.Mesh(exclusionWasteBrush.geometry, wasteMat);
-            wasteMesh.name = 'Debug_Pattern_Waste_Exclusion';
-            // Match Transforms? Brush is likely world-space already if evaluated? 
-            // Evaluator results are usually new meshes. 
-            // Wait, evaluate returns a Brush. We need to respect its transform if it has one, 
-            // but usually result of evaluate is baked or needs update?
-            // Actually, evaluate returns a Brush with geometry. 
-            // We should check if we need to set position/scale.
-            // Usually result is in local space of the operation.
-            // Let's assume standard behavior:
-            wasteMesh.visible = !!debugShowPatternCutter;
-            group.add(wasteMesh);
-
-
-            resultBrush = evaluator.evaluate(resultBrush, effectiveExclusionBrush, SUBTRACTION);
             exclusionGeo.dispose();
         }
 
@@ -763,6 +806,7 @@ const ImperativeModel = React.forwardRef<THREE.Group, ImperativeModelProps>(({
 
 
             
+            // 3b. Subtract Holes (Always if present)
             // 3b. Subtract Holes (Always if present)
             if (hasHoles) {
                 let finalHoleShapes = holeShapes;
@@ -785,32 +829,40 @@ const ImperativeModel = React.forwardRef<THREE.Group, ImperativeModelProps>(({
                 const holeDepth = thickness + Math.max(maxPatternHeight, Number(inlayExtend || 0)) + 20;
     
                 const holeGeo = new THREE.ExtrudeGeometry(finalHoleShapes, { depth: holeDepth, bevelEnabled: false });
-            const holeBrush = new Brush(holeGeo);
-            holeBrush.position.z = -10;
-            holeBrush.updateMatrixWorld();
-            
-            // Calculate Waste (The holes being removed)
-            const wasteBrush = evaluator.evaluate(resultBrush, holeBrush, INTERSECTION);
-            
-            // Render Waste Material (Highlighted Red to match tool, 0.5 opacity)
-            const wasteMat = new THREE.MeshBasicMaterial({ color: 0xff0000, opacity: 0.5, transparent: true, side: THREE.DoubleSide, depthWrite: false });
-            const wasteMesh = new THREE.Mesh(wasteBrush.geometry, wasteMat);
-            wasteMesh.name = 'Debug_Hole_Waste_Pattern';
-            wasteMesh.visible = !!debugShowHoleCutter;
-            group.add(wasteMesh);
+                
+                if (holeGeo.attributes.position && holeGeo.attributes.position.count > 0) {
+                    const holeBrush = new Brush(holeGeo);
+                    holeBrush.position.z = -10;
+                    holeBrush.updateMatrixWorld();
+                    
+                    try {
+                        // Calculate Waste (The holes being removed)
+                        const wasteBrush = evaluator.evaluate(resultBrush, holeBrush, INTERSECTION);
+                        
+                        // Render Waste Material (Highlighted Red to match tool, 0.5 opacity)
+                         if (wasteBrush && wasteBrush.geometry && wasteBrush.geometry.attributes.position && wasteBrush.geometry.attributes.position.count > 0) {
+                            const wasteMat = new THREE.MeshBasicMaterial({ color: 0xff0000, opacity: 0.5, transparent: true, side: THREE.DoubleSide, depthWrite: false });
+                            const wasteMesh = new THREE.Mesh(wasteBrush.geometry, wasteMat);
+                            wasteMesh.name = 'Debug_Hole_Waste_Pattern';
+                            wasteMesh.visible = !!debugShowHoleCutter;
+                            group.add(wasteMesh);
+                         }
 
-            resultBrush = evaluator.evaluate(resultBrush, holeBrush, SUBTRACTION);
-            
-            // Always create debug mesh for holes
-            const debugMat = new THREE.MeshBasicMaterial({ color: 0xff0000, opacity: 0.3, transparent: true, side: THREE.DoubleSide, depthWrite: false });
-            const debugMesh = new THREE.Mesh(holeGeo.clone(), debugMat);
-            debugMesh.name = 'Debug_Hole_Cutter';
-            debugMesh.position.z = -10;
-            debugMesh.visible = !!debugShowHoleCutter;
-            group.add(debugMesh);
-
-            holeGeo.dispose();
-        }
+                        resultBrush = evaluator.evaluate(resultBrush, holeBrush, SUBTRACTION);
+                        
+                        // Always create debug mesh for holes
+                        const debugMat = new THREE.MeshBasicMaterial({ color: 0xff0000, opacity: 0.3, transparent: true, side: THREE.DoubleSide, depthWrite: false });
+                        const debugMesh = new THREE.Mesh(holeGeo.clone(), debugMat);
+                        debugMesh.name = 'Debug_Hole_Cutter';
+                        debugMesh.position.z = -10;
+                        debugMesh.visible = !!debugShowHoleCutter;
+                        group.add(debugMesh);
+                    } catch (err) {
+                        console.warn("Error during Pattern Hole subtract:", err);
+                    }
+                }
+                holeGeo.dispose();
+            }
 
         // 3c. Intersection (Outline)
         if (hasClipping && filledCutoutShapes) {
@@ -839,37 +891,41 @@ const ImperativeModel = React.forwardRef<THREE.Group, ImperativeModelProps>(({
                 bevelEnabled: false 
             });
             
-            // Center the geometry? No, keep it in place.
-            // Previous code centered it for scaling. But now we offset in place.
-            // So we just create the brush.
-            const cutterBrush = new Brush(cutterGeo);
-            cutterBrush.updateMatrixWorld();
-            
-            // Calculate Waste (The part being removed by the margin/clip)
-            const wasteBrush = evaluator.evaluate(resultBrush, cutterBrush, SUBTRACTION);
-            
-            // Render Waste Material (Highlighted Blue to match tool, 0.5 opacity)
-            const wasteMat = new THREE.MeshBasicMaterial({ color: 0x0000ff, opacity: 0.5, transparent: true, side: THREE.DoubleSide, depthWrite: false });
-            const wasteMesh = new THREE.Mesh(wasteBrush.geometry, wasteMat);
-            wasteMesh.name = 'Debug_Pattern_Waste';
-            // Match Transforms
-            wasteMesh.scale.copy(wasteBrush.scale);
-            wasteMesh.position.copy(wasteBrush.position);
-            wasteMesh.visible = !!debugShowPatternCutter;
-            group.add(wasteMesh);
+            if (cutterGeo.attributes.position && cutterGeo.attributes.position.count > 0) {
+                const cutterBrush = new Brush(cutterGeo);
+                cutterBrush.updateMatrixWorld();
+                
+                try {
+                    // Calculate Waste (The part being removed by the margin/clip)
+                    const wasteBrush = evaluator.evaluate(resultBrush, cutterBrush, SUBTRACTION);
+                    
+                    // Render Waste Material (Highlighted Blue to match tool, 0.5 opacity)
+                     if (wasteBrush && wasteBrush.geometry && wasteBrush.geometry.attributes.position && wasteBrush.geometry.attributes.position.count > 0) {
+                        const wasteMat = new THREE.MeshBasicMaterial({ color: 0x0000ff, opacity: 0.5, transparent: true, side: THREE.DoubleSide, depthWrite: false });
+                        const wasteMesh = new THREE.Mesh(wasteBrush.geometry, wasteMat);
+                        wasteMesh.name = 'Debug_Pattern_Waste';
+                        // Match Transforms
+                        wasteMesh.scale.copy(wasteBrush.scale);
+                        wasteMesh.position.copy(wasteBrush.position);
+                        wasteMesh.visible = !!debugShowPatternCutter;
+                        group.add(wasteMesh);
+                     }
 
-            resultBrush = evaluator.evaluate(resultBrush, cutterBrush, INTERSECTION);
-            
-            // Always create debug mesh for pattern cutter
-            const debugMat = new THREE.MeshBasicMaterial({ color: 0x0000ff, opacity: 0.3, transparent: true, side: THREE.DoubleSide, depthWrite: false });
-            const debugMesh = new THREE.Mesh(cutterGeo.clone(), debugMat);
-            debugMesh.name = 'Debug_Pattern_Cutter';
-            // Match Transforms
-            debugMesh.scale.copy(cutterBrush.scale);
-            debugMesh.position.copy(cutterBrush.position);
-            debugMesh.visible = !!debugShowPatternCutter;
-            group.add(debugMesh);
-
+                    resultBrush = evaluator.evaluate(resultBrush, cutterBrush, INTERSECTION);
+                    
+                    // Always create debug mesh for pattern cutter
+                    const debugMat = new THREE.MeshBasicMaterial({ color: 0x0000ff, opacity: 0.3, transparent: true, side: THREE.DoubleSide, depthWrite: false });
+                    const debugMesh = new THREE.Mesh(cutterGeo.clone(), debugMat);
+                    debugMesh.name = 'Debug_Pattern_Cutter';
+                    // Match Transforms
+                    debugMesh.scale.copy(cutterBrush.scale);
+                    debugMesh.position.copy(cutterBrush.position);
+                    debugMesh.visible = !!debugShowPatternCutter;
+                    group.add(debugMesh);
+                } catch (err) {
+                    console.warn("Error during Pattern Clipping:", err);
+                }
+            }
             // Clean up cutter geometry
             cutterGeo.dispose();
         }
@@ -893,17 +949,25 @@ const ImperativeModel = React.forwardRef<THREE.Group, ImperativeModelProps>(({
              cutterBrush.position.set(0, 0, zPos);
              cutterBrush.updateMatrixWorld();
 
-             // Subtract from result
-             resultBrush = evaluator.evaluate(resultBrush, cutterBrush, SUBTRACTION);
+             try {
+                // Subtract from result
+                resultBrush = evaluator.evaluate(resultBrush, cutterBrush, SUBTRACTION);
+             } catch (err) {
+                 console.warn("Error during Pattern Height Cut:", err);
+             }
              cutterGeo.dispose();
         }
         
         // 4. Result Mesh
-        resultBrush.name = 'Pattern';
-        resultBrush.material = mat;
-        resultBrush.castShadow = true;
-        resultBrush.receiveShadow = true;
-        group.add(resultBrush);
+        if (resultBrush && resultBrush.geometry && resultBrush.geometry.attributes.position && resultBrush.geometry.attributes.position.count > 0) {
+            resultBrush.name = 'Pattern';
+            resultBrush.material = mat;
+            resultBrush.castShadow = true;
+            resultBrush.receiveShadow = true;
+            group.add(resultBrush);
+        } else {
+            console.warn("Pattern Generation resulted in empty geometry.");
+        }
         
         // Cleanup intermediates?
         geometries.forEach(g => g.dispose());
