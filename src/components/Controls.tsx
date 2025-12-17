@@ -5,6 +5,7 @@ import { BaseSettings, InlaySettings, GeometrySettings, ProjectSchemaV1 } from '
 import { RotateCcw, HelpCircle, ChevronDown, Download, Upload } from 'lucide-react';
 import { useAlert } from '../context/AlertContext';
 import SegmentedControl from './ui/SegmentedControl';
+import Button from './ui/Button';
 import { calculateInlayScale } from '../utils/patternUtils';
 import * as THREE from 'three';
 
@@ -128,34 +129,38 @@ const Controls: React.FC<ControlsProps> = ({
       <div className={className}>
             {/* Reset Button */}
             {onReset && (
-                <button
+                <Button
                     onClick={handleResetClick}
-                    className="w-full bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 border border-red-500/50 hover:border-red-400 p-3 rounded-lg flex items-center justify-center gap-2 transition-all font-medium"
+                    variant="danger"
+                    size="md"
+                    className="w-full"
+                    leftIcon={<RotateCcw size={18} />}
                 >
-                    <RotateCcw size={18} />
                     Reset All Settings
-                </button>
+                </Button>
             )}
 
             {/* Debug Import/Export */}
             {geometrySettings.debugMode && (
                 <div className="grid grid-cols-2 gap-2 pt-2">
-                    <button
+                    <Button
                         onClick={handleImportClick}
-                        className="bg-gray-700 hover:bg-gray-600 text-gray-300 p-2 rounded-lg flex items-center justify-center gap-2 text-sm"
+                        variant="secondary"
+                        size="sm"
+                        leftIcon={<Download size={14} />}
                         title="Import Project JSON"
                     >
-                        <Download size={14} />
                         Import Settings
-                    </button>
-                    <button
+                    </Button>
+                    <Button
                         onClick={handleExportClick}
-                        className="bg-gray-700 hover:bg-gray-600 text-gray-300 p-2 rounded-lg flex items-center justify-center gap-2 text-sm"
+                        variant="secondary"
+                        size="sm"
+                        leftIcon={<Upload size={14} />}
                         title="Export Project JSON"
                     >
-                        <Upload size={14} />
                         Export Settings
-                    </button>
+                    </Button>
                 </div>
             )}
 
@@ -177,25 +182,29 @@ const Controls: React.FC<ControlsProps> = ({
         <div className="flex items-center justify-between mb-1">
           <div className="flex items-center gap-3">
              {onToggleCollapse && (
-                  <button
+                  <Button
                       onClick={onToggleCollapse}
-                      className="md:hidden p-1 -ml-1 text-gray-400 hover:text-white transition-colors"
+                      variant="ghost"
+                      size="icon"
+                      className="md:hidden -ml-1 text-gray-400 hover:text-white"
                   >
                       <ChevronDown size={20} className={`transition-transform duration-300 ${isCollapsed ? '-rotate-90' : 'rotate-0'}`} />
-                  </button>
+                  </Button>
              )}
              <h2 className="text-xl font-bold bg-gradient-to-r from-purple-400 to-cyan-400 bg-clip-text text-transparent">
                 GrippySheet Studio
              </h2>
           </div>
           <div className="flex gap-2">
-            <button
+            <Button
               onClick={onOpenWelcome}
-              className="p-2 text-gray-400 hover:text-white hover:bg-gray-700/50 rounded-lg transition-all"
+              variant="ghost"
+              size="icon"
+              className="text-gray-400 hover:text-white hover:bg-gray-700/50"
               title="Help & Info"
             >
               <HelpCircle size={20} />
-            </button>
+            </Button>
           </div>
         </div>
           

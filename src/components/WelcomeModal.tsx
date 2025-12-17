@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { SiGithub } from '@icons-pack/react-simple-icons';
 import { Box, X, ExternalLink, ChevronDown, HelpCircle } from 'lucide-react';
+import Button from './ui/Button';
 
 interface WelcomeModalProps {
     onClose: () => void;
@@ -32,12 +33,14 @@ const WelcomeModal: React.FC<WelcomeModalProps> = ({ onClose }) => {
                         </h2>
                         <p className="text-gray-400 text-sm">Design custom printable grip tape patterns</p>
                     </div>
-                    <button 
+                    <Button 
                         onClick={handleClose}
-                        className="text-gray-500 hover:text-white transition-colors p-1"
+                        variant="ghost"
+                        size="icon"
+                        className="text-gray-500 hover:text-white"
                     >
                         <X size={24} />
-                    </button>
+                    </Button>
                 </div>
 
                 {/* Content / Links */}
@@ -111,12 +114,14 @@ const WelcomeModal: React.FC<WelcomeModalProps> = ({ onClose }) => {
 
                 {/* Footer / Actions */}
                 <div className="pt-2">
-                    <button
+                    <Button
                         onClick={handleClose}
-                        className="w-full py-3 bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 text-white font-bold rounded-xl shadow-lg shadow-purple-900/20 active:scale-[0.98] transition-all"
+                        variant="primary"
+                        size="lg"
+                        className="w-full font-bold rounded-xl shadow-lg shadow-purple-900/20 active:scale-[0.98]"
                     >
                         Get Started
-                    </button>
+                    </Button>
                     
                     <div className="mt-4 flex justify-center">
                         <label className="flex items-center gap-2 cursor-pointer group">
