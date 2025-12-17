@@ -105,14 +105,42 @@ export const parseDxfToShapes = (dxfString: string): THREE.Shape[] => {
             }
         } else if (entity.type === 'SPLINE') {
             const spline = entity as any;
-            if (spline.controlPoints && spline.controlPoints.length > 1) {
-                for (let i = 0; i < spline.controlPoints.length - 1; i++) {
+            const controlPoints = spline.controlPoints;
+            const knots = spline.knotValues;
+            const degree = spline.degreeOfSplineCurve || 3;
+
+            if (controlPoints && controlPoints.length > degree && knots && knots.length > 0) {
+                // Interpolate BSpline
+                const resolution = 20; // Points per knot span. 
+                // Adjust based on needs. 4 spans * 20 = 80 points.
+                const interpolatedPoints = interpolateBSpline(controlPoints, degree, knots, resolution);
+
+                if (interpolatedPoints.length > 1) {
                     segments.push({
-                        start: new THREE.Vector2(spline.controlPoints[i].x, -spline.controlPoints[i].y),
-                        end: new THREE.Vector2(spline.controlPoints[i + 1].x, -spline.controlPoints[i + 1].y),
-                        createPathAction: (path, offset) => path.lineTo(spline.controlPoints[i + 1].x - offset.x, -spline.controlPoints[i + 1].y - offset.y),
-                        createReversePathAction: (path, offset) => path.lineTo(spline.controlPoints[i].x - offset.x, -spline.controlPoints[i].y - offset.y),
-                        type: 'SPLINE_APPROX'
+                        start: interpolatedPoints[0],
+                        end: interpolatedPoints[interpolatedPoints.length - 1],
+                        createPathAction: (path, offset) => {
+                            for (let k = 1; k < interpolatedPoints.length; k++) {
+                                path.lineTo(interpolatedPoints[k].x - offset.x, interpolatedPoints[k].y - offset.y);
+                            }
+                        },
+                        createReversePathAction: (path, offset) => {
+                            for (let k = interpolatedPoints.length - 2; k >= 0; k--) {
+                                path.lineTo(interpolatedPoints[k].x - offset.x, interpolatedPoints[k].y - offset.y);
+                            }
+                        },
+                        type: 'SPLINE_INTERPOLATED'
+                    });
+                }
+            } else if (controlPoints && controlPoints.length > 1) {
+                // Fallback to linear if data missing
+                for (let i = 0; i < controlPoints.length - 1; i++) {
+                    segments.push({
+                        start: new THREE.Vector2(controlPoints[i].x, -controlPoints[i].y),
+                        end: new THREE.Vector2(controlPoints[i + 1].x, -controlPoints[i + 1].y),
+                        createPathAction: (path, offset) => path.lineTo(controlPoints[i + 1].x - offset.x, -controlPoints[i + 1].y - offset.y),
+                        createReversePathAction: (path, offset) => path.lineTo(controlPoints[i].x - offset.x, -controlPoints[i].y - offset.y),
+                        type: 'SPLINE_LINEAR_FALLBACK'
                     });
                 }
             }
@@ -353,6 +381,90 @@ export const parseDxfToShapes = (dxfString: string): THREE.Shape[] => {
 
     return finalShapes;
 };
+
+function interpolateBSpline(controlPoints: any[], degree: number, knots: number[], segmentResolution = 20) {
+    const points: THREE.Vector2[] = [];
+
+    // Domain [u_p, u_m-p]
+    // Standard knots length = n + p + 1. 
+    // n = controlPoints.length.
+
+    // Check knot bounds.
+    // If knots are standard clamped, p first knots are 0, p last are 1 (or max).
+    // Domain is knots[degree] to knots[knots.length - 1 - degree].
+
+    const low = knots[degree];
+    const high = knots[knots.length - 1 - degree];
+
+    // Safety check
+    if (high <= low) return points;
+
+
+    // Or just strictly sample based on knots?
+    // Let's sample uniformly across domain for now. 
+    // If knot spans are uneven, uniform sampling might undersample some areas.
+    // Better: sample per knot span.
+
+    // Iterate through unique knot spans
+    for (let i = degree; i < knots.length - 1 - degree; i++) {
+        const u0 = knots[i];
+        const u1 = knots[i + 1];
+        if (u1 <= u0) continue; // Empty span (multiplicity)
+
+        // Sample this span
+        for (let j = 0; j < segmentResolution; j++) {
+            const t = u0 + (u1 - u0) * (j / segmentResolution);
+            points.push(evaluateBSpline(t, degree, controlPoints, knots));
+        }
+    }
+    // Add exact end point
+    points.push(evaluateBSpline(high, degree, controlPoints, knots));
+
+    return points;
+}
+
+
+
+function evaluateBSpline(t: number, degree: number, points: any[], knots: number[]) {
+    // Find knot span s such that knots[s] <= t < knots[s+1]
+    let s = degree;
+    while (s < knots.length - 1 - degree && knots[s + 1] <= t) {
+        s++;
+    }
+
+    // Handle t == high endpoint for clamped splines
+    if (t > knots[knots.length - 1 - degree] - 1e-9) {
+        s = knots.length - degree - 2;
+    }
+
+    // De Boor's algorithm
+    // We create a temporary array of points d[i]
+    // d_i^0 = P_{s-p+i} for i=0..p
+
+    const v: THREE.Vector2[] = [];
+    for (let i = 0; i <= degree; i++) {
+        // Handle index bounds just in case
+        const idx = s - degree + i;
+        if (idx >= 0 && idx < points.length) {
+            v[i] = new THREE.Vector2(points[idx].x, -points[idx].y);
+        } else {
+            v[i] = new THREE.Vector2(0, 0);
+        }
+    }
+
+    for (let r = 1; r <= degree; r++) {
+        for (let j = degree; j >= r; j--) {
+            const denom = knots[s + 1 + j - r] - knots[s - degree + j];
+            let alpha = 0;
+            if (denom !== 0) {
+                alpha = (t - knots[s - degree + j]) / denom;
+            }
+            v[j].lerp(v[j - 1], 1 - alpha);
+        }
+    }
+
+    return v[degree];
+}
 
 export const generateSVGPath = (shapes: THREE.Shape[]): string => {
     let pathData = "";

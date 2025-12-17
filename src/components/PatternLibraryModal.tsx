@@ -29,6 +29,7 @@ const PRESETS: PatternPreset[] = [
     { name: 'Spooderman', file: 'spooderman.svg', type: 'svg', category: 'inlays', keepOriginalColors: true },
     { name: "Dolan Duck", file: "dolan.svg", type: "svg", category: "inlays", keepOriginalColors: true },
     { name: "Gooby", file: "gooby.svg", type: "svg", category: "inlays", keepOriginalColors: true },
+    { name: "MatixBuilt", file: "matixbuilt.svg", type: "svg", category: "inlays", keepOriginalColors: true },
 
     // Outlines
     { name: 'XR Cobra Viper', file: 'xrcobraviper.dxf', type: 'dxf', category: 'outlines', infoUrl: 'https://www.printables.com/model/968803' },
@@ -39,7 +40,7 @@ const PRESETS: PatternPreset[] = [
     { name: 'GT Kush Wide', file: 'gtkushwide.dxf', type: 'dxf', category: 'outlines', infoUrl: 'https://www.printables.com/model/968803' },
     { name: 'GT Mushies', file: 'gtmushies.dxf', type: 'dxf', category: 'outlines', infoUrl: 'https://www.printables.com/model/968803' },
     { name: 'Pint', file: 'pint.dxf', type: 'dxf', category: 'outlines', infoUrl: 'https://www.printables.com/model/968803' },
-    // { name: 'Pint Matix', file: 'pintmatix.dxf', type: 'dxf', category: 'outlines' }
+    { name: 'Pint Matix', file: 'pintmatix.dxf', type: 'dxf', category: 'outlines' }
 ];
 
 interface PatternLibraryModalProps {
