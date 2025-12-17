@@ -35,6 +35,7 @@ export const GeometrySettingsSchema = z.object({
     isTiled: z.boolean().default(true),
     tileSpacing: z.number().default(10),
     patternMargin: z.number().default(3),
+    marginAppliesToHoles: z.boolean().default(false),
     patternColor: z.string().default(DEFAULT_PATTERN_COLOR),
     clipToOutline: z.boolean().default(true),
     tilingDistribution: z.enum(['grid', 'offset', 'hex', 'radial', 'random', 'wave', 'zigzag', 'warped-grid']).default('offset'),

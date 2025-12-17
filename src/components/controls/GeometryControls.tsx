@@ -39,6 +39,7 @@ const GeometryControls: React.FC<GeometryControlsProps> = ({
     isTiled,
     tileSpacing,
     patternMargin,
+    marginAppliesToHoles,
     clipToOutline,
     tilingDistribution,
     tilingDirection,
@@ -466,22 +467,24 @@ const GeometryControls: React.FC<GeometryControlsProps> = ({
           )}
 
           {/* Margin & Clip Toggles */}
-          <div className="flex gap-4 pt-2 border-t border-gray-800">
-            <div className="flex-1 min-w-0">
-              <ControlField label="Margin" tooltip="Safety margin from edge">
-                <DebouncedInput
-                  type="number"
-                  value={patternMargin}
-                  onChange={(val) =>
-                    updateSettings({ patternMargin: Number(val) })
-                  }
-                  step="0.5"
-                  min="0"
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none"
-                />
-              </ControlField>
-            </div>
+          {/* Margin */}
+          <div className="pt-2 border-t border-gray-800">
+            <ControlField label="Margin" tooltip="Safety margin from edge">
+              <DebouncedInput
+                type="number"
+                value={patternMargin}
+                onChange={(val) =>
+                  updateSettings({ patternMargin: Number(val) })
+                }
+                step="0.5"
+                min="0"
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none"
+              />
+            </ControlField>
+          </div>
 
+          {/* Toggles Row */}
+          <div className="flex gap-4 pt-2">
             <div className="flex-1 min-w-0">
               <ControlField
                 label="Clip to Edge"
@@ -497,6 +500,22 @@ const GeometryControls: React.FC<GeometryControlsProps> = ({
                 />
               </ControlField>
             </div>
+
+            <div className="flex-1 min-w-0">
+               <ControlField
+                  label="Holes"
+                  tooltip="Apply margin to hole cutouts"
+               >
+                 <ToggleButton
+                   label={marginAppliesToHoles ? "Expanded" : "Exact"}
+                   isToggled={!!marginAppliesToHoles}
+                   onToggle={() =>
+                     updateSettings({ marginAppliesToHoles: !marginAppliesToHoles })
+                   }
+                   icon={<Scissors size={16} />}
+                 />
+               </ControlField>
+             </div>
           </div>
 
           <div className="space-y-2 pt-2 border-t border-gray-800">

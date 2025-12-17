@@ -38,7 +38,8 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
       patternShapes, patternType, patternScale, patternScaleZ,
       isTiled, tileSpacing, patternMargin, 
       tilingDistribution, tilingDirection, tilingOrientation,
-      clipToOutline, debugMode, patternColor: geomPatternColor, rotationClamp
+      clipToOutline, debugMode, patternColor: geomPatternColor, rotationClamp,
+      marginAppliesToHoles
   } = geometrySettings;
 
   const [viewState, setViewState] = useState<ViewState>({ type: 'ortho', timestamp: Date.now() });
@@ -429,6 +430,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
                 rotationClamp={rotationClamp}
                 patternMaxHeight={geometrySettings.patternMaxHeight === '' ? undefined : Number(geometrySettings.patternMaxHeight)}
                 clipToOutline={clipToOutline}
+                marginAppliesToHoles={marginAppliesToHoles}
                 inlayShapes={inlayShapes}
                 inlayDepth={inlayDepth}
                 inlayScale={inlayScale}

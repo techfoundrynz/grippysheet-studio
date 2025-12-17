@@ -18,6 +18,7 @@ interface ImperativeModelProps {
   isTiled: boolean;
   tileSpacing: number;
   patternMargin: number;
+  marginAppliesToHoles?: boolean;
   tilingDistribution?: 'grid' | 'offset' | 'hex' | 'radial' | 'random' | 'wave' | 'zigzag' | 'warped-grid';
   tilingDirection?: 'horizontal' | 'vertical';
   tilingOrientation?: 'none' | 'alternate' | 'random' | 'aligned';
@@ -61,6 +62,7 @@ const ImperativeModel = React.forwardRef<THREE.Group, ImperativeModelProps>(({
   isTiled,
   tileSpacing,
   patternMargin,
+  marginAppliesToHoles = false,
   tilingDistribution = 'hex',
   tilingDirection = 'horizontal',
   tilingOrientation = 'aligned',
@@ -811,8 +813,8 @@ const ImperativeModel = React.forwardRef<THREE.Group, ImperativeModelProps>(({
             if (hasHoles) {
                 let finalHoleShapes = holeShapes;
                 
-                // Apply Margin (Expand Holes)
-                if (patternMargin && Math.abs(patternMargin) > 0.001) {
+                // Apply Margin (Expand Holes) - Only if enabled
+                if (marginAppliesToHoles && patternMargin && Math.abs(patternMargin) > 0.001) {
                      // Expand the hole shape (Positive Offset) -> Note: Holes are treated as positive polys in offsetUtils
                      // CLIPPER OFFSET: +patternMargin
                      const offsetShapes: THREE.Shape[] = [];
@@ -990,7 +992,7 @@ const ImperativeModel = React.forwardRef<THREE.Group, ImperativeModelProps>(({
       isTiled, tileSpacing, patternMargin, tilingDistribution, tilingOrientation, tilingDirection,
       clipToOutline, displayMode, inlayShapes, inlayScale, inlayRotation, inlayMirror, baseRotation, rotationClamp,
       thickness, filledCutoutShapes, holeShapes, patternShapes, size, patternMaxHeight,
-      filledCutoutShapes, holeShapes, patternShapes, size // Removed redundant checks, kept keys
+      marginAppliesToHoles
   ]);
 
   // --- 4. Debug Visibility & Material Effect ---
