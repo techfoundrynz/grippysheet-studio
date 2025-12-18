@@ -35,10 +35,11 @@ const PRESETS: PatternPreset[] = [
     { name: "MatixBuilt", file: "matixbuilt.svg", type: "svg", category: "inlays", keepOriginalColors: true },
 
     // Outlines
-    { name: 'XR Cobra Viper', file: 'xrcobraviper.dxf', type: 'dxf', category: 'outlines', infoUrl: 'https://www.printables.com/model/968803' },
+    { name: 'XR Cobra/Viper', file: 'xrcobraviper.dxf', type: 'dxf', category: 'outlines', infoUrl: 'https://www.printables.com/model/968803' },
     { name: 'XR Kush Wide', file: 'xrkushwide.dxf', type: 'dxf', category: 'outlines', infoUrl: 'https://www.printables.com/model/968803' },
     { name: 'XR Mushies V2', file: 'xrmushiesv2.dxf', type: 'dxf', category: 'outlines', infoUrl: 'https://www.printables.com/model/968803' },
-    {name: 'XR PubPad', file: 'xrpubpad.dxf', type: 'dxf', category: 'outlines' },
+    { name: 'XR PubPad', file: 'xrpubpad.dxf', type: 'dxf', category: 'outlines' },
+    { name: 'XR Stompies', file: 'xrstompies.dxf', type: 'dxf', category: 'outlines' },
     { name: 'Floatwheel', file: 'floatwheel.dxf', type: 'dxf', category: 'outlines', infoUrl: 'https://www.printables.com/model/968803' },
     { name: 'GT Kush Wide', file: 'gtkushwide.dxf', type: 'dxf', category: 'outlines', infoUrl: 'https://www.printables.com/model/968803' },
     { name: 'GT Mushies', file: 'gtmushies.dxf', type: 'dxf', category: 'outlines', infoUrl: 'https://www.printables.com/model/968803' },

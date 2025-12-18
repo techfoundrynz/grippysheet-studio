@@ -36,26 +36,22 @@ export const parseDxfToShapes = (dxfString: string): THREE.Shape[] => {
             const line = entity as any;
             if (line.vertices && line.vertices.length >= 2) {
                 segments.push({
-                    start: new THREE.Vector2(line.vertices[0].x, -line.vertices[0].y),
-                    end: new THREE.Vector2(line.vertices[1].x, -line.vertices[1].y),
-                    createPathAction: (path, offset) => path.lineTo(line.vertices[1].x - offset.x, -line.vertices[1].y - offset.y),
-                    createReversePathAction: (path, offset) => path.lineTo(line.vertices[0].x - offset.x, -line.vertices[0].y - offset.y),
+                    start: new THREE.Vector2(line.vertices[0].x, line.vertices[0].y),
+                    end: new THREE.Vector2(line.vertices[1].x, line.vertices[1].y),
+                    createPathAction: (path, offset) => path.lineTo(line.vertices[1].x - offset.x, line.vertices[1].y - offset.y),
+                    createReversePathAction: (path, offset) => path.lineTo(line.vertices[0].x - offset.x, line.vertices[0].y - offset.y),
                     type: 'LINE'
                 });
             }
         } else if (entity.type === 'ARC') {
             const arc = entity as any;
             const cx = arc.center.x;
-            const cy = -arc.center.y; // Flip center Y
+            const cy = arc.center.y;
             const r = arc.radius;
             // Angles: 
-            // In DXF, angles are CCW from X-axis. 
-            // We flip Y, which mirrors the coordinate system.
-            // A CCW arc (0 to 90) in +Y becomes a CW arc (0 to -90) visually if simply projected?
-            // Or rather: Angle theta in +Y is (cos, sin). In -Y it is (cos, -sin) = (cos, sin(-theta)).
-            // So angle becomes -theta.
-            const startAngle = -arc.startAngle;
-            const endAngle = -arc.endAngle;
+            // DXF angles are CCW from X-axis.
+            const startAngle = arc.startAngle;
+            const endAngle = arc.endAngle;
 
             const startX = cx + r * Math.cos(startAngle);
             const startY = cy + r * Math.sin(startAngle);
@@ -65,16 +61,10 @@ export const parseDxfToShapes = (dxfString: string): THREE.Shape[] => {
             segments.push({
                 start: new THREE.Vector2(startX, startY),
                 end: new THREE.Vector2(endX, endY),
-                // Forward: startAngle -> endAngle. Since we flipped Y and negated angles, the winding direction in the new coord system...
-                // absarc(..., clockwise).
-                // If original was CCW (increasing angle), new is decreasing angle (-start > -end)? No.
-                // 0 -> 90. New: 0 -> -90. Decreasing. So Clockwise is TRUE?
-                // Let's rely on standard ThreeJS behavior: absarc goes from aStart to aEnd.
-                // Boolean 'clockwise': default false (CCW).
-                // If we want 0 -> -90. That is CW. So set true.
-                createPathAction: (path, offset) => path.absarc(cx - offset.x, cy - offset.y, r, startAngle, endAngle, true),
-                // Reverse: endAngle -> startAngle. -90 -> 0. Increasing. CCW. So set false.
-                createReversePathAction: (path, offset) => path.absarc(cx - offset.x, cy - offset.y, r, endAngle, startAngle, false),
+                // Forward: startAngle -> endAngle (CCW).
+                createPathAction: (path, offset) => path.absarc(cx - offset.x, cy - offset.y, r, startAngle, endAngle, false),
+                // Reverse: endAngle -> startAngle (CW).
+                createReversePathAction: (path, offset) => path.absarc(cx - offset.x, cy - offset.y, r, endAngle, startAngle, true),
                 type: 'ARC'
             });
         } else if (entity.type === 'LWPOLYLINE' || entity.type === 'POLYLINE') {
@@ -85,20 +75,20 @@ export const parseDxfToShapes = (dxfString: string): THREE.Shape[] => {
                 // Treat as individual segments is safer for mixed garbage input.
                 for (let i = 0; i < poly.vertices.length - 1; i++) {
                     segments.push({
-                        start: new THREE.Vector2(poly.vertices[i].x, -poly.vertices[i].y),
-                        end: new THREE.Vector2(poly.vertices[i + 1].x, -poly.vertices[i + 1].y),
-                        createPathAction: (path, offset) => path.lineTo(poly.vertices[i + 1].x - offset.x, -poly.vertices[i + 1].y - offset.y),
-                        createReversePathAction: (path, offset) => path.lineTo(poly.vertices[i].x - offset.x, -poly.vertices[i].y - offset.y),
+                        start: new THREE.Vector2(poly.vertices[i].x, poly.vertices[i].y),
+                        end: new THREE.Vector2(poly.vertices[i + 1].x, poly.vertices[i + 1].y),
+                        createPathAction: (path, offset) => path.lineTo(poly.vertices[i + 1].x - offset.x, poly.vertices[i + 1].y - offset.y),
+                        createReversePathAction: (path, offset) => path.lineTo(poly.vertices[i].x - offset.x, poly.vertices[i].y - offset.y),
                         type: 'POLYSEGMENT'
                     });
                 }
                 if (poly.shape || poly.closed) {
                     const last = poly.vertices.length - 1;
                     segments.push({
-                        start: new THREE.Vector2(poly.vertices[last].x, -poly.vertices[last].y),
-                        end: new THREE.Vector2(poly.vertices[0].x, -poly.vertices[0].y),
-                        createPathAction: (path, offset) => path.lineTo(poly.vertices[0].x - offset.x, -poly.vertices[0].y - offset.y),
-                        createReversePathAction: (path, offset) => path.lineTo(poly.vertices[last].x - offset.x, -poly.vertices[last].y - offset.y),
+                        start: new THREE.Vector2(poly.vertices[last].x, poly.vertices[last].y),
+                        end: new THREE.Vector2(poly.vertices[0].x, poly.vertices[0].y),
+                        createPathAction: (path, offset) => path.lineTo(poly.vertices[0].x - offset.x, poly.vertices[0].y - offset.y),
+                        createReversePathAction: (path, offset) => path.lineTo(poly.vertices[last].x - offset.x, poly.vertices[last].y - offset.y),
                         type: 'POLYSEGMENT'
                     });
                 }
@@ -136,10 +126,10 @@ export const parseDxfToShapes = (dxfString: string): THREE.Shape[] => {
                 // Fallback to linear if data missing
                 for (let i = 0; i < controlPoints.length - 1; i++) {
                     segments.push({
-                        start: new THREE.Vector2(controlPoints[i].x, -controlPoints[i].y),
-                        end: new THREE.Vector2(controlPoints[i + 1].x, -controlPoints[i + 1].y),
-                        createPathAction: (path, offset) => path.lineTo(controlPoints[i + 1].x - offset.x, -controlPoints[i + 1].y - offset.y),
-                        createReversePathAction: (path, offset) => path.lineTo(controlPoints[i].x - offset.x, -controlPoints[i].y - offset.y),
+                        start: new THREE.Vector2(controlPoints[i].x, controlPoints[i].y),
+                        end: new THREE.Vector2(controlPoints[i + 1].x, controlPoints[i + 1].y),
+                        createPathAction: (path, offset) => path.lineTo(controlPoints[i + 1].x - offset.x, controlPoints[i + 1].y - offset.y),
+                        createReversePathAction: (path, offset) => path.lineTo(controlPoints[i].x - offset.x, controlPoints[i].y - offset.y),
                         type: 'SPLINE_LINEAR_FALLBACK'
                     });
                 }
@@ -147,7 +137,7 @@ export const parseDxfToShapes = (dxfString: string): THREE.Shape[] => {
         } else if (entity.type === 'CIRCLE') {
             const circle = entity as any;
             const cx = circle.center.x;
-            const cy = -circle.center.y;
+            const cy = circle.center.y;
             const r = circle.radius;
             // Circle is a closed loop. Start/End are same.
             // Start at 0 radians.
@@ -156,18 +146,18 @@ export const parseDxfToShapes = (dxfString: string): THREE.Shape[] => {
             segments.push({
                 start: startEnd,
                 end: startEnd,
-                createPathAction: (path, offset) => path.absarc(cx - offset.x, cy - offset.y, r, 0, 2 * Math.PI, true),
-                createReversePathAction: (path, offset) => path.absarc(cx - offset.x, cy - offset.y, r, 2 * Math.PI, 0, false),
+                createPathAction: (path, offset) => path.absarc(cx - offset.x, cy - offset.y, r, 0, 2 * Math.PI, false),
+                createReversePathAction: (path, offset) => path.absarc(cx - offset.x, cy - offset.y, r, 2 * Math.PI, 0, true),
                 type: 'CIRCLE'
             });
         } else if (entity.type === 'ELLIPSE') {
             const ellipse = entity as any;
             const cx = ellipse.center.x;
-            const cy = -ellipse.center.y;
+            const cy = ellipse.center.y;
 
             // Major axis vector
             const mx = ellipse.majorAxisEndPoint.x;
-            const my = -ellipse.majorAxisEndPoint.y; // Flip Y
+            const my = ellipse.majorAxisEndPoint.y;
 
             const majorRadius = Math.sqrt(mx * mx + my * my);
             const minorRadius = majorRadius * ellipse.axisRatio;
@@ -204,8 +194,8 @@ export const parseDxfToShapes = (dxfString: string): THREE.Shape[] => {
             segments.push({
                 start: startPoint,
                 end: endPoint,
-                createPathAction: (path, offset) => path.absellipse(cx - offset.x, cy - offset.y, majorRadius, minorRadius, startParam, endParam, true, rotation),
-                createReversePathAction: (path, offset) => path.absellipse(cx - offset.x, cy - offset.y, majorRadius, minorRadius, endParam, startParam, false, rotation),
+                createPathAction: (path, offset) => path.absellipse(cx - offset.x, cy - offset.y, majorRadius, minorRadius, startParam, endParam, false, rotation),
+                createReversePathAction: (path, offset) => path.absellipse(cx - offset.x, cy - offset.y, majorRadius, minorRadius, endParam, startParam, true, rotation),
                 type: 'ELLIPSE'
             });
         }
@@ -446,7 +436,7 @@ function evaluateBSpline(t: number, degree: number, points: any[], knots: number
         // Handle index bounds just in case
         const idx = s - degree + i;
         if (idx >= 0 && idx < points.length) {
-            v[i] = new THREE.Vector2(points[idx].x, -points[idx].y);
+            v[i] = new THREE.Vector2(points[idx].x, points[idx].y);
         } else {
             v[i] = new THREE.Vector2(0, 0);
         }
