@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useMemo } from 'react';
 import * as THREE from 'three';
 import { Brush, Evaluator, SUBTRACTION, INTERSECTION } from 'three-bvh-csg';
 import { mergeGeometries, mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { generateTilePositions, getShapesBounds } from '../utils/patternUtils';
+import { generateTilePositions, getShapesBounds, calculateInlayOffset } from '../utils/patternUtils';
 import { offsetShape } from '../utils/offsetUtils';
 
 interface ImperativeModelProps {
@@ -34,6 +34,7 @@ interface ImperativeModelProps {
   inlayRotation?: number;
   inlayExtend?: number;
   inlayMirror?: boolean;
+  inlayPosition?: 'center' | 'top' | 'bottom' | 'left' | 'right' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
   wireframeBase?: boolean;
   wireframeInlay?: boolean;
   wireframePattern?: boolean;
@@ -47,7 +48,11 @@ interface ImperativeModelProps {
   debugShowInlayCutter?: boolean;
 }
 
-const ImperativeModel = React.forwardRef<THREE.Group, ImperativeModelProps>(({
+
+
+
+const ImperativeModel = React.forwardRef((props: ImperativeModelProps, ref: React.Ref<THREE.Group>) => {
+  const {
   size,
   thickness,
   color,
@@ -78,6 +83,7 @@ const ImperativeModel = React.forwardRef<THREE.Group, ImperativeModelProps>(({
   inlayRotation = 0,
   inlayExtend = 0,
   inlayMirror = false,
+  inlayPosition = 'center',
   wireframeBase = false,
   wireframeInlay = false,
   wireframePattern = false,
@@ -86,7 +92,7 @@ const ImperativeModel = React.forwardRef<THREE.Group, ImperativeModelProps>(({
   debugShowPatternCutter = false,
   debugShowHoleCutter = false,
   debugShowInlayCutter = false,
-}, ref) => {
+  } = props;
   const localGroupRef = useRef<THREE.Group>(null);
   
   // Expose ref
@@ -310,6 +316,19 @@ const ImperativeModel = React.forwardRef<THREE.Group, ImperativeModelProps>(({
         group.remove(obj);
     });
 
+    // --- Pre-calculate Group Bounds for Positioning ---
+    const { x: globalDx, y: globalDy } = calculateInlayOffset(
+        inlayShapes,
+        filledCutoutShapes,
+        size,
+        {
+            inlayScale,
+            inlayRotation,
+            inlayMirror,
+            inlayPosition
+        }
+    );
+
     inlayShapes.forEach((item, i) => {
         if (item.color === 'transparent') return;
 
@@ -346,6 +365,11 @@ const ImperativeModel = React.forwardRef<THREE.Group, ImperativeModelProps>(({
         geo.applyMatrix4(new THREE.Matrix4().makeScale(inlayScale, inlayScale, 1));
         if (inlayRotation !== 0) {
             geo.applyMatrix4(new THREE.Matrix4().makeRotationZ(inlayRotation * (Math.PI / 180)));
+        }
+
+        // Apply Global Translation (Positioning)
+        if (globalDx !== 0 || globalDy !== 0) {
+            geo.translate(globalDx, globalDy, 0);
         }
 
         // VALIDATION: Check if geometry is valid before proceeding
@@ -474,7 +498,7 @@ const ImperativeModel = React.forwardRef<THREE.Group, ImperativeModelProps>(({
         }
     });
 
-  }, [inlayShapes, inlayDepth, inlayScale, inlayRotation, inlayExtend, inlayMirror, thickness, color, wireframeInlay, clipToOutline, filledCutoutShapes, holeShapes, displayMode]);
+  }, [inlayShapes, inlayDepth, inlayScale, inlayRotation, inlayExtend, inlayMirror, inlayPosition, thickness, color, wireframeInlay, clipToOutline, filledCutoutShapes, holeShapes, displayMode]);
 
 
   // --- 3. Pattern Construction (The Heavy Lifter) ---
@@ -595,10 +619,25 @@ const ImperativeModel = React.forwardRef<THREE.Group, ImperativeModelProps>(({
         pHeight = (unitGeo.boundingBox.max.y - unitGeo.boundingBox.min.y) * patternScale;
     }
 
+    // Determine Inlay Offsets for Cutouts
+    const { x: inlayDx, y: inlayDy } = calculateInlayOffset(
+        inlayShapes,
+        filledCutoutShapes,
+        size,
+        {
+            inlayScale,
+            inlayRotation,
+            inlayMirror,
+            inlayPosition
+        }
+    );
+
+
+
     // Helper to scale and rotate shapes
     const scaleShape = (original: any) => {
         const shape = original.shape || original;
-        if (inlayScale === 1 && inlayRotation === 0) return shape;
+        if (inlayScale === 1 && inlayRotation === 0 && inlayDx === 0 && inlayDy === 0) return shape;
         
         const newShape = new THREE.Shape();
         
@@ -612,8 +651,13 @@ const ImperativeModel = React.forwardRef<THREE.Group, ImperativeModelProps>(({
             const sx = p.x * (inlayMirror ? -inlayScale : inlayScale);
             const sy = p.y * inlayScale;
             // 2. Rotate
-            const rx = sx * cos - sy * sin;
-            const ry = sx * sin + sy * cos;
+            let rx = sx * cos - sy * sin;
+            let ry = sx * sin + sy * cos;
+            
+            // 3. Translate (Positioning)
+            rx += inlayDx;
+            ry += inlayDy;
+
             return new THREE.Vector2(rx, ry);
         };
         
@@ -990,7 +1034,7 @@ const ImperativeModel = React.forwardRef<THREE.Group, ImperativeModelProps>(({
       patternColor, wireframePattern, 
       patternScale, patternScaleZ, 
       isTiled, tileSpacing, patternMargin, tilingDistribution, tilingOrientation, tilingDirection,
-      clipToOutline, displayMode, inlayShapes, inlayScale, inlayRotation, inlayMirror, baseRotation, rotationClamp,
+      clipToOutline, displayMode, inlayShapes, inlayScale, inlayRotation, inlayMirror, inlayPosition, baseRotation, rotationClamp,
       thickness, filledCutoutShapes, holeShapes, patternShapes, size, patternMaxHeight,
       marginAppliesToHoles
   ]);

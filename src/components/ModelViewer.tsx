@@ -31,7 +31,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
   // So baseSettings doesn't have patternColor.
   
   const { 
-      inlayShapes, inlayDepth, inlayScale, inlayRotation, inlayExtend, inlayMirror 
+      inlayShapes, inlayDepth, inlayScale, inlayRotation, inlayExtend, inlayMirror, inlayPosition
   } = inlaySettings;
 
   const {
@@ -437,6 +437,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
                 inlayRotation={inlayRotation}
                 inlayExtend={inlayExtend}
                 inlayMirror={inlayMirror}
+                inlayPosition={inlayPosition}
                 wireframeBase={wireframeState.base}
                 wireframeInlay={wireframeState.inlay}
                 wireframePattern={wireframeState.pattern}

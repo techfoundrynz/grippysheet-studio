@@ -35,6 +35,7 @@ const InlayControls: React.FC<InlayControlsProps> = ({
     inlayRotation,
     inlayExtend,
     inlayMirror,
+    inlayPosition,
   } = settings;
 
   const [showPaintModal, setShowPaintModal] = useState(false);
@@ -206,6 +207,27 @@ const InlayControls: React.FC<InlayControlsProps> = ({
               step="0.1"
               className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none"
             />
+          </ControlField>
+
+          <ControlField
+            label="Position"
+            tooltip="Align the inlay relative to the base"
+          >
+            <select
+              value={inlayPosition || 'center'}
+              onChange={(e) => updateSettings({ inlayPosition: e.target.value as any })}
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none appearance-none"
+            >
+              <option value="center">Center</option>
+              <option value="top-left">Top Left</option>
+              <option value="top">Top</option>
+              <option value="top-right">Top Right</option>
+              <option value="left">Left</option>
+              <option value="right">Right</option>
+              <option value="bottom-left">Bottom Left</option>
+              <option value="bottom">Bottom</option>
+              <option value="bottom-right">Bottom Right</option>
+            </select>
           </ControlField>
 
           <div className="flex gap-4">

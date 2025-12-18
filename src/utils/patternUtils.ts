@@ -813,4 +813,103 @@ export const calculateInlayScale = (
     return 1;
 };
 
+/**
+ * Calculates the offset required to position the inlay group based on settings.
+ */
+export const calculateInlayOffset = (
+    inlayShapes: any[],
+    cutoutShapes: THREE.Shape[] | null,
+    baseSize: number,
+    settings: {
+        inlayScale: number;
+        inlayRotation: number;
+        inlayMirror: boolean;
+        inlayPosition: string;
+    }
+): { x: number, y: number } => {
+    const { inlayScale, inlayRotation, inlayMirror, inlayPosition } = settings;
+
+    if (!inlayPosition || inlayPosition === 'center' || !inlayShapes || inlayShapes.length === 0) {
+        return { x: 0, y: 0 };
+    }
+
+    let minX = Infinity, minY = Infinity;
+    let maxX = -Infinity, maxY = -Infinity;
+    let hasValidShapes = false;
+
+    inlayShapes.forEach(item => {
+        if (item.color === 'transparent') return;
+        hasValidShapes = true;
+
+        // Get points from original shape
+        let pts: THREE.Vector2[] = [];
+        if (item.shape && item.shape.getPoints) {
+            pts = item.shape.getPoints();
+        } else if (item.getPoints) {
+            pts = item.getPoints();
+        }
+
+        pts.forEach((p: THREE.Vector2) => {
+            let x = p.x;
+            let y = p.y;
+
+            // 1. Mirror (flip X)
+            if (inlayMirror) x = -x;
+
+            // 2. Scale
+            x *= inlayScale;
+            y *= inlayScale;
+
+            // 3. Rotate
+            if (inlayRotation !== 0) {
+                const rad = inlayRotation * (Math.PI / 180);
+                const cos = Math.cos(rad);
+                const sin = Math.sin(rad);
+                const rx = x * cos - y * sin;
+                const ry = x * sin + y * cos;
+                x = rx;
+                y = ry;
+            }
+
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+            if (y < minY) minY = y;
+            if (y > maxY) maxY = y;
+        });
+    });
+
+    if (!hasValidShapes || minX === Infinity) {
+        return { x: 0, y: 0 };
+    }
+
+    // Base Bounds
+    let bMin = new THREE.Vector2(-baseSize / 2, -baseSize / 2);
+    let bMax = new THREE.Vector2(baseSize / 2, baseSize / 2);
+
+    if (cutoutShapes && cutoutShapes.length > 0) {
+        const sb = getShapesBounds(cutoutShapes);
+        bMin = sb.min;
+        bMax = sb.max;
+    }
+
+    let dx = 0;
+    let dy = 0;
+
+    // Horizontal
+    if (inlayPosition.includes('left')) {
+        dx = bMin.x - minX;
+    } else if (inlayPosition.includes('right')) {
+        dx = bMax.x - maxX;
+    }
+
+    // Vertical
+    if (inlayPosition.includes('top')) {
+        dy = bMax.y - maxY;
+    } else if (inlayPosition.includes('bottom')) {
+        dy = bMin.y - minY;
+    }
+
+    return { x: dx, y: dy };
+};
+
 
