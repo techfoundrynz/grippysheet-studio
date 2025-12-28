@@ -161,29 +161,55 @@ export const parseDxfToShapes = (dxfString: string): THREE.Shape[] => {
             const poly = entity as any;
             if (poly.vertices && poly.vertices.length > 1) {
                 const elevation = poly.elevation || 0;
-                const convertedVertices = poly.vertices.map((v: any) => {
-                    const wcs = transformPointToWCS(v.x, v.y, elevation, basis);
-                    return new THREE.Vector2(wcs.x * scaleFactor, wcs.y * scaleFactor);
-                });
 
-                for (let i = 0; i < convertedVertices.length - 1; i++) {
-                    segments.push({
-                        start: convertedVertices[i],
-                        end: convertedVertices[i + 1],
-                        createPathAction: (path, offset) => path.lineTo(convertedVertices[i + 1].x - offset.x, convertedVertices[i + 1].y - offset.y),
-                        createReversePathAction: (path, offset) => path.lineTo(convertedVertices[i].x - offset.x, convertedVertices[i].y - offset.y),
-                        type: 'POLYSEGMENT'
-                    });
-                }
-                if (poly.shape || poly.closed) {
-                    const last = convertedVertices.length - 1;
-                    segments.push({
-                        start: convertedVertices[last],
-                        end: convertedVertices[0],
-                        createPathAction: (path, offset) => path.lineTo(convertedVertices[0].x - offset.x, convertedVertices[0].y - offset.y),
-                        createReversePathAction: (path, offset) => path.lineTo(convertedVertices[last].x - offset.x, convertedVertices[last].y - offset.y),
-                        type: 'POLYSEGMENT'
-                    });
+                const getWCS = (v: any) => {
+                    const w = transformPointToWCS(v.x, v.y, elevation, basis);
+                    return new THREE.Vector2(w.x * scaleFactor, w.y * scaleFactor);
+                };
+
+                for (let i = 0; i < poly.vertices.length; i++) {
+                    let nextIdx = i + 1;
+                    if (nextIdx >= poly.vertices.length) {
+                        if (poly.shape || poly.closed) {
+                            nextIdx = 0;
+                        } else {
+                            break;
+                        }
+                    }
+
+                    const v1 = poly.vertices[i];
+                    const v2 = poly.vertices[nextIdx];
+                    const bulge = v1.bulge || 0;
+
+                    const p1 = getWCS(v1);
+                    const p2 = getWCS(v2);
+
+                    if (Math.abs(bulge) > 1e-6) {
+                        const dist = p1.distanceTo(p2);
+                        const radius = dist * (bulge * bulge + 1) / (4 * Math.abs(bulge));
+                        const cx = (p1.x + p2.x) / 2 - (p2.y - p1.y) * (1 - bulge * bulge) / (4 * bulge);
+                        const cy = (p1.y + p2.y) / 2 + (p2.x - p1.x) * (1 - bulge * bulge) / (4 * bulge);
+
+                        const startAngle = Math.atan2(p1.y - cy, p1.x - cx);
+                        const endAngle = Math.atan2(p2.y - cy, p2.x - cx);
+                        const isCW = bulge < 0;
+
+                        segments.push({
+                            start: p1,
+                            end: p2,
+                            createPathAction: (path, offset) => path.absarc(cx - offset.x, cy - offset.y, radius, startAngle, endAngle, isCW),
+                            createReversePathAction: (path, offset) => path.absarc(cx - offset.x, cy - offset.y, radius, endAngle, startAngle, !isCW),
+                            type: 'POLYSEGMENT_ARC'
+                        });
+                    } else {
+                        segments.push({
+                            start: p1,
+                            end: p2,
+                            createPathAction: (path, offset) => path.lineTo(p2.x - offset.x, p2.y - offset.y),
+                            createReversePathAction: (path, offset) => path.lineTo(p1.x - offset.x, p1.y - offset.y),
+                            type: 'POLYSEGMENT'
+                        });
+                    }
                 }
             }
         } else if (entity.type === 'SPLINE') {
