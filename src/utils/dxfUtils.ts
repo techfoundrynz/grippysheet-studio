@@ -1,7 +1,7 @@
 import DxfParser from 'dxf-parser';
 import * as THREE from 'three';
 
-const EPSILON = 0.001; // Tolerance for connecting points
+const EPSILON = 0.15; // Tolerance for connecting points
 
 interface PathSegment {
     start: THREE.Vector2;
@@ -10,6 +10,40 @@ interface PathSegment {
     createReversePathAction: (path: THREE.Path, offset: THREE.Vector2) => void;
     type: string;
 }
+
+const getExtrusion = (entity: any): THREE.Vector3 => {
+    if (entity.extrusionDirectionX !== undefined && entity.extrusionDirectionY !== undefined && entity.extrusionDirectionZ !== undefined) {
+        return new THREE.Vector3(entity.extrusionDirectionX, entity.extrusionDirectionY, entity.extrusionDirectionZ);
+    }
+    if (entity.extrusionDirection) {
+        return new THREE.Vector3(entity.extrusionDirection.x, entity.extrusionDirection.y, entity.extrusionDirection.z);
+    }
+    return new THREE.Vector3(0, 0, 1);
+};
+
+// DXF Arbitrary Axis Algorithm
+const getOCSBasis = (N: THREE.Vector3) => {
+    const threshold = 1.0 / 64.0;
+    const Ax = new THREE.Vector3();
+    const Ay = new THREE.Vector3();
+
+    if (Math.abs(N.x) < threshold && Math.abs(N.y) < threshold) {
+        Ax.crossVectors(new THREE.Vector3(0, 1, 0), N).normalize();
+    } else {
+        Ax.crossVectors(new THREE.Vector3(0, 0, 1), N).normalize();
+    }
+    Ay.crossVectors(N, Ax).normalize();
+    return { Ax, Ay, Az: N };
+};
+
+const transformPointToWCS = (x: number, y: number, z: number, basis: { Ax: THREE.Vector3, Ay: THREE.Vector3, Az: THREE.Vector3 }): THREE.Vector3 => {
+    // P_wcs = x * Ax + y * Ay + z * Az
+    const p = new THREE.Vector3();
+    p.addScaledVector(basis.Ax, x);
+    p.addScaledVector(basis.Ay, y);
+    p.addScaledVector(basis.Az, z);
+    return p;
+};
 
 export const parseDxfToShapes = (dxfString: string): THREE.Shape[] => {
     console.log('Starting DXF parse...');
@@ -28,18 +62,49 @@ export const parseDxfToShapes = (dxfString: string): THREE.Shape[] => {
         return [];
     }
 
+    // Determine Scale Factor (Target: Millimeters)
+    let scaleFactor = 1.0;
+    if (dxf.header && dxf.header['$INSUNITS'] !== undefined) {
+        const units = dxf.header['$INSUNITS'];
+        // DXF Unit Codes:
+        // 1 = Inches
+        // 2 = Feet
+        // 4 = Millimeters
+        // 5 = Centimeters
+        // 6 = Meters
+        switch (units) {
+            case 1: scaleFactor = 25.4; break; // Inches to mm
+            case 2: scaleFactor = 304.8; break; // Feet to mm
+            case 4: scaleFactor = 1.0; break; // mm to mm
+            case 5: scaleFactor = 10.0; break; // cm to mm
+            case 6: scaleFactor = 1000.0; break; // m to mm
+            default:
+                console.log(`Unknown or unsupported DXF unit code: ${units}. Assuming 1:1.`);
+                scaleFactor = 1.0;
+        }
+        console.log(`DXF Units: ${units}, Scale Factor to mm: ${scaleFactor}`);
+    } else {
+        console.log('No DXF units found ($INSUNITS). Assuming millimeters (1:1).');
+    }
+
     // 1. Collect all potential segments from entities
     const segments: PathSegment[] = [];
 
     dxf.entities.forEach((entity) => {
+        const extrusion = getExtrusion(entity);
+        const basis = getOCSBasis(extrusion);
+
         if (entity.type === 'LINE') {
             const line = entity as any;
             if (line.vertices && line.vertices.length >= 2) {
+                const startWCS = transformPointToWCS(line.vertices[0].x, line.vertices[0].y, line.vertices[0].z, basis);
+                const endWCS = transformPointToWCS(line.vertices[1].x, line.vertices[1].y, line.vertices[1].z, basis);
+
                 segments.push({
-                    start: new THREE.Vector2(line.vertices[0].x, line.vertices[0].y),
-                    end: new THREE.Vector2(line.vertices[1].x, line.vertices[1].y),
-                    createPathAction: (path, offset) => path.lineTo(line.vertices[1].x - offset.x, line.vertices[1].y - offset.y),
-                    createReversePathAction: (path, offset) => path.lineTo(line.vertices[0].x - offset.x, line.vertices[0].y - offset.y),
+                    start: new THREE.Vector2(startWCS.x * scaleFactor, startWCS.y * scaleFactor),
+                    end: new THREE.Vector2(endWCS.x * scaleFactor, endWCS.y * scaleFactor),
+                    createPathAction: (path, offset) => path.lineTo(endWCS.x * scaleFactor - offset.x, endWCS.y * scaleFactor - offset.y),
+                    createReversePathAction: (path, offset) => path.lineTo(startWCS.x * scaleFactor - offset.x, startWCS.y * scaleFactor - offset.y),
                     type: 'LINE'
                 });
             }
@@ -47,48 +112,76 @@ export const parseDxfToShapes = (dxfString: string): THREE.Shape[] => {
             const arc = entity as any;
             const cx = arc.center.x;
             const cy = arc.center.y;
+            const cz = arc.center.z || 0;
             const r = arc.radius;
-            // Angles: 
-            // DXF angles are CCW from X-axis.
-            const startAngle = arc.startAngle;
-            const endAngle = arc.endAngle;
 
-            const startX = cx + r * Math.cos(startAngle);
-            const startY = cy + r * Math.sin(startAngle);
-            const endX = cx + r * Math.cos(endAngle);
-            const endY = cy + r * Math.sin(endAngle);
+            const centerWCS = transformPointToWCS(cx, cy, cz, basis);
+
+            const startAngleOcs = arc.startAngle;
+            const endAngleOcs = arc.endAngle;
+
+            const startX_ocs = cx + r * Math.cos(startAngleOcs);
+            const startY_ocs = cy + r * Math.sin(startAngleOcs);
+            const startZ_ocs = cz;
+
+            const endX_ocs = cx + r * Math.cos(endAngleOcs);
+            const endY_ocs = cy + r * Math.sin(endAngleOcs);
+            const endZ_ocs = cz;
+
+            const startWCS = transformPointToWCS(startX_ocs, startY_ocs, startZ_ocs, basis);
+            const endWCS = transformPointToWCS(endX_ocs, endY_ocs, endZ_ocs, basis);
+
+            const startAngleWCS = Math.atan2(startWCS.y - centerWCS.y, startWCS.x - centerWCS.x);
+            const endAngleWCS = Math.atan2(endWCS.y - centerWCS.y, endWCS.x - centerWCS.x);
+
+            const isCounterClockwise = basis.Az.z > 0;
 
             segments.push({
-                start: new THREE.Vector2(startX, startY),
-                end: new THREE.Vector2(endX, endY),
-                // Forward: startAngle -> endAngle (CCW).
-                createPathAction: (path, offset) => path.absarc(cx - offset.x, cy - offset.y, r, startAngle, endAngle, false),
-                // Reverse: endAngle -> startAngle (CW).
-                createReversePathAction: (path, offset) => path.absarc(cx - offset.x, cy - offset.y, r, endAngle, startAngle, true),
+                start: new THREE.Vector2(startWCS.x * scaleFactor, startWCS.y * scaleFactor),
+                end: new THREE.Vector2(endWCS.x * scaleFactor, endWCS.y * scaleFactor),
+                createPathAction: (path, offset) => path.absarc(
+                    centerWCS.x * scaleFactor - offset.x,
+                    centerWCS.y * scaleFactor - offset.y,
+                    r * scaleFactor,
+                    startAngleWCS,
+                    endAngleWCS,
+                    !isCounterClockwise
+                ),
+                createReversePathAction: (path, offset) => path.absarc(
+                    centerWCS.x * scaleFactor - offset.x,
+                    centerWCS.y * scaleFactor - offset.y,
+                    r * scaleFactor,
+                    endAngleWCS,
+                    startAngleWCS,
+                    isCounterClockwise
+                ),
                 type: 'ARC'
             });
         } else if (entity.type === 'LWPOLYLINE' || entity.type === 'POLYLINE') {
             const poly = entity as any;
             if (poly.vertices && poly.vertices.length > 1) {
-                // Break polyline into individual segments to allow for partial stitching if needed, 
-                // OR treat as pre-stitched blocks. 
-                // Treat as individual segments is safer for mixed garbage input.
-                for (let i = 0; i < poly.vertices.length - 1; i++) {
+                const elevation = poly.elevation || 0;
+                const convertedVertices = poly.vertices.map((v: any) => {
+                    const wcs = transformPointToWCS(v.x, v.y, elevation, basis);
+                    return new THREE.Vector2(wcs.x * scaleFactor, wcs.y * scaleFactor);
+                });
+
+                for (let i = 0; i < convertedVertices.length - 1; i++) {
                     segments.push({
-                        start: new THREE.Vector2(poly.vertices[i].x, poly.vertices[i].y),
-                        end: new THREE.Vector2(poly.vertices[i + 1].x, poly.vertices[i + 1].y),
-                        createPathAction: (path, offset) => path.lineTo(poly.vertices[i + 1].x - offset.x, poly.vertices[i + 1].y - offset.y),
-                        createReversePathAction: (path, offset) => path.lineTo(poly.vertices[i].x - offset.x, poly.vertices[i].y - offset.y),
+                        start: convertedVertices[i],
+                        end: convertedVertices[i + 1],
+                        createPathAction: (path, offset) => path.lineTo(convertedVertices[i + 1].x - offset.x, convertedVertices[i + 1].y - offset.y),
+                        createReversePathAction: (path, offset) => path.lineTo(convertedVertices[i].x - offset.x, convertedVertices[i].y - offset.y),
                         type: 'POLYSEGMENT'
                     });
                 }
                 if (poly.shape || poly.closed) {
-                    const last = poly.vertices.length - 1;
+                    const last = convertedVertices.length - 1;
                     segments.push({
-                        start: new THREE.Vector2(poly.vertices[last].x, poly.vertices[last].y),
-                        end: new THREE.Vector2(poly.vertices[0].x, poly.vertices[0].y),
-                        createPathAction: (path, offset) => path.lineTo(poly.vertices[0].x - offset.x, poly.vertices[0].y - offset.y),
-                        createReversePathAction: (path, offset) => path.lineTo(poly.vertices[last].x - offset.x, poly.vertices[last].y - offset.y),
+                        start: convertedVertices[last],
+                        end: convertedVertices[0],
+                        createPathAction: (path, offset) => path.lineTo(convertedVertices[0].x - offset.x, convertedVertices[0].y - offset.y),
+                        createReversePathAction: (path, offset) => path.lineTo(convertedVertices[last].x - offset.x, convertedVertices[last].y - offset.y),
                         type: 'POLYSEGMENT'
                     });
                 }
@@ -100,10 +193,13 @@ export const parseDxfToShapes = (dxfString: string): THREE.Shape[] => {
             const degree = spline.degreeOfSplineCurve || 3;
 
             if (controlPoints && controlPoints.length > degree && knots && knots.length > 0) {
+                // Scale control points
+                const scaledCP = controlPoints.map((p: any) => ({ x: p.x * scaleFactor, y: p.y * scaleFactor }));
+
                 // Interpolate BSpline
                 const resolution = 20; // Points per knot span. 
                 // Adjust based on needs. 4 spans * 20 = 80 points.
-                const interpolatedPoints = interpolateBSpline(controlPoints, degree, knots, resolution);
+                const interpolatedPoints = interpolateBSpline(scaledCP, degree, knots, resolution);
 
                 if (interpolatedPoints.length > 1) {
                     segments.push({
@@ -126,10 +222,10 @@ export const parseDxfToShapes = (dxfString: string): THREE.Shape[] => {
                 // Fallback to linear if data missing
                 for (let i = 0; i < controlPoints.length - 1; i++) {
                     segments.push({
-                        start: new THREE.Vector2(controlPoints[i].x, controlPoints[i].y),
-                        end: new THREE.Vector2(controlPoints[i + 1].x, controlPoints[i + 1].y),
-                        createPathAction: (path, offset) => path.lineTo(controlPoints[i + 1].x - offset.x, controlPoints[i + 1].y - offset.y),
-                        createReversePathAction: (path, offset) => path.lineTo(controlPoints[i].x - offset.x, controlPoints[i].y - offset.y),
+                        start: new THREE.Vector2(controlPoints[i].x * scaleFactor, controlPoints[i].y * scaleFactor),
+                        end: new THREE.Vector2(controlPoints[i + 1].x * scaleFactor, controlPoints[i + 1].y * scaleFactor),
+                        createPathAction: (path, offset) => path.lineTo(controlPoints[i + 1].x * scaleFactor - offset.x, controlPoints[i + 1].y * scaleFactor - offset.y),
+                        createReversePathAction: (path, offset) => path.lineTo(controlPoints[i].x * scaleFactor - offset.x, controlPoints[i].y * scaleFactor - offset.y),
                         type: 'SPLINE_LINEAR_FALLBACK'
                     });
                 }
@@ -138,26 +234,26 @@ export const parseDxfToShapes = (dxfString: string): THREE.Shape[] => {
             const circle = entity as any;
             const cx = circle.center.x;
             const cy = circle.center.y;
+            const cz = circle.center.z || 0;
             const r = circle.radius;
-            // Circle is a closed loop. Start/End are same.
-            // Start at 0 radians.
-            const startEnd = new THREE.Vector2(cx + r, cy);
+
+            const centerWCS = transformPointToWCS(cx, cy, cz, basis);
 
             segments.push({
-                start: startEnd,
-                end: startEnd,
-                createPathAction: (path, offset) => path.absarc(cx - offset.x, cy - offset.y, r, 0, 2 * Math.PI, false),
-                createReversePathAction: (path, offset) => path.absarc(cx - offset.x, cy - offset.y, r, 2 * Math.PI, 0, true),
+                start: new THREE.Vector2(centerWCS.x * scaleFactor + r * scaleFactor, centerWCS.y * scaleFactor),
+                end: new THREE.Vector2(centerWCS.x * scaleFactor + r * scaleFactor, centerWCS.y * scaleFactor),
+                createPathAction: (path, offset) => path.absarc(centerWCS.x * scaleFactor - offset.x, centerWCS.y * scaleFactor - offset.y, r * scaleFactor, 0, 2 * Math.PI, false),
+                createReversePathAction: (path, offset) => path.absarc(centerWCS.x * scaleFactor - offset.x, centerWCS.y * scaleFactor - offset.y, r * scaleFactor, 2 * Math.PI, 0, true),
                 type: 'CIRCLE'
             });
         } else if (entity.type === 'ELLIPSE') {
             const ellipse = entity as any;
-            const cx = ellipse.center.x;
-            const cy = ellipse.center.y;
+            const cx = ellipse.center.x * scaleFactor;
+            const cy = ellipse.center.y * scaleFactor;
 
             // Major axis vector
-            const mx = ellipse.majorAxisEndPoint.x;
-            const my = ellipse.majorAxisEndPoint.y;
+            const mx = ellipse.majorAxisEndPoint.x * scaleFactor;
+            const my = ellipse.majorAxisEndPoint.y * scaleFactor;
 
             const majorRadius = Math.sqrt(mx * mx + my * my);
             const minorRadius = majorRadius * ellipse.axisRatio;
@@ -483,4 +579,3 @@ export const generateSVGPath = (shapes: THREE.Shape[]): string => {
     });
     return pathData;
 };
-

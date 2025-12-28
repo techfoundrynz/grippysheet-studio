@@ -35,7 +35,7 @@ const PRESETS: PatternPreset[] = [
     { name: "MatixBuilt", file: "matixbuilt.svg", type: "svg", category: "inlays", keepOriginalColors: true },
 
     // Outlines
-    // { name: 'XR Stock', file: 'xrstock.dxf', type: 'dxf', category: 'outlines', infoUrl: 'https://www.printables.com/model/968803' },
+    { name: 'XR Stock', file: 'xrstock.dxf', type: 'dxf', category: 'outlines', infoUrl: 'https://www.printables.com/model/968803' },
     { name: 'XR Cobra/Viper', file: 'xrcobraviper.dxf', type: 'dxf', category: 'outlines', infoUrl: 'https://www.printables.com/model/968803' },
     { name: 'XR Kush Wide', file: 'xrkushwide.dxf', type: 'dxf', category: 'outlines', infoUrl: 'https://www.printables.com/model/968803' },
     { name: 'XR Mushies V2', file: 'xrmushiesv2.dxf', type: 'dxf', category: 'outlines', infoUrl: 'https://www.printables.com/model/968803' },
