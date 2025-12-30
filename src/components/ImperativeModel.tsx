@@ -1,9 +1,12 @@
 import React, { useEffect, useRef, useMemo } from 'react';
+import { eventBus } from "../utils/eventBus";
 import * as THREE from 'three';
 import { Brush, Evaluator, SUBTRACTION, INTERSECTION } from 'three-bvh-csg';
 import { mergeGeometries, mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { generateTilePositions, getShapesBounds, calculateInlayOffset } from '../utils/patternUtils';
+import { generateTilePositions, getShapesBounds } from '../utils/patternUtils';
 import { offsetShape, unionShapes } from '../utils/offsetUtils';
+
+import { InlayItem } from '../types/schemas';
 
 interface ImperativeModelProps {
   size: number;
@@ -28,15 +31,9 @@ interface ImperativeModelProps {
   clipToOutline?: boolean;
   baseOutlineRotation?: number; // Rotates the BASE shape
   baseOutlineMirror?: boolean; // Mirrors the BASE shape
-  inlayShapes?: any[] | null | undefined;
-  inlayDepth?: number;
-  inlayScale?: number;
-  inlayRotation?: number;
-  inlayExtend?: number;
-  inlayMirror?: boolean;
-  inlayPosition?: 'center' | 'top' | 'bottom' | 'left' | 'right' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'manual';
-  inlayPositionX?: number;
-  inlayPositionY?: number;
+  
+  inlayItems?: InlayItem[];
+  
   wireframeBase?: boolean;
   wireframeInlay?: boolean;
   wireframePattern?: boolean;
@@ -49,6 +46,7 @@ interface ImperativeModelProps {
   debugShowHoleCutter?: boolean;
   debugShowInlayCutter?: boolean;
   isDragging?: boolean;
+  previewInlay?: InlayItem | null;
 }
 
 
@@ -80,15 +78,7 @@ const ImperativeModel = React.forwardRef((props: ImperativeModelProps, ref: Reac
   clipToOutline = false,
   baseOutlineRotation = 0,
   baseOutlineMirror = false,
-  inlayShapes,
-  inlayDepth = 0.6,
-  inlayScale = 1,
-  inlayRotation = 0,
-  inlayExtend = 0,
-  inlayMirror = false,
-  inlayPosition = 'center',
-  inlayPositionX = 0,
-  inlayPositionY = 0,
+  inlayItems = [],
   wireframeBase = false,
   wireframeInlay = false,
   wireframePattern = false,
@@ -98,6 +88,7 @@ const ImperativeModel = React.forwardRef((props: ImperativeModelProps, ref: Reac
   debugShowHoleCutter = false,
   debugShowInlayCutter = false,
   isDragging = false,
+  previewInlay = null,
   } = props;
   const localGroupRef = useRef<THREE.Group>(null);
   
@@ -300,10 +291,9 @@ const ImperativeModel = React.forwardRef((props: ImperativeModelProps, ref: Reac
         group.remove(obj);
     });
 
-    if (!inlayShapes || inlayShapes.length === 0) return;
+    if (!inlayItems || inlayItems.length === 0) return;
     
     // Cleanup existing Inlay Debug Meshes
-    // We must find any object starting with "Debug_Inlay_Cutter_", "Debug_Inlay_Waste_", or "Debug_Hole_Waste_Inlay_"
     const objectsToRemove: THREE.Object3D[] = [];
     group.children.forEach(child => {
         if (
@@ -329,208 +319,252 @@ const ImperativeModel = React.forwardRef((props: ImperativeModelProps, ref: Reac
         inlayGroup.name = 'InlayGroup';
         group.add(inlayGroup);
     } else {
-        // Clear children
         inlayGroup.clear();
     }
-
-    // Move Inlay logic result directly into inlayGroup or keep logic same but add to inlayGroup instead of group
     
-    // ... (rest of logic)
-
-    // Wait, the logic below adds meshes to `group`. I need to change `group.add(mesh)` to `inlayGroup.add(mesh)`.
-    // And for debug meshes, they can stay in root or go in group? 
-    // Debug meshes (waste/cutter) should possibly stay in root or be managed similarly. 
-    // They are named `Debug_...`. The clear logic at line 301 removes them from `group`.
-    // So I only need to change where the finalized "Inlay_i" meshes are added.
-    
-    // --- Pre-calculate Group Bounds for Positioning ---
-    const { x: globalDx, y: globalDy } = calculateInlayOffset(
-        inlayShapes,
-        filledCutoutShapes,
-        size,
-        {
-            inlayScale,
-            inlayRotation,
-            inlayMirror,
-            inlayPosition,
-            inlayPositionX,
-            inlayPositionY
-        }
-    );
-
-    // Apply offset to GROUP, not geometry.
-    // This ensures TransformControls gizmo is at the visual center of the inlay.
-    // If dragging, we STILL need to update the position, but avoid slow CSG recals.
-    // Since we filtered out CSG below with `if(isDragging)`, this position update is cheap.
-    // However, the `isDragging` condition here previously BLOCKED the update to avoid fighting with TransformControls?
-    // No, with the new `InlayInteractionHandles`, we drive the `inlayPositionX/Y` state directly.
-    // So we SHOULD update this position every render, even during drag!
-    
-    inlayGroup.position.set(globalDx, globalDy, 0);
-    inlayGroup.scale.set(1, 1, 1); // Always reset scale as it's baked into geometry
+    // Since we have multiple independent items, the "Group" position concept is less relevant
+    // UNLESS we want to group them all relative to 0,0.
+    // Let's keep InlayGroup at (0,0,0) and position meshes inside it.
+    inlayGroup.position.set(0, 0, 0);
+    inlayGroup.scale.set(1, 1, 1);
     inlayGroup.rotation.set(0, 0, 0); 
 
-    inlayShapes.forEach((item, i) => {
-        if (item.color === 'transparent') return;
+    // Merge previewInlay with inlayItems for rendering
+    const itemsToRender = previewInlay 
+        ? inlayItems.map(item => item.id === previewInlay.id ? previewInlay : item)
+        : inlayItems;
 
-        // Generate Inlays
-        const totalDepth = inlayDepth + Number(inlayExtend || 0) + ((i + 1) * 0.001);
-        const mat = createMaterial(item.color === 'base' ? color : item.color, false, 1.0, wireframeInlay);
-
-        // Transform Shape if Mirror is required (to avoid negative scale on Geometry causing CSG issues)
-        let shapeToExtrude = item.shape;
-        if (inlayMirror) {
-             const pts = item.shape.getPoints().map((p: THREE.Vector2) => new THREE.Vector2(-p.x, p.y));
-             // Mirror flips winding (CCW -> CW). Restore CCW by key reversal.
-             pts.reverse();
-             
-             const newShape = new THREE.Shape(pts);
-             if (item.shape.holes && item.shape.holes.length > 0) {
-                 item.shape.holes.forEach((h: THREE.Path) => {
-                      let hPts = h.getPoints().map((p: THREE.Vector2) => new THREE.Vector2(-p.x, p.y));
-                      // Mirror flips winding (CW -> CCW). Restore CW by key reversal.
-                      hPts.reverse();
-                      newShape.holes.push(new THREE.Path(hPts));
-                 });
-             }
-             shapeToExtrude = newShape;
-        }
-
-        const geo = new THREE.ExtrudeGeometry(shapeToExtrude, { depth: totalDepth, bevelEnabled: false });
+    itemsToRender.forEach((item, i) => {
+        // Check if this is the preview item (skip CSG for it)
+        const isPreviewItem = previewInlay && item.id === previewInlay.id;
         
-        // 1. Bake transforms (Scale/Rotate)
-        // Note: We do NOT bake Translation here anymore.
-        geo.translate(0, 0, thickness - inlayDepth);
+        // Calculate offset for THIS specific item
+        // We use the "manual" position logic for all items now, as x/y are stored on the item.
+        // If the user wants "center" or "top-left", the UI calculates those coords and saves them to x/y.
+        // Wait, the schema still had specific x/y. 
+        // But previously `calculateInlayOffset` handled alignment logic.
+        // Since we removed alignment props from Item schema (only x/y/scale/rotation), 
+        // we assume the UI handles "Snap to Top Left" by setting X/Y.
+        // However, `calculateInlayOffset` logic relies on bbox. 
+        // For now, let's treat item.x/item.y as absolute offsets from center (0,0).
         
-        geo.applyMatrix4(new THREE.Matrix4().makeScale(inlayScale, inlayScale, 1));
-        if (inlayRotation !== 0) {
-            geo.applyMatrix4(new THREE.Matrix4().makeRotationZ(inlayRotation * (Math.PI / 180)));
-        }
+        const dx = item.x || 0;
+        const dy = item.y || 0;
 
-        // VALIDATION: Check if geometry is valid before proceeding
-        if (!geo.attributes.position || geo.attributes.position.count === 0) {
-             console.warn(`Skipping Inlay ${i}: Invalid geometry generated from shape.`);
-             geo.dispose();
-             return;
-        }
+        const shapeList = item.shapes || [];
 
-        // Check if we need CSG
-        const needsClipping = filledCutoutShapes && filledCutoutShapes.length > 0;
-        const hasHoles = holeShapes && holeShapes.length > 0;
+        shapeList.forEach((shapeParams: any, shapeIdx: number) => {
+            const rawShape = shapeParams.shape || shapeParams;
+            const shapeColor = shapeParams.color || 'white';
+            
+            if (shapeColor === 'transparent') return;
 
-        if ((!needsClipping && !hasHoles) || isDragging) {
-             // Fast Path (No CSG)
-             // When dragging, we show the full, uncut model for better feedback/performance
-             const mesh = new THREE.Mesh(geo, mat);
-             mesh.name = `Inlay_${i}`;
-             mesh.castShadow = true;
-             mesh.receiveShadow = true;
-             inlayGroup.add(mesh);
-        } else {
-            // CSG Path
-            try {
-                // 2. Setup Evaluator
-                const evaluator = new Evaluator();
-                evaluator.attributes = ['position', 'normal'];
+            const totalDepth = (item.depth || 0.6) + Number(item.extend || 0) + ((i + 1) * 0.001);
+            const mat = createMaterial(shapeColor === 'base' ? color : shapeColor, false, 1.0, wireframeInlay);
+            
+            // Fix Z-fighting with base
+            mat.polygonOffset = true;
+            mat.polygonOffsetFactor = -1;
+            mat.polygonOffsetUnits = -1;
 
-                let resultBrush = new Brush(geo);
-                // IMPORTANT: Move brush to match Group position for calculation against Cutter (which is at 0,0,0)
-                resultBrush.position.set(globalDx, globalDy, 0);
-                resultBrush.updateMatrixWorld();
-
-                // 3. Subtract Holes
-                if (hasHoles) {
-                    const holeDepth = thickness + Math.max(Number(patternScaleZ || 0), Number(inlayExtend || 0)) + 20;
-                    const holeGeo = new THREE.ExtrudeGeometry(holeShapes, { depth: holeDepth, bevelEnabled: false });
-                    
-                    if (holeGeo.attributes.position && holeGeo.attributes.position.count > 0) {
-                        const holeBrush = new Brush(holeGeo);
-                        holeBrush.position.z = -10;
-                        holeBrush.updateMatrixWorld();
-                        
-                        try {
-                             const wasteBrush = evaluator.evaluate(resultBrush, holeBrush, INTERSECTION);
-                             if (wasteBrush && wasteBrush.geometry && wasteBrush.geometry.attributes.position && wasteBrush.geometry.attributes.position.count > 0) {
-                                // Waste mesh needs to be put in Root (to avoid double offset) or InlayGroup?
-                                // If InlayGroup is offset, and we add mesh to it, mesh is offset.
-                                // Result of CSG is in World Coords (where resultBrush was).
-                                // So resulting geometry is at (globalDx, globalDy).
-                                // If we put it in InlayGroup (which is at globalDx, globalDy), we double offset!
-                                // We must move resulting geometry BACK to local origin of InlayGroup.
-                                wasteBrush.geometry.translate(-globalDx, -globalDy, 0);
-
-                                const wasteMat = new THREE.MeshBasicMaterial({ color: 0xff0000, opacity: 0.5, transparent: true, side: THREE.DoubleSide, depthWrite: false });
-                                const wasteMesh = new THREE.Mesh(wasteBrush.geometry, wasteMat);
-                                wasteMesh.name = `Debug_Hole_Waste_Inlay_${i}`;
-                                wasteMesh.visible = !!debugShowHoleCutter;
-                                inlayGroup.add(wasteMesh);
-                             }
-
-                            resultBrush = evaluator.evaluate(resultBrush, holeBrush, SUBTRACTION);
-                        } catch (err) {
-                            console.warn("Error during Inlay Hole subtraction:", err);
-                        }
-                    }
-                    holeGeo.dispose();
-                }
-
-                // 4. Clip to Outline
-                if (needsClipping) {
-                    const cutterDepth = thickness + Math.max(Number(patternScaleZ || 0), Number(inlayExtend || 0)) + 5;
-                    const cutterGeo = new THREE.ExtrudeGeometry(filledCutoutShapes, { depth: cutterDepth, bevelEnabled: false });
-                    
-                    if (cutterGeo.attributes.position && cutterGeo.attributes.position.count > 0) {
-                        const cutterBrush = new Brush(cutterGeo);
-                        cutterBrush.updateMatrixWorld();
-                        
-                        try {
-                            const wasteBrush = evaluator.evaluate(resultBrush, cutterBrush, SUBTRACTION);
-                             if (wasteBrush && wasteBrush.geometry && wasteBrush.geometry.attributes.position && wasteBrush.geometry.attributes.position.count > 0) {
-                                wasteBrush.geometry.translate(-globalDx, -globalDy, 0); // Localize
-                                const wasteMat = new THREE.MeshBasicMaterial({ color: 0x00ff00, opacity: 0.5, transparent: true, side: THREE.DoubleSide, depthWrite: false });
-                                const wasteMesh = new THREE.Mesh(wasteBrush.geometry, wasteMat);
-                                wasteMesh.name = `Debug_Inlay_Waste_${i}`;
-                                wasteMesh.visible = !!debugShowInlayCutter;
-                                inlayGroup.add(wasteMesh);
-                             }
-
-                            resultBrush = evaluator.evaluate(resultBrush, cutterBrush, INTERSECTION);
-                            
-                            // Debug cutter is in world space (0,0,0). Add to root.
-                            // Or, if we want to add to inlayGroup, we must inverse translate.
-                            // Let's add debug cutter to ROOT since it represents the Base.
-                            const debugMat = new THREE.MeshBasicMaterial({ color: 0x00ff00, opacity: 0.01, transparent: true, side: THREE.DoubleSide, depthWrite: false });
-                            const debugMesh = new THREE.Mesh(cutterGeo.clone(), debugMat);
-                            debugMesh.name = `Debug_Inlay_Cutter_${i}`;
-                            debugMesh.visible = !!debugShowInlayCutter;
-                            // Ensure we clean up previous debug meshes in root if we add them there
-                            // Our cleanup loop at start handles root children.
-                            group.add(debugMesh); 
-                        } catch (err) {
-                            console.warn("Error during Inlay Clipping:", err);
-                        }
-                    }
-                    cutterGeo.dispose();
-                }
-
-                if (resultBrush && resultBrush.geometry && resultBrush.geometry.attributes.position && resultBrush.geometry.attributes.position.count > 0) {
-                    // Localize result geometry to InlayGroup space
-                    resultBrush.geometry.translate(-globalDx, -globalDy, 0);
-
-                    const mesh = new THREE.Mesh(resultBrush.geometry, mat);
-                    mesh.name = `Inlay_${i}`;
-                    mesh.castShadow = true;
-                    mesh.receiveShadow = true;
-                    inlayGroup.add(mesh);
-                }
-            } catch (error) {
-                console.error(`CSG Error on Inlay ${i}`, error);
-                geo.dispose();
+             // Transform Shape if Mirror is required
+            let shapeToExtrude = rawShape;
+            if (item.mirror) {
+                 const pts = rawShape.getPoints().map((p: THREE.Vector2) => new THREE.Vector2(-p.x, p.y));
+                 pts.reverse(); // Fix winding
+                 
+                 const newShape = new THREE.Shape(pts);
+                 if (rawShape.holes && rawShape.holes.length > 0) {
+                     rawShape.holes.forEach((h: THREE.Path) => {
+                          let hPts = h.getPoints().map((p: THREE.Vector2) => new THREE.Vector2(-p.x, p.y));
+                          hPts.reverse(); // Fix winding
+                          newShape.holes.push(new THREE.Path(hPts));
+                     });
+                 }
+                 shapeToExtrude = newShape;
             }
-        }
+
+            const geo = new THREE.ExtrudeGeometry(shapeToExtrude, { depth: totalDepth, bevelEnabled: false });
+            
+            // 1. Bake transforms (Scale/Rotate)
+            // LIFT slightly primarily to avoid Z-fighting
+            // Add slight Z-offset based on shape index to prevent z-fighting between stacked inlay shapes
+            const shapeZOffset = shapeIdx * 0.002;
+            geo.translate(0, 0, thickness - (item.depth || 0.6) + 0.1 + shapeZOffset);
+            
+            geo.applyMatrix4(new THREE.Matrix4().makeScale(item.scale, item.scale, 1));
+            
+            if (item.rotation !== 0) {
+                geo.applyMatrix4(new THREE.Matrix4().makeRotationZ(item.rotation * (Math.PI / 180)));
+            }
+
+            // 2. Apply Position (Translate to item location)
+            // Note: We bake this into geometry so CSG works easily in world space (relative to (0,0) center)
+            geo.translate(dx, dy, 0);
+
+            // VALIDATION
+            if (!geo.attributes.position || geo.attributes.position.count === 0) {
+                 geo.dispose();
+                 return;
+            }
+
+            // Check CSG - Skip CSG for preview items
+            const needsClipping = filledCutoutShapes && filledCutoutShapes.length > 0;
+            const hasHoles = holeShapes && holeShapes.length > 0;
+
+            if ((!needsClipping && !hasHoles) || isPreviewItem) {
+                 // Fast Path
+                 const mesh = new THREE.Mesh(geo, mat);
+                 mesh.name = `Inlay_${item.id}_${shapeIdx}`;
+                 mesh.castShadow = true;
+                 mesh.receiveShadow = true;
+                 inlayGroup.add(mesh);
+            } else {
+                try {
+                    const evaluator = new Evaluator();
+                    evaluator.attributes = ['position', 'normal'];
+                    let resultBrush = new Brush(geo);
+                    resultBrush.updateMatrixWorld();
+
+                     // 3. Subtract Holes
+                    if (hasHoles) {
+                        const maxExtend = Math.max(...itemsToRender.map(it => it.extend || 0), 0);
+                        const holeDepth = thickness + Math.max(Number(patternScaleZ || 0), maxExtend) + 20;
+                        const holeGeo = new THREE.ExtrudeGeometry(holeShapes, { depth: holeDepth, bevelEnabled: false });
+                        
+                        if (holeGeo.attributes.position && holeGeo.attributes.position.count > 0) {
+                            const holeBrush = new Brush(holeGeo);
+                            holeBrush.position.z = -10;
+                            holeBrush.updateMatrixWorld();
+                            
+                            try {
+                                 // Only generate debug waste for the FIRST shape of the FIRST item to avoid clutter?
+                                 // Or maybe valid debug per item.
+                                 if (debugShowHoleCutter && i === 0 && shapeIdx === 0) {
+                                     const wasteBrush = evaluator.evaluate(resultBrush, holeBrush, INTERSECTION);
+                                     if (wasteBrush && wasteBrush.geometry && wasteBrush.geometry.attributes.position && wasteBrush.geometry.attributes.position.count > 0) {
+                                        // Since we already baked translation into resultBrush geometry, 
+                                        // wasteBrush geometry is in World Space (correct).
+                                        // We add to inlayGroup (which is at 0,0,0). Correct.
+                                        const wasteMat = new THREE.MeshBasicMaterial({ color: 0xff0000, opacity: 0.5, transparent: true, side: THREE.DoubleSide, depthWrite: false });
+                                        const wasteMesh = new THREE.Mesh(wasteBrush.geometry, wasteMat);
+                                        wasteMesh.name = `Debug_Hole_Waste_Inlay_${i}`;
+                                        inlayGroup.add(wasteMesh);
+                                     }
+                                 }
+                                resultBrush = evaluator.evaluate(resultBrush, holeBrush, SUBTRACTION);
+                            } catch (err) { }
+                        }
+                        holeGeo.dispose();
+                    }
+
+                    // 4. Clip to Outline
+                    if (needsClipping) {
+                        const maxExtend = Math.max(...itemsToRender.map(it => it.extend || 0), 0);
+                        const cutterDepth = thickness + Math.max(Number(patternScaleZ || 0), maxExtend) + 5;
+                        const cutterGeo = new THREE.ExtrudeGeometry(filledCutoutShapes, { depth: cutterDepth, bevelEnabled: false });
+                        
+                        if (cutterGeo.attributes.position && cutterGeo.attributes.position.count > 0) {
+                            const cutterBrush = new Brush(cutterGeo);
+                            cutterBrush.updateMatrixWorld();
+                            try {
+                                if (debugShowInlayCutter && i === 0 && shapeIdx === 0) {
+                                     const wasteBrush = evaluator.evaluate(resultBrush, cutterBrush, SUBTRACTION);
+                                     if (wasteBrush && wasteBrush.geometry && wasteBrush.geometry.attributes.position && wasteBrush.geometry.attributes.position.count > 0) {
+                                        const wasteMat = new THREE.MeshBasicMaterial({ color: 0x00ff00, opacity: 0.5, transparent: true, side: THREE.DoubleSide, depthWrite: false });
+                                        const wasteMesh = new THREE.Mesh(wasteBrush.geometry, wasteMat);
+                                        wasteMesh.name = `Debug_Inlay_Waste_${i}`;
+                                        inlayGroup.add(wasteMesh);
+                                     }
+                                }
+                                resultBrush = evaluator.evaluate(resultBrush, cutterBrush, INTERSECTION);
+                                
+                                if (debugShowInlayCutter && i === 0 && shapeIdx === 0) {
+                                    const debugMat = new THREE.MeshBasicMaterial({ color: 0x00ff00, opacity: 0.01, transparent: true, side: THREE.DoubleSide, depthWrite: false });
+                                    const debugMesh = new THREE.Mesh(cutterGeo.clone(), debugMat);
+                                    debugMesh.name = `Debug_Inlay_Cutter_${i}`;
+                                    group.add(debugMesh); 
+                                }
+
+                            } catch (err) { }
+                        }
+                        cutterGeo.dispose();
+                    }
+
+                    if (resultBrush && resultBrush.geometry && resultBrush.geometry.attributes.position && resultBrush.geometry.attributes.position.count > 0) {
+                        const mesh = new THREE.Mesh(resultBrush.geometry, mat);
+                        mesh.name = `Inlay_${item.id}_${shapeIdx}`;
+                        mesh.castShadow = true;
+                        mesh.receiveShadow = true;
+                        inlayGroup.add(mesh);
+                    }
+                } catch (error) {
+                    geo.dispose();
+                }
+            }
+        });
     });
 
-  }, [inlayShapes, inlayDepth, inlayScale, inlayRotation, inlayExtend, inlayMirror, inlayPosition, inlayPositionX, inlayPositionY, thickness, color, wireframeInlay, clipToOutline, filledCutoutShapes, holeShapes, displayMode, isDragging]);
+  }, [inlayItems, thickness, color, wireframeInlay, clipToOutline, filledCutoutShapes, holeShapes, displayMode, isDragging, debugShowHoleCutter, debugShowInlayCutter, previewInlay]);
+
+    // Subscribe to Event Bus for high-performance live preview updates
+    // This allows us to move meshes during drag without React re-renders or regenerating geometry
+    useEffect(() => {
+        const handleInlayTransform = (newItem: any) => {
+            if (!newItem || !newItem.id) return;
+            
+            // Need to find inlayGroup dynamically because it's managed by another effect
+            const group = localGroupRef.current;
+            if (!group) return;
+            const inlayGroup = group.getObjectByName('InlayGroup');
+            if (!inlayGroup) return;
+
+            // Find the committed item (source of truth for baked geometry)
+            // We use the item from props, not the event, to know what the geometry *currently* is
+            const originalItem = inlayItems.find(i => i.id === newItem.id);
+            if (!originalItem) return;
+
+            // Find all meshes for this inlay
+            inlayGroup.children.forEach(child => {
+                if (child.name.startsWith(`Inlay_${newItem.id}_`)) {
+                    // Calculate Delta Transform: Target * Inverse(Original)
+                    const origScale = originalItem.scale;
+                    const origRot = originalItem.rotation * (Math.PI / 180);
+                    const origX = originalItem.x || 0;
+                    const origY = originalItem.y || 0;
+                    
+                    const mBaked = new THREE.Matrix4();
+                    mBaked.compose(
+                        new THREE.Vector3(origX, origY, 0),
+                        new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), origRot),
+                        new THREE.Vector3(origScale, origScale, 1)
+                    );
+
+                    const targetScale = newItem.scale;
+                    const targetRot = (newItem.rotation || 0) * (Math.PI / 180);
+                    const targetX = newItem.x || 0;
+                    const targetY = newItem.y || 0;
+
+                    const mTarget = new THREE.Matrix4();
+                    mTarget.compose(
+                        new THREE.Vector3(targetX, targetY, 0),
+                        new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), targetRot),
+                        new THREE.Vector3(targetScale, targetScale, 1)
+                    );
+
+                    // M_mesh = M_target * Inverse(M_baked)
+                    const mDelta = mTarget.multiply(mBaked.invert());
+                    
+                    child.matrix.copy(mDelta);
+                    child.matrixAutoUpdate = false;
+                    child.matrixWorldNeedsUpdate = true;
+                }
+            });
+        }
+
+        const cleanup = eventBus.on('INLAY_TRANSFORM', handleInlayTransform);
+        return () => cleanup();
+    }, [inlayItems]); // Re-subscribe if items change
 
 
   // --- 3. Pattern Construction (The Heavy Lifter) ---
@@ -652,83 +686,82 @@ const ImperativeModel = React.forwardRef((props: ImperativeModelProps, ref: Reac
     }
 
     // Determine Inlay Offsets for Cutouts
-    const { x: inlayDx, y: inlayDy } = calculateInlayOffset(
-        inlayShapes || [],
-        filledCutoutShapes,
-        size,
-        {
-            inlayScale,
-            inlayRotation,
-            inlayMirror,
-            inlayPosition,
-            inlayPositionX,
-            inlayPositionY
-        }
-    );
+    // Determine Inlay Offsets for Cutouts - NOW PER ITEM
+    
+    // Helper to scale and rotate shapes based on item properties
+    const getTransformedShapes = (mode: 'include' | 'exclude') => {
+        const resultShapes: THREE.Shape[] = [];
 
-
-
-    // Helper to scale and rotate shapes
-    const scaleShape = (original: any) => {
-        const shape = original.shape || original;
-        if (inlayScale === 1 && inlayRotation === 0 && inlayDx === 0 && inlayDy === 0) return shape;
-        
-        const newShape = new THREE.Shape();
-        
-        // Pre-calc rotation
-        const rad = inlayRotation * (Math.PI / 180);
-        const cos = Math.cos(rad);
-        const sin = Math.sin(rad);
-
-        const transform = (p: THREE.Vector2) => {
-            // 1. Scale (Mirror X if needed)
-            const sx = p.x * (inlayMirror ? -inlayScale : inlayScale);
-            const sy = p.y * inlayScale;
-            // 2. Rotate
-            let rx = sx * cos - sy * sin;
-            let ry = sx * sin + sy * cos;
+        inlayItems.forEach(item => {
+            const itemShapes = item.shapes || [];
+            // Filter shapes by mode? Currently shapes don't have individual modes, the item does? 
+            // Or does the shape inside the item have gripMode?
+            // The previous logic checked `s.gripMode` or `s.excludePattern`.
+            // Let's assume schema matches previous structure: shapes inside item have properties.
             
-            // 3. Translate (Positioning)
-            rx += inlayDx;
-            ry += inlayDy;
-
-            return new THREE.Vector2(rx, ry);
-        };
-        
-        // If mirroring, we might need to reverse winding order?
-        // ThreeJS standard: CCW = solid.
-        // If we flip X, CCW becomes CW.
-        // So if mirrored, we should reverse the point order to maintain CCW winding.
-        
-        const pts = shape.getPoints().map(transform);
-        if (inlayMirror) pts.reverse();
-
-        pts.forEach((p: THREE.Vector2, i: number) => {
-            if (i === 0) newShape.moveTo(p.x, p.y);
-            else newShape.lineTo(p.x, p.y);
-        });
-        
-        if (shape.holes && shape.holes.length > 0) {
-            shape.holes.forEach((h: THREE.Path) => {
-                const newHole = new THREE.Path();
-                h.getPoints().forEach((p: THREE.Vector2, i: number) => {
-                    const tp = transform(p);
-                    if (i === 0) newHole.moveTo(tp.x, tp.y);
-                    else newHole.lineTo(tp.x, tp.y);
-                });
-                newShape.holes.push(newHole);
+            const relevantShapes = itemShapes.filter((s: any) => {
+                 if (mode === 'exclude') return s.gripMode === 'exclude' || (!s.gripMode && s.excludePattern);
+                 if (mode === 'include') return s.gripMode === 'include';
+                 return false;
             });
-        }
-        return newShape;
+
+            relevantShapes.forEach((original: any) => {
+                const shape = original.shape || original;
+                const scale = item.scale || 1;
+                const rotation = item.rotation || 0;
+                const mirror = item.mirror || false;
+                const dx = item.x || 0;
+                const dy = item.y || 0;
+
+                const newShape = new THREE.Shape();
+                
+                // Pre-calc rotation
+                const rad = rotation * (Math.PI / 180);
+                const cos = Math.cos(rad);
+                const sin = Math.sin(rad);
+
+                const transform = (p: THREE.Vector2) => {
+                    // 1. Scale (Mirror X if needed)
+                    const sx = p.x * (mirror ? -scale : scale);
+                    const sy = p.y * scale;
+                    // 2. Rotate
+                    let rx = sx * cos - sy * sin;
+                    let ry = sx * sin + sy * cos;
+                    
+                    // 3. Translate (Positioning)
+                    rx += dx;
+                    ry += dy;
+
+                    return new THREE.Vector2(rx, ry);
+                };
+                
+                const pts = shape.getPoints().map(transform);
+                if (mirror) pts.reverse();
+
+                pts.forEach((p: THREE.Vector2, i: number) => {
+                    if (i === 0) newShape.moveTo(p.x, p.y);
+                    else newShape.lineTo(p.x, p.y);
+                });
+                
+                if (shape.holes && shape.holes.length > 0) {
+                    shape.holes.forEach((h: THREE.Path) => {
+                        const newHole = new THREE.Path();
+                        h.getPoints().forEach((p: THREE.Vector2, i: number) => {
+                            const tp = transform(p);
+                            if (i === 0) newHole.moveTo(tp.x, tp.y);
+                            else newHole.lineTo(tp.x, tp.y);
+                        });
+                        newShape.holes.push(newHole);
+                    });
+                }
+                resultShapes.push(newShape);
+            });
+        });
+        return resultShapes;
     };
 
-    const finalExclusionShapes = inlayShapes 
-        ? inlayShapes.filter(s => (s.gripMode === 'exclude' || (!s.gripMode && s.excludePattern))).map(scaleShape)
-        : [];
-
-    const finalInclusionShapes = inlayShapes
-        ? inlayShapes.filter(s => s.gripMode === 'include').map(scaleShape)
-        : [];
+    const finalExclusionShapes = getTransformedShapes('exclude');
+    const finalInclusionShapes = getTransformedShapes('include');
 
     const positions = isTiled ? generateTilePositions(
         bounds, pWidth, pHeight, tileSpacing, 
@@ -908,7 +941,8 @@ const ImperativeModel = React.forwardRef((props: ImperativeModelProps, ref: Reac
                 finalHoleShapes = unionShapes(finalHoleShapes);
             
                 // Calculate required cutter height: Base + Max Features + Margin
-                const holeDepth = thickness + Math.max(maxPatternHeight, Number(inlayExtend || 0)) + 20;
+                const maxInlayExtend = inlayItems.length > 0 ? Math.max(...inlayItems.map(it => it.extend || 0), 0) : 0;
+                const holeDepth = thickness + Math.max(maxPatternHeight, maxInlayExtend) + 20;
     
                 const holeGeo = new THREE.ExtrudeGeometry(finalHoleShapes, { depth: holeDepth, bevelEnabled: false });
                 
@@ -965,7 +999,8 @@ const ImperativeModel = React.forwardRef((props: ImperativeModelProps, ref: Reac
             }
 
             // Calculate required cutter height: Base + Max Features + Margin
-            const cutterDepth = thickness + Math.max(maxPatternHeight, Number(inlayExtend || 0)) + 5;
+            const maxInlayExtend = inlayItems.length > 0 ? Math.max(...inlayItems.map(it => it.extend || 0), 0) : 0;
+            const cutterDepth = thickness + Math.max(maxPatternHeight, maxInlayExtend) + 5;
 
             // Create simplified cutter geometry without bevels
             const cutterGeo = new THREE.ExtrudeGeometry(finalCutoutShapes, {
@@ -1070,7 +1105,7 @@ const ImperativeModel = React.forwardRef((props: ImperativeModelProps, ref: Reac
       patternColor, wireframePattern, 
       patternScale, patternScaleZ, 
       isTiled, tileSpacing, patternMargin, tilingDistribution, tilingOrientation, tilingDirection,
-      clipToOutline, displayMode, inlayShapes, inlayScale, inlayRotation, inlayMirror, inlayPosition, inlayPositionX, inlayPositionY, baseRotation, rotationClamp,
+      clipToOutline, displayMode, inlayItems, baseRotation, rotationClamp,
       thickness, filledCutoutShapes, holeShapes, patternShapes, size, patternMaxHeight,
       marginAppliesToHoles
   ]);

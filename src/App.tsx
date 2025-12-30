@@ -19,6 +19,12 @@ const App = () => {
   // Inlay Settings
   const [inlaySettings, setInlaySettings] = useState<InlaySettings>(defaultInlaySettings);
 
+  // Selected Inlay
+  const [selectedInlayId, setSelectedInlayId] = useState<string | null>(null);
+  
+  // Drag Preview Item (Lifted State)
+  const [previewInlay, setPreviewInlay] = useState<any>(null);
+
   // Welcome Modal State
   const [showWelcome, setShowWelcome] = useState(() => {
       // Check local storage on init
@@ -46,6 +52,7 @@ const App = () => {
       setBaseSettings(defaultBaseSettings);
       setGeometrySettings(defaultGeometrySettings);
       setInlaySettings(defaultInlaySettings);
+      setSelectedInlayId(null);
   };
 
   return (
@@ -62,6 +69,10 @@ const App = () => {
                   geometrySettings={geometrySettings}
                   meshRef={meshRef} 
                   activeTab={activeTab}
+                  selectedInlayId={selectedInlayId}
+                  setSelectedInlayId={setSelectedInlayId}
+                  previewInlay={previewInlay}
+                  setPreviewInlay={setPreviewInlay}
                 />
             </div>
         </div>
@@ -81,6 +92,8 @@ const App = () => {
               geometrySettings={geometrySettings}
               setGeometrySettings={setGeometrySettings}
               onReset={handleReset}
+              selectedInlayId={selectedInlayId}
+              setSelectedInlayId={setSelectedInlayId}
               onOpenWelcome={() => setShowWelcome(true)}
               isCollapsed={isControlsCollapsed}
               onToggleCollapse={() => setIsControlsCollapsed(!isControlsCollapsed)}

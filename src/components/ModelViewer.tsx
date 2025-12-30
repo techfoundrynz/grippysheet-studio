@@ -11,7 +11,7 @@ import { BaseSettings, InlaySettings, GeometrySettings } from '../types/schemas'
 import CameraRig, { ViewState } from './CameraRig';
 import FpsTracker from './FpsTracker';
 import ScreenshotManager from './ScreenshotManager';
-import { calculateInlayOffset } from '../utils/patternUtils';
+import { generateTilePositions, getShapesBounds } from '../utils/patternUtils';
 
 interface ModelViewerProps {
   baseSettings: BaseSettings;
@@ -19,7 +19,11 @@ interface ModelViewerProps {
   geometrySettings: GeometrySettings;
   meshRef: React.RefObject<THREE.Group | null>;
   onInlayChange?: (settings: InlaySettings) => void;
-  activeTab?: 'base' | 'inlay' | 'geometry';
+  selectedInlayId?: string | null;
+  setSelectedInlayId?: (id: string | null) => void;
+  previewInlay?: any;
+  setPreviewInlay?: (item: any) => void;
+  activeTab?: string;
 }
 
 const ModelViewer: React.FC<ModelViewerProps> = ({ 
@@ -28,14 +32,18 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
   geometrySettings,
   meshRef, 
   onInlayChange,
-  activeTab = 'base'
+  activeTab = 'base',
+  selectedInlayId,
+  setSelectedInlayId,
+  previewInlay,
+  setPreviewInlay
 }) => {
   const { size, thickness, color, cutoutShapes, baseOutlineRotation, baseOutlineMirror } = baseSettings;
   
-  const { 
-      inlayShapes, inlayDepth, inlayScale, inlayRotation, inlayExtend, inlayMirror, inlayPosition,
-      inlayPositionX, inlayPositionY
-  } = inlaySettings;
+
+// ... (skipping unchanged parts) ...
+
+
 
   const {
       patternShapes, patternType, patternScale, patternScaleZ,
@@ -95,7 +103,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
         const group = meshRef.current.getObjectByName('InlayGroup');
         setInlayGroup(group || null);
     }
-  }, [meshRef.current, inlaySettings.inlayShapes, isProcessing]);
+  }, [meshRef.current, inlaySettings.items, isProcessing]);
 
 
   const handleCapture = (bgColor: string | null) => {
@@ -449,15 +457,10 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
                 patternMaxHeight={geometrySettings.patternMaxHeight === '' ? undefined : Number(geometrySettings.patternMaxHeight)}
                 clipToOutline={clipToOutline}
                 marginAppliesToHoles={marginAppliesToHoles}
-                inlayShapes={inlayShapes}
-                inlayDepth={inlayDepth}
-                inlayScale={inlayScale}
-                inlayRotation={inlayRotation}
-                inlayExtend={inlayExtend}
-                inlayMirror={inlayMirror}
-                inlayPosition={inlayPosition}
-                inlayPositionX={inlayPositionX}
-                inlayPositionY={inlayPositionY}
+                
+                inlayItems={inlaySettings.items}
+                
+                
                 wireframeBase={wireframeState.base}
                 wireframeInlay={wireframeState.inlay}
                 wireframePattern={wireframeState.pattern}
@@ -470,15 +473,19 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
                 debugShowInlayCutter={debugState.inlay}
                 debugShowHoleCutter={debugState.holes}
                 isDragging={isDragging}
+                previewInlay={previewInlay}
             />
 
-        {activeTab === 'inlay' && inlayGroup && onInlayChange && (
+        {activeTab === 'inlay' && onInlayChange && (
             <InlayInteractionHandles
                 baseSettings={baseSettings}
                 inlaySettings={inlaySettings}
                 onInlayChange={onInlayChange}
                 setIsDragging={setIsDragging}
                 thickness={thickness}
+                selectedInlayId={selectedInlayId || null}
+                setSelectedInlayId={setSelectedInlayId}
+                setPreviewInlay={setPreviewInlay}
             />
         )}
         
@@ -512,35 +519,46 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
              })()
         )}
 
-        {outlineState.inlay && inlayShapes && inlayShapes.length > 0 && (() => {
+        {outlineState.inlay && inlaySettings.items && inlaySettings.items.length > 0 && inlaySettings.items.map((item, itemIdx) => {
              // Calculate effective position for the outline
-             const { x: dx, y: dy } = calculateInlayOffset(
-                inlayShapes,
-                baseSettings.cutoutShapes,
-                baseSettings.size,
-                inlaySettings
-            );
-
-            return inlayShapes.map((shape, i) => {
-                const rawPoints = shape.shape ? shape.shape.getPoints() : shape.getPoints();
-                // Apply mirror to points directly if needed
-                const points = inlayMirror 
+             // We use the item's x/y directly as we did in ImperativeModel
+             const dx = item.x || 0;
+             const dy = item.y || 0;
+             
+             const shapeList = item.shapes || [];
+             
+             return shapeList.map((shapeParams: any, shapeIdx: number) => {
+                const shape = shapeParams.shape || shapeParams;
+                const rawPoints = shape.getPoints();
+                
+                // 1. Mirror
+                // Mirroring flips X. 
+                let points = item.mirror 
                     ? rawPoints.map((p: THREE.Vector2) => new THREE.Vector2(-p.x, p.y)) 
                     : rawPoints;
 
+                // 2. We can't use simple <Line> rotation prop because we need to apply it around the center 
+                // BEFORE translation.
+                // Actually <Line> rotation rotates around the object's origin. 
+                // If we set position=[dx, dy], rotation will rotate around (dx, dy) which is what we want 
+                // IF the geometry is centered at 0,0.
+                
+                // However, mirroring reverses winding order which might not matter for a Line,
+                // but if we mirror points manually, we are good.
+                
                 return (
                 <Line
-                    key={`inlay-outline-${i}`}
+                    key={`inlay-outline-${item.id}-${shapeIdx}`}
                     points={points} 
                     color="#4ade80"
                     lineWidth={2}
-                    position={[dx, dy, thickness + 0.1 + ((i + 1) * 0.001)]}
-                    scale={[inlayScale, inlayScale, 1]}
-                    rotation={[0, 0, inlayRotation * (Math.PI / 180)]}
+                    position={[dx, dy, thickness + 0.1 + ((itemIdx + 1) * 0.001)]}
+                    scale={[item.scale, item.scale, 1]}
+                    rotation={[0, 0, item.rotation * (Math.PI / 180)]}
                 />
                 );
-            });
-        })()}
+             });
+        })}
 
         {outlineState.pattern && patternShapes && patternShapes.length > 0 && patternShapes[0] instanceof THREE.Shape && (
              <Line

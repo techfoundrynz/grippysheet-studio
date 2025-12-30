@@ -28,6 +28,8 @@ interface ControlsProps {
   exportControls?: React.ReactNode;
   activeTab: 'base' | 'inlay' | 'geometry';
   setActiveTab: (tab: 'base' | 'inlay' | 'geometry') => void;
+  selectedInlayId: string | null;
+  setSelectedInlayId: (id: string | null) => void;
 }
 
 const Controls: React.FC<ControlsProps> = ({
@@ -43,7 +45,9 @@ const Controls: React.FC<ControlsProps> = ({
   onToggleCollapse,
   exportControls,
   activeTab, 
-  setActiveTab
+  setActiveTab,
+  selectedInlayId,
+  setSelectedInlayId
 }) => {
   const { showAlert } = useAlert();
   // Lifted state
@@ -79,9 +83,11 @@ const Controls: React.FC<ControlsProps> = ({
       updateBase({ cutoutShapes: shapes });
 
       // 2. Check if we need to resize existing inlay (if it exists in inlaySettings)
-      if (inlaySettings.inlayShapes && inlaySettings.inlayShapes.length > 0) {
-           const scale = calculateInlayScale(inlaySettings.inlayShapes, shapes as THREE.Shape[], baseSettings.size);
-           updateInlay({ inlayScale: scale });
+      if (inlaySettings.items && inlaySettings.items.length > 0) {
+           // We might want to auto-scale ALL items or just the first one?
+           // For now, let's just leave it manual or auto-scale active item logic in InlayControls.
+           // The old logic was global inlayScale.
+           // Maybe we skip auto-scaling here for now as items are independent.
       }
   };
 
@@ -255,6 +261,8 @@ const Controls: React.FC<ControlsProps> = ({
                         cutoutShapes={baseSettings.cutoutShapes}
                         baseSize={baseSettings.size}
                         baseColor={baseSettings.color}
+                        selectedInlayId={selectedInlayId}
+                        setSelectedInlayId={setSelectedInlayId}
                     />
                 </div>
             </Freeze>

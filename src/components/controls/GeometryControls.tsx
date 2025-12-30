@@ -135,7 +135,7 @@ const GeometryControls: React.FC<GeometryControlsProps> = ({
   return (
     <section className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
       <ShapeUploader
-        label="Upload Grip Geometry"
+        label="Grip Geometry"
         shapes={
           patternShapes && patternShapes.length > 0 ? patternShapes : null
         }
@@ -502,20 +502,22 @@ const GeometryControls: React.FC<GeometryControlsProps> = ({
             </div>
 
             <div className="flex-1 min-w-0">
-               <ControlField
-                  label="Holes"
-                  tooltip="Apply margin to hole cutouts"
-               >
-                 <ToggleButton
-                   label={marginAppliesToHoles ? "Expanded" : "Exact"}
-                   isToggled={!!marginAppliesToHoles}
-                   onToggle={() =>
-                     updateSettings({ marginAppliesToHoles: !marginAppliesToHoles })
-                   }
-                   icon={<Scissors size={16} />}
-                 />
-               </ControlField>
-             </div>
+              <ControlField
+                label="Holes"
+                tooltip="Apply margin to hole cutouts"
+              >
+                <ToggleButton
+                  label={marginAppliesToHoles ? "Expanded" : "Exact"}
+                  isToggled={!!marginAppliesToHoles}
+                  onToggle={() =>
+                    updateSettings({
+                      marginAppliesToHoles: !marginAppliesToHoles,
+                    })
+                  }
+                  icon={<Scissors size={16} />}
+                />
+              </ControlField>
+            </div>
           </div>
 
           <div className="space-y-2 pt-2 border-t border-gray-800">

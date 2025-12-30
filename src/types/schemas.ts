@@ -16,16 +16,36 @@ export const BaseSettingsSchema = z.object({
     baseOutlineMirror: z.boolean().default(false),
 });
 
+export const InlayItemSchema = z.object({
+    id: z.string(),
+    name: z.string().optional(),
+    shapes: ThreeObjectsSchema.default([]),
+    scale: z.number().default(1),
+    rotation: z.number().default(0),
+    mirror: z.boolean().default(false),
+    x: z.number().default(0),
+    y: z.number().default(0),
+    depth: z.number().default(0.6),
+    extend: z.number().default(0),
+    positionPreset: z.enum(['center', 'top', 'bottom', 'left', 'right', 'top-left', 'top-right', 'bottom-left', 'bottom-right', 'manual']).default('center'),
+});
+
+export type InlayItem = z.infer<typeof InlayItemSchema>;
+
 export const InlaySettingsSchema = z.object({
-    inlayShapes: ThreeObjectsSchema.nullable().optional().default(null),
-    inlayDepth: z.number().default(0.6),
-    inlayScale: z.number().default(1),
-    inlayRotation: z.number().default(0),
-    inlayExtend: z.number().default(0),
-    inlayMirror: z.boolean().default(false),
-    inlayPosition: z.enum(['center', 'top', 'bottom', 'left', 'right', 'top-left', 'top-right', 'bottom-left', 'bottom-right', 'manual']).default('center'),
-    inlayPositionX: z.number().default(0),
-    inlayPositionY: z.number().default(0),
+    items: z.array(InlayItemSchema).default([{
+        id: 'default-layer',
+        name: 'Inlay Layer 1',
+        shapes: [],
+        scale: 1,
+        rotation: 0,
+        mirror: false,
+        x: 0,
+        y: 0,
+        depth: 0.6,
+        extend: 0,
+        positionPreset: 'center',
+    }]),
 });
 
 export const GeometrySettingsSchema = z.object({

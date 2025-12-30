@@ -3,7 +3,8 @@ import * as THREE from 'three';
 import { useThree, ThreeEvent, useFrame } from '@react-three/fiber';
 import { Line } from '@react-three/drei';
 import { BaseSettings, InlaySettings } from '../../types/schemas';
-import { calculateInlayOffset, getShapesBounds } from '../../utils/patternUtils';
+import { getShapesBounds, calculateInlayOffset } from '../../utils/patternUtils';
+import { eventBus } from "../../utils/eventBus";
 
 interface InlayInteractionHandlesProps {
     baseSettings: BaseSettings;
@@ -11,6 +12,9 @@ interface InlayInteractionHandlesProps {
     onInlayChange: (settings: InlaySettings) => void;
     setIsDragging: (isDragging: boolean) => void;
     thickness: number; // To position handles slightly above
+    selectedInlayId: string | null;
+    setSelectedInlayId?: (id: string | null) => void;
+    setPreviewInlay?: (item: any) => void;
 }
 
 const HANDLE_PIXEL_SIZE = 12; // Desired size in screen pixels
@@ -93,28 +97,39 @@ export const InlayInteractionHandles: React.FC<InlayInteractionHandlesProps> = (
     inlaySettings,
     onInlayChange,
     setIsDragging,
-    thickness
+    thickness,
+    selectedInlayId,
+    setSelectedInlayId,
+    setPreviewInlay
 }) => {
     const { camera, gl } = useThree();
     const planeRef = useRef(new THREE.Plane(new THREE.Vector3(0, 0, 1), 0));
     const [hovered, setHovered] = useState<'none' | 'body' | 'tl' | 'tr' | 'bl' | 'br' | 'rot'>('none');
+    const latestPreviewRef = useRef<any>(null);
+    const groupRef = useRef<THREE.Group>(null);
     
     // Refs to hold latest props
-    const latestProps = useRef({ baseSettings, inlaySettings, onInlayChange });
-    latestProps.current = { baseSettings, inlaySettings, onInlayChange };
+    const latestProps = useRef({ baseSettings, inlaySettings, onInlayChange, selectedInlayId });
+    latestProps.current = { baseSettings, inlaySettings, onInlayChange, selectedInlayId };
 
-    // Helper to get CURRENT effective position (handles auto-alignment)
-    const getEffectivePosition = () => {
-         const { x, y } = calculateInlayOffset(
-            inlaySettings.inlayShapes,
-            baseSettings.cutoutShapes,
-            baseSettings.size,
-            inlaySettings
-        );
-        return new THREE.Vector3(x, y, 0);
-    };
+    // Find Selected Item (Committed state)
+    const selectedItem = useMemo(() => {
+        return inlaySettings.items?.find(i => i.id === selectedInlayId) || null;
+    }, [inlaySettings.items, selectedInlayId]);
 
-    const effectivePos = getEffectivePosition();
+    // Use preview during drag (with snapped values), otherwise committed item
+    const displayItem = latestPreviewRef.current || selectedItem;
+
+    // Update outline box transform directly on every frame during drag (no React re-renders)
+    useFrame(() => {
+        if (groupRef.current && latestPreviewRef.current) {
+            const item = latestPreviewRef.current;
+            groupRef.current.position.set(item.x || 0, item.y || 0, thickness);
+            groupRef.current.rotation.set(0, 0, (item.rotation || 0) * (Math.PI / 180));
+            groupRef.current.scale.set(item.scale || 1, item.scale || 1, 1);
+        }
+    });
+
 
     // Track drag state
     const dragStartRef = useRef<{
@@ -127,16 +142,17 @@ export const InlayInteractionHandles: React.FC<InlayInteractionHandlesProps> = (
     } | null>(null);
 
 
-    // 1. Unrotated Bounds (unchanged logic)
+    // 1. Unrotated Bounds of the SHAPE itself (at scale 1) - Based on committed shapes
     const bounds = useMemo(() => {
-        if (!inlaySettings.inlayShapes || inlaySettings.inlayShapes.length === 0) {
-            return { min: new THREE.Vector2(-50, -50), max: new THREE.Vector2(50, 50), size: new THREE.Vector2(100, 100), center: new THREE.Vector2(0,0) };
+        if (!selectedItem || !selectedItem.shapes || selectedItem.shapes.length === 0) {
+             return { min: new THREE.Vector2(-50, -50), max: new THREE.Vector2(50, 50), size: new THREE.Vector2(100, 100), center: new THREE.Vector2(0,0) };
         }
-        const shapes = (inlaySettings.inlayShapes || []).map((s: any) => s.shape || s);
+        const shapes = selectedItem.shapes.map((s: any) => s.shape || s);
         return getShapesBounds(shapes);
-    }, [inlaySettings.inlayShapes]); 
+    }, [selectedItem]); 
 
-    // ... Helper functions (getHitPointNative, getHitPointR3F) ...
+
+    // ... Helper functions ...
     const getHitPointNative = (e: PointerEvent) => {
         const rect = gl.domElement.getBoundingClientRect();
         const x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
@@ -165,19 +181,27 @@ export const InlayInteractionHandles: React.FC<InlayInteractionHandlesProps> = (
         const point = getHitPointNative(e);
         if (!point) return;
 
-        const { inlaySettings: currentSettings, onInlayChange: currentOnChange } = latestProps.current;
+        const { inlaySettings: currentSettings, selectedInlayId: curId } = latestProps.current;
+        
+        // Find current item to update
+        if (!curId || !currentSettings.items) return;
+        const itemIndex = currentSettings.items.findIndex(i => i.id === curId);
+        if (itemIndex === -1) return;
+        
+        const curItem = currentSettings.items[itemIndex];
+        let newItem = { ...curItem };
+        let hasChanges = false;
 
         if (state.type === 'move') {
             const dx = point.x - state.startPoint.x;
             const dy = point.y - state.startPoint.y;
             
-            // Switch to manual and apply new position
-            currentOnChange({
-                ...currentSettings,
-                inlayPosition: 'manual',
-                inlayPositionX: state.startPos.x + dx,
-                inlayPositionY: state.startPos.y + dy
-            });
+            // Snap to 0.1mm increments
+            newItem.x = Math.round((state.startPos.x + dx) * 10) / 10;
+            newItem.y = Math.round((state.startPos.y + dy) * 10) / 10;
+            newItem.positionPreset = 'manual'; // Switch to manual when dragging
+            hasChanges = true;
+
         } else if (state.type === 'scale') {
             const center = new THREE.Vector3(state.startPos.x, state.startPos.y, 0);
             const curDist = point.distanceTo(center);
@@ -185,18 +209,27 @@ export const InlayInteractionHandles: React.FC<InlayInteractionHandlesProps> = (
             if (state.startDistance > 0.1) {
                 const ratio = curDist / state.startDistance;
                 let newScale = state.startScale * ratio;
-                newScale = Math.max(0.1, newScale);
+                newItem.scale = Math.max(0.01, Math.round(newScale * 20) / 20);
                 
-                // Switch to manual? Maybe not for Scaling?
-                // Scaling doesn't strictly require switching to manual position, 
-                // but usually direct manipulation implies taking control.
-                // However, scaling center-aligned object just scales it in place.
-                // We will KEEP current position mode if just scaling.
+                // Recalculate position if using a preset
+                if (newItem.positionPreset && newItem.positionPreset !== 'manual' && newItem.shapes && newItem.shapes.length > 0) {
+                    const { baseSettings } = latestProps.current;
+                    const offset = calculateInlayOffset(
+                        newItem.shapes,
+                        null,
+                        baseSettings.size,
+                        {
+                            inlayScale: newItem.scale,
+                            inlayRotation: newItem.rotation || 0,
+                            inlayMirror: newItem.mirror || false,
+                            inlayPosition: newItem.positionPreset,
+                        }
+                    );
+                    newItem.x = offset.x;
+                    newItem.y = offset.y;
+                }
                 
-                currentOnChange({
-                    ...currentSettings,
-                    inlayScale: newScale
-                });
+                hasChanges = true;
             }
         } else if (state.type === 'rotate') {
              const center = new THREE.Vector3(state.startPos.x, state.startPos.y, 0);
@@ -204,16 +237,40 @@ export const InlayInteractionHandles: React.FC<InlayInteractionHandlesProps> = (
              const startAngle = Math.atan2(state.startPoint.y - center.y, state.startPoint.x - center.x);
              
              let angleDiff = currentAngle - startAngle;
-             // Convert to degrees
              let degDiff = THREE.MathUtils.radToDeg(angleDiff);
              
-             let newRotation = (state.startRotation || 0) + degDiff;
+             // Snap to 1° increments
+             newItem.rotation = Math.round((state.startRotation || 0) + degDiff);
              
-             currentOnChange({
-                 ...currentSettings,
-                 inlayRotation: newRotation
-             });
+             // Recalculate position if using a preset
+             if (newItem.positionPreset && newItem.positionPreset !== 'manual' && newItem.shapes && newItem.shapes.length > 0) {
+                 const { baseSettings } = latestProps.current;
+                 const offset = calculateInlayOffset(
+                     newItem.shapes,
+                     null,
+                     baseSettings.size,
+                     {
+                         inlayScale: newItem.scale || 1,
+                         inlayRotation: newItem.rotation,
+                         inlayMirror: newItem.mirror || false,
+                         inlayPosition: newItem.positionPreset,
+                     }
+                 );
+                 newItem.x = offset.x;
+                 newItem.y = offset.y;
+             }
+             
+             hasChanges = true;
         }
+
+        if (hasChanges) {
+            // Only update ref for outline box - don't trigger re-renders during drag
+            latestPreviewRef.current = newItem;
+            
+            // Emit event for live preview in ImperativeModel (High Performance)
+            eventBus.emit('INLAY_TRANSFORM', newItem);
+        }
+
     }).current;
 
     const handleWindowUp = useRef((e: PointerEvent) => {
@@ -221,11 +278,33 @@ export const InlayInteractionHandles: React.FC<InlayInteractionHandlesProps> = (
         dragStartRef.current = null;
         window.removeEventListener('pointermove', handleWindowMove);
         window.removeEventListener('pointerup', handleWindowUp);
+
+        // Commit changes if we have a preview
+        if (latestPreviewRef.current) {
+             const { inlaySettings: currentSettings, onInlayChange: currentOnChange, selectedInlayId: curId } = latestProps.current;
+             if (curId && currentSettings.items) {
+                 const itemIndex = currentSettings.items.findIndex(i => i.id === curId);
+                 if (itemIndex !== -1) {
+                     const newItems = [...currentSettings.items];
+                     newItems[itemIndex] = latestPreviewRef.current;
+                     currentOnChange({
+                         ...currentSettings,
+                         items: newItems
+                     });
+                 }
+             }
+             if (setPreviewInlay) {
+                 setPreviewInlay(null);
+             }
+             latestPreviewRef.current = null;
+        }
+
     }).current;
 
 
     // 4. Initial Trigger
     const handlePointerDown = (e: ThreeEvent<PointerEvent>, type: 'move' | 'scale' | 'rotate') => {
+        if (!selectedItem) return;
         e.stopPropagation();
         (e.target as HTMLElement).setPointerCapture(e.pointerId);
 
@@ -234,19 +313,24 @@ export const InlayInteractionHandles: React.FC<InlayInteractionHandlesProps> = (
 
         setIsDragging(true);
         
-        // Calculate center based on CURRENT EFFECTIVE position, not just manual props
-        // This is crucial for 'center' mode etc.
-        const currentEffectivePos = getEffectivePosition();
-        const dist = point.distanceTo(currentEffectivePos);
+        // Center is the item's current position
+        const center = new THREE.Vector3(selectedItem.x || 0, selectedItem.y || 0, 0);
+        const dist = point.distanceTo(center);
 
         dragStartRef.current = {
             type,
             startPoint: point,
-            startPos: { x: currentEffectivePos.x, y: currentEffectivePos.y },
-            startScale: inlaySettings.inlayScale || 1,
-            startRotation: inlaySettings.inlayRotation || 0,
+            startPos: { x: center.x, y: center.y },
+            startScale: selectedItem.scale || 1,
+            startRotation: selectedItem.rotation || 0,
             startDistance: dist
         };
+        
+        // Initialize preview
+        if (setPreviewInlay) {
+            setPreviewInlay({ ...selectedItem });
+        }
+        latestPreviewRef.current = { ...selectedItem };
 
         window.addEventListener('pointermove', handleWindowMove);
         window.addEventListener('pointerup', handleWindowUp);
@@ -260,24 +344,9 @@ export const InlayInteractionHandles: React.FC<InlayInteractionHandlesProps> = (
         };
     }, []);
 
-
-    const width = bounds.size.x;
-    const height = bounds.size.y;
-    // ... corners logic
-    const halfW = width / 2;
-    const halfH = height / 2;
-
-    const corners = [
-        { x: -halfW, y: halfH, cursor: 'nw-resize', id: 'tl' },
-        { x: halfW, y: halfH, cursor: 'ne-resize', id: 'tr' },
-        { x: -halfW, y: -halfH, cursor: 'sw-resize', id: 'bl' },
-        { x: halfW, y: -halfH, cursor: 'se-resize', id: 'br' },
-    ];
-
     // ROTATION HANDLE
-    const invScale = 1 / (inlaySettings.inlayScale || 1);
-    const rotHandleY = halfH + (30 * 0.02) * invScale; 
-
+    const invScale = displayItem ? (1 / (displayItem.scale || 1)) : 1;
+    
     // --- Custom Cursors ---
     const createCursorUrl = (svgContent: string) => `url("data:image/svg+xml;utf8,${encodeURIComponent(svgContent.trim())}") 16 16, auto`;
 
@@ -366,12 +435,29 @@ export const InlayInteractionHandles: React.FC<InlayInteractionHandlesProps> = (
         return () => { if (!dragStartRef.current) setCursor('auto'); };
     }, [hovered]);
 
+    if (!displayItem || !displayItem.shapes || displayItem.shapes.length === 0) return null;
+
+    const width = bounds.size.x;
+    const height = bounds.size.y;
+    // ... corners logic
+    const halfW = width / 2;
+    const halfH = height / 2;
+
+    const corners = [
+        { x: -halfW, y: halfH, cursor: 'nw-resize', id: 'tl' },
+        { x: halfW, y: halfH, cursor: 'ne-resize', id: 'tr' },
+        { x: -halfW, y: -halfH, cursor: 'sw-resize', id: 'bl' },
+        { x: halfW, y: -halfH, cursor: 'se-resize', id: 'br' },
+    ];
+
+    const rotHandleY = halfH + (30 * 0.02) * invScale;
+
     return (
         <group
-            position={[effectivePos.x, effectivePos.y, thickness]} 
-            rotation={[0, 0, (inlaySettings.inlayRotation || 0) * (Math.PI / 180)]}
-            scale={[inlaySettings.inlayScale || 1, inlaySettings.inlayScale || 1, 1]}
-            // No R3F listeners here anymore
+            ref={groupRef}
+            position={[displayItem.x, displayItem.y, thickness]} 
+            rotation={[0, 0, (displayItem.rotation || 0) * (Math.PI / 180)]}
+            scale={[displayItem.scale || 1, displayItem.scale || 1, 1]}
         >
             <mesh
                 onPointerDown={(e) => handlePointerDown(e, 'move')}
@@ -418,7 +504,7 @@ export const InlayInteractionHandles: React.FC<InlayInteractionHandlesProps> = (
                 position={[0, rotHandleY, 0]}
                 setHovered={setHovered}
                 onDown={handlePointerDown}
-                inlayScale={inlaySettings.inlayScale || 1}
+                inlayScale={displayItem.scale || 1}
             />
             
             {corners.map((c) => (
@@ -428,7 +514,7 @@ export const InlayInteractionHandles: React.FC<InlayInteractionHandlesProps> = (
                     position={[c.x, c.y, 0]}
                     setHovered={setHovered}
                     onDown={handlePointerDown}
-                    inlayScale={inlaySettings.inlayScale || 1}
+                    inlayScale={displayItem.scale || 1}
                 />
             ))}
         </group>
