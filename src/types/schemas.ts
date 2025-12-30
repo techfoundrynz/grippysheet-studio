@@ -23,7 +23,9 @@ export const InlaySettingsSchema = z.object({
     inlayRotation: z.number().default(0),
     inlayExtend: z.number().default(0),
     inlayMirror: z.boolean().default(false),
-    inlayPosition: z.enum(['center', 'top', 'bottom', 'left', 'right', 'top-left', 'top-right', 'bottom-left', 'bottom-right']).default('center'),
+    inlayPosition: z.enum(['center', 'top', 'bottom', 'left', 'right', 'top-left', 'top-right', 'bottom-left', 'bottom-right', 'manual']).default('center'),
+    inlayPositionX: z.number().default(0),
+    inlayPositionY: z.number().default(0),
 });
 
 export const GeometrySettingsSchema = z.object({

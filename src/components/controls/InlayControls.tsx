@@ -209,10 +209,11 @@ const InlayControls: React.FC<InlayControlsProps> = ({
             />
           </ControlField>
 
-          <ControlField
+            <ControlField
             label="Position"
             tooltip="Align the inlay relative to the base"
           >
+            <div className="space-y-2">
             <select
               value={inlayPosition || 'center'}
               onChange={(e) => updateSettings({ inlayPosition: e.target.value as any })}
@@ -227,8 +228,41 @@ const InlayControls: React.FC<InlayControlsProps> = ({
               <option value="bottom-left">Bottom Left</option>
               <option value="bottom">Bottom</option>
               <option value="bottom-right">Bottom Right</option>
+              <option value="manual">Manual</option>
             </select>
+            
+            {/* Manual inputs moved below */}
+            </div>
           </ControlField>
+
+          {inlayPosition === 'manual' && (
+            <div className="flex gap-4">
+              <div className="flex-1 min-w-0">
+                <ControlField label="X Position (mm)" tooltip="Manual X offset">
+                  <DebouncedInput
+                    type="number"
+                    value={settings.inlayPositionX || 0}
+                    onChange={(val) =>
+                      updateSettings({ inlayPositionX: Number(val) })
+                    }
+                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none"
+                  />
+                </ControlField>
+              </div>
+              <div className="flex-1 min-w-0">
+                <ControlField label="Y Position (mm)" tooltip="Manual Y offset">
+                  <DebouncedInput
+                    type="number"
+                    value={settings.inlayPositionY || 0}
+                    onChange={(val) =>
+                      updateSettings({ inlayPositionY: Number(val) })
+                    }
+                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none"
+                  />
+                </ControlField>
+              </div>
+            </div>
+          )}
 
           <div className="flex gap-4">
             <div className="flex-1 min-w-0">

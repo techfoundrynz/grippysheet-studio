@@ -3,7 +3,6 @@ import ModelViewer from "./components/ModelViewer";
 import Controls from "./components/Controls";
 import OutputPanel from "./components/OutputPanel";
 import * as THREE from 'three';
-import { DEFAULT_BASE_COLOR, DEFAULT_PATTERN_COLOR } from './constants/colors';
 import { AlertProvider } from './context/AlertContext';
 import { BaseSettings, InlaySettings, GeometrySettings } from './types/schemas';
 
@@ -27,6 +26,7 @@ const App = () => {
   });
 
   const [isControlsCollapsed, setIsControlsCollapsed] = useState(false);
+  const [activeTab, setActiveTab] = useState<'base' | 'inlay' | 'geometry'>('base');
 
   const meshRef = useRef<THREE.Group>(null);
 
@@ -58,8 +58,10 @@ const App = () => {
                 <ModelViewer 
                   baseSettings={baseSettings}
                   inlaySettings={inlaySettings}
+                  onInlayChange={setInlaySettings}
                   geometrySettings={geometrySettings}
                   meshRef={meshRef} 
+                  activeTab={activeTab}
                 />
             </div>
         </div>
@@ -70,6 +72,8 @@ const App = () => {
             ${isControlsCollapsed ? 'h-auto flex-shrink-0 md:flex-none' : 'h-1/2 flex-1 md:flex-none'}
         `}>
             <Controls 
+              activeTab={activeTab}
+              setActiveTab={setActiveTab}
               baseSettings={baseSettings}
               setBaseSettings={setBaseSettings}
               inlaySettings={inlaySettings}

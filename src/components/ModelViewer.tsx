@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, OrthographicCamera, PerspectiveCamera, Line } from '@react-three/drei';
-import { Box, Layers, ScanLine, Activity, Ghost, RotateCcw, Camera as CameraIcon, Palette, Scissors } from 'lucide-react';
+import { InlayInteractionHandles } from './interaction/InlayInteractionHandles';
+import { Box, Layers, ScanLine, Activity, Ghost, Camera as CameraIcon, Palette, Scissors } from 'lucide-react';
 import * as THREE from 'three';
 import ScreenshotModal from './ScreenshotModal';
 import ImperativeModel from './ImperativeModel';
@@ -10,12 +11,15 @@ import { BaseSettings, InlaySettings, GeometrySettings } from '../types/schemas'
 import CameraRig, { ViewState } from './CameraRig';
 import FpsTracker from './FpsTracker';
 import ScreenshotManager from './ScreenshotManager';
+import { calculateInlayOffset } from '../utils/patternUtils';
 
 interface ModelViewerProps {
   baseSettings: BaseSettings;
   inlaySettings: InlaySettings;
   geometrySettings: GeometrySettings;
   meshRef: React.RefObject<THREE.Group | null>;
+  onInlayChange?: (settings: InlaySettings) => void;
+  activeTab?: 'base' | 'inlay' | 'geometry';
 }
 
 const ModelViewer: React.FC<ModelViewerProps> = ({ 
@@ -23,15 +27,14 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
   inlaySettings,
   geometrySettings,
   meshRef, 
+  onInlayChange,
+  activeTab = 'base'
 }) => {
   const { size, thickness, color, cutoutShapes, baseOutlineRotation, baseOutlineMirror } = baseSettings;
-  // Note: patternColor is in GeometrySettings in my new schema, but strict prop definition in ImperativeModel might expect it.
-  // Wait, in previous App.tsx, patternColor was state constant passed to ModelViewer.
-  // In new Schema, patternColor is in GeometrySettings.
-  // So baseSettings doesn't have patternColor.
   
   const { 
-      inlayShapes, inlayDepth, inlayScale, inlayRotation, inlayExtend, inlayMirror, inlayPosition
+      inlayShapes, inlayDepth, inlayScale, inlayRotation, inlayExtend, inlayMirror, inlayPosition,
+      inlayPositionX, inlayPositionY
   } = inlaySettings;
 
   const {
@@ -49,7 +52,6 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
   useEffect(() => {
      if (viewState.type === 'ortho') setCameraType('orthographic');
      else setCameraType('perspective');
-     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); 
 
   const [outlineState, setOutlineState] = useState({ base: false, inlay: false, pattern: false });
@@ -75,6 +77,26 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
   const outlinesMenuRef = React.useRef<HTMLDivElement>(null);
   const wireframeMenuRef = React.useRef<HTMLDivElement>(null);
   const debugMenuRef = React.useRef<HTMLDivElement>(null);
+  const orbitRef = React.useRef<any>(null);
+  const [inlayGroup, setInlayGroup] = useState<THREE.Object3D | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+
+  // Toggle OrbitControls based on dragging state
+  useEffect(() => {
+    if (orbitRef.current) {
+        orbitRef.current.enabled = !isDragging;
+    }
+  }, [isDragging]);
+
+  // Find InlayGroup when meshRef or inlaySettings changes
+  useEffect(() => {
+    if (meshRef.current) {
+        // We look for 'InlayGroup'. ImperativeModel ensures it exists if Inlays are present.
+        const group = meshRef.current.getObjectByName('InlayGroup');
+        setInlayGroup(group || null);
+    }
+  }, [meshRef.current, inlaySettings.inlayShapes, isProcessing]);
+
 
   const handleCapture = (bgColor: string | null) => {
       if (captureRef.current) {
@@ -128,13 +150,8 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
         >
           <Box size={20} />
         </button>
-        <button
-          onClick={() => setViewState(prev => ({ ...prev, timestamp: Date.now() }))}
-          className="p-2 rounded hover:bg-gray-700 transition-colors text-gray-400 hover:text-white"
-          title="Reset View"
-        >
-          <RotateCcw size={20} />
-        </button>
+
+
 
         {debugMode && (
           <>
@@ -396,6 +413,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
         <ScreenshotManager triggerRef={captureRef} size={size} />
         <CameraRig viewState={viewState} size={size} setCameraType={setCameraType} />
         <OrbitControls 
+            ref={orbitRef}
             makeDefault 
             mouseButtons={{
                 LEFT: THREE.MOUSE.ROTATE,
@@ -438,6 +456,8 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
                 inlayExtend={inlayExtend}
                 inlayMirror={inlayMirror}
                 inlayPosition={inlayPosition}
+                inlayPositionX={inlayPositionX}
+                inlayPositionY={inlayPositionY}
                 wireframeBase={wireframeState.base}
                 wireframeInlay={wireframeState.inlay}
                 wireframePattern={wireframeState.pattern}
@@ -449,7 +469,18 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
                 debugShowPatternCutter={debugState.pattern}
                 debugShowInlayCutter={debugState.inlay}
                 debugShowHoleCutter={debugState.holes}
+                isDragging={isDragging}
             />
+
+        {activeTab === 'inlay' && inlayGroup && onInlayChange && (
+            <InlayInteractionHandles
+                baseSettings={baseSettings}
+                inlaySettings={inlaySettings}
+                onInlayChange={onInlayChange}
+                setIsDragging={setIsDragging}
+                thickness={thickness}
+            />
+        )}
         
         {outlineState.base && cutoutShapes && cutoutShapes.length > 0 && (
              (() => {
@@ -481,25 +512,35 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
              })()
         )}
 
-        {outlineState.inlay && inlayShapes && inlayShapes.length > 0 && inlayShapes.map((shape, i) => {
-            const rawPoints = shape.shape ? shape.shape.getPoints() : shape.getPoints();
-            // Apply mirror to points directly if needed
-            const points = inlayMirror 
-                ? rawPoints.map((p: THREE.Vector2) => new THREE.Vector2(-p.x, p.y)) 
-                : rawPoints;
-
-            return (
-            <Line
-                key={`inlay-outline-${i}`}
-                points={points} 
-                color="#4ade80"
-                lineWidth={2}
-                position={[0, 0, thickness + 0.1 + ((i + 1) * 0.001)]}
-                scale={[inlayScale, inlayScale, 1]}
-                rotation={[0, 0, inlayRotation * (Math.PI / 180)]}
-            />
+        {outlineState.inlay && inlayShapes && inlayShapes.length > 0 && (() => {
+             // Calculate effective position for the outline
+             const { x: dx, y: dy } = calculateInlayOffset(
+                inlayShapes,
+                baseSettings.cutoutShapes,
+                baseSettings.size,
+                inlaySettings
             );
-        })}
+
+            return inlayShapes.map((shape, i) => {
+                const rawPoints = shape.shape ? shape.shape.getPoints() : shape.getPoints();
+                // Apply mirror to points directly if needed
+                const points = inlayMirror 
+                    ? rawPoints.map((p: THREE.Vector2) => new THREE.Vector2(-p.x, p.y)) 
+                    : rawPoints;
+
+                return (
+                <Line
+                    key={`inlay-outline-${i}`}
+                    points={points} 
+                    color="#4ade80"
+                    lineWidth={2}
+                    position={[dx, dy, thickness + 0.1 + ((i + 1) * 0.001)]}
+                    scale={[inlayScale, inlayScale, 1]}
+                    rotation={[0, 0, inlayRotation * (Math.PI / 180)]}
+                />
+                );
+            });
+        })()}
 
         {outlineState.pattern && patternShapes && patternShapes.length > 0 && patternShapes[0] instanceof THREE.Shape && (
              <Line

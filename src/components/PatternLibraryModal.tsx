@@ -25,6 +25,7 @@ const PRESETS: PatternPreset[] = [
     { name: 'Bevelled Cube', file: 'bevelled-cube.stl', type: 'stl', category: 'patterns' },
     { name: 'Skewed Pyramid', file: 'pyramid-skewed.stl', type: 'stl', category: 'patterns' },
     {name: 'Nipple', file: 'nipple.stl', type: 'stl', category: 'patterns' },
+    { name: 'PubGrip', file: 'pubgrip.stl', type: 'stl', category: 'patterns' },
     
     // Inlays
     { name: 'Pubmote', file: 'pubmote.svg', type: 'svg', category: 'inlays', keepOriginalColors: true },

@@ -824,27 +824,36 @@ export const calculateInlayOffset = (
         inlayScale: number;
         inlayRotation: number;
         inlayMirror: boolean;
-        inlayPosition: string;
+        inlayPosition: string; // broadened type to match usage, but logically limited
+        inlayPositionX?: number;
+        inlayPositionY?: number;
     }
 ): { x: number, y: number } => {
-    const { inlayScale, inlayRotation, inlayMirror, inlayPosition } = settings;
+    const { inlayScale, inlayRotation, inlayMirror, inlayPosition, inlayPositionX, inlayPositionY } = settings;
 
-    if (!inlayPosition || inlayPosition === 'center' || !inlayShapes || inlayShapes.length === 0) {
-        return { x: 0, y: 0 };
-    }
+    if (!inlayShapes || inlayShapes.length === 0) return { x: 0, y: 0 };
+    if (inlayPosition === 'center') return { x: 0, y: 0 };
+    if (inlayPosition === 'manual') return { x: inlayPositionX || 0, y: inlayPositionY || 0 };
 
     let minX = Infinity, minY = Infinity;
     let maxX = -Infinity, maxY = -Infinity;
     let hasValidShapes = false;
 
+    // Calc transformed bounds
+    // We can't reuse getShapesBounds because we need transformed bounds.
+    // Optimization: Just calculate box of transformed points
+    const rad = inlayRotation * (Math.PI / 180);
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+
     inlayShapes.forEach(item => {
         if (item.color === 'transparent') return;
         hasValidShapes = true;
 
-        // Get points from original shape
         let pts: THREE.Vector2[] = [];
-        if (item.shape && item.shape.getPoints) {
-            pts = item.shape.getPoints();
+        const shp = item.shape || item;
+        if (shp && shp.getPoints) {
+            pts = shp.getPoints();
         } else if (item.getPoints) {
             pts = item.getPoints();
         }
@@ -862,9 +871,6 @@ export const calculateInlayOffset = (
 
             // 3. Rotate
             if (inlayRotation !== 0) {
-                const rad = inlayRotation * (Math.PI / 180);
-                const cos = Math.cos(rad);
-                const sin = Math.sin(rad);
                 const rx = x * cos - y * sin;
                 const ry = x * sin + y * cos;
                 x = rx;

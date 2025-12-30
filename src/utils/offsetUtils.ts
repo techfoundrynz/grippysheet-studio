@@ -148,3 +148,68 @@ function isPointInPoly(p: THREE.Vector2, polygon: THREE.Vector2[]): boolean {
     }
     return inside;
 }
+
+/**
+ * Unions multiple shapes into a set of non-overlapping shapes.
+ */
+export const unionShapes = (shapes: THREE.Shape[]): THREE.Shape[] => {
+    if (!shapes || shapes.length === 0) return [];
+
+    const clipper = new ClipperLib.Clipper() as any;
+    const clipType = ClipperLib.ClipType.ctUnion;
+    const polyFillType = (ClipperLib as any).PolyFillType ? (ClipperLib as any).PolyFillType.pftNonZero : 1;
+
+    // Add all shapes as Subject
+    shapes.forEach(shape => {
+        const paths = new ClipperLib.Paths();
+
+        // Outer
+        const outerPath = new ClipperLib.Path();
+        shape.getPoints().forEach(p => {
+            outerPath.push({ X: Math.round(p.x * SCALE), Y: Math.round(p.y * SCALE) });
+        });
+        paths.push(outerPath);
+
+        // Holes
+        if (shape.holes && shape.holes.length > 0) {
+            shape.holes.forEach(hole => {
+                const holePath = new ClipperLib.Path();
+                hole.getPoints().forEach(p => {
+                    holePath.push({ X: Math.round(p.x * SCALE), Y: Math.round(p.y * SCALE) });
+                });
+                paths.push(holePath);
+            });
+        }
+
+        clipper.AddPaths(paths, ClipperLib.PolyType.ptSubject, true);
+    });
+
+    const resultPaths = new ClipperLib.Paths();
+    const succeeded = clipper.Execute(clipType, resultPaths, polyFillType, polyFillType);
+
+    if (!succeeded || resultPaths.length === 0) return [];
+
+    // Convert back to THREE.Shapes
+    const convertedShapes: THREE.Shape[] = [];
+    const derivedHoles: THREE.Path[] = [];
+    const derivedOuters: THREE.Shape[] = [];
+
+    resultPaths.forEach(path => {
+        const points = path.map(pt => new THREE.Vector2(pt.X / SCALE, pt.Y / SCALE));
+        if (points.length < 3) return;
+
+        const area = THREE.ShapeUtils.area(points);
+        if (area > 0) {
+            derivedOuters.push(new THREE.Shape(points));
+        } else {
+            derivedHoles.push(new THREE.Path(points));
+        }
+    });
+
+    derivedOuters.forEach(outer => {
+        outer.holes = derivedHoles.filter(h => isPointInPoly(h.getPoints()[0], outer.getPoints()));
+        convertedShapes.push(outer);
+    });
+
+    return convertedShapes;
+};

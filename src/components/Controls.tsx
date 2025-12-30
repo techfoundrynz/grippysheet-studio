@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Freeze } from 'react-freeze';
 import { exportProject, importProject } from '../utils/projectUtils';
 import { BaseSettings, InlaySettings, GeometrySettings, ProjectSchemaV1 } from '../types/schemas';
@@ -26,6 +26,8 @@ interface ControlsProps {
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
   exportControls?: React.ReactNode;
+  activeTab: 'base' | 'inlay' | 'geometry';
+  setActiveTab: (tab: 'base' | 'inlay' | 'geometry') => void;
 }
 
 const Controls: React.FC<ControlsProps> = ({
@@ -39,10 +41,12 @@ const Controls: React.FC<ControlsProps> = ({
   onOpenWelcome,
   isCollapsed = false,
   onToggleCollapse,
-  exportControls
+  exportControls,
+  activeTab, 
+  setActiveTab
 }) => {
   const { showAlert } = useAlert();
-  const [activeTab, setActiveTab] = useState<'base' | 'inlay' | 'geometry'>('base');
+  // Lifted state
   const containerRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
