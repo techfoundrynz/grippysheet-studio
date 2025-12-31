@@ -46,6 +46,7 @@ const PRESETS: PatternPreset[] = [
     { name: 'XR Mushies V2', file: 'xrmushiesv2.dxf', type: 'dxf', category: 'outlines', infoUrl: 'https://www.printables.com/model/968803' },
     { name: 'XR PubPad', file: 'xrpubpad.dxf', type: 'dxf', category: 'outlines' },
     { name: 'XR Stompies', file: 'xrstompies.dxf', type: 'dxf', category: 'outlines' },
+    { name: 'XR Viperbite Wide', file: 'xrviperbitewide.dxf', type: 'dxf', category: 'outlines' },
     { name: 'Floatwheel', file: 'floatwheel.dxf', type: 'dxf', category: 'outlines', infoUrl: 'https://www.printables.com/model/968803' },
     { name: 'GT Stock', file: 'gtstock.dxf', type: 'dxf', category: 'outlines', infoUrl: 'https://www.printables.com/model/968803' },
     { name: 'GT Kush Wide', file: 'gtkushwide.dxf', type: 'dxf', category: 'outlines', infoUrl: 'https://www.printables.com/model/968803' },
