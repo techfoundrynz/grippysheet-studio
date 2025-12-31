@@ -468,7 +468,24 @@ const ImperativeModel = React.forwardRef((props: ImperativeModelProps, ref: Reac
     const group = localGroupRef.current;
     if (!group) return;
 
-    // Clear existing Inlays
+    // Clear existing InlayGroup completely
+    const existingInlayGroup = group.getObjectByName('InlayGroup');
+    if (existingInlayGroup) {
+        // Dispose all meshes in the group
+        existingInlayGroup.traverse((obj) => {
+            if (obj instanceof THREE.Mesh) {
+                obj.geometry.dispose();
+                if (obj.material instanceof THREE.Material) {
+                    obj.material.dispose();
+                } else if (Array.isArray(obj.material)) {
+                    obj.material.forEach(m => m.dispose());
+                }
+            }
+        });
+        group.remove(existingInlayGroup);
+    }
+
+    // Clear any orphaned Inlay meshes (safety cleanup)
     const toRemove: THREE.Object3D[] = [];
     group.traverse((obj) => {
         if (obj.name.startsWith('Inlay_')) toRemove.push(obj);
@@ -476,7 +493,9 @@ const ImperativeModel = React.forwardRef((props: ImperativeModelProps, ref: Reac
     toRemove.forEach(obj => {
         if (obj instanceof THREE.Mesh) {
             obj.geometry.dispose();
-            (obj.material as THREE.Material).dispose();
+            if (obj.material instanceof THREE.Material) {
+                obj.material.dispose();
+            }
         }
         group.remove(obj);
     });
