@@ -39,7 +39,7 @@ const GeometryControls: React.FC<GeometryControlsProps> = ({
     isTiled,
     tileSpacing,
     patternMargin,
-    marginAppliesToHoles,
+    holeMode,
     clipToOutline,
     tilingDistribution,
     tilingDirection,
@@ -504,18 +504,26 @@ const GeometryControls: React.FC<GeometryControlsProps> = ({
             <div className="flex-1 min-w-0">
               <ControlField
                 label="Holes"
-                tooltip="Apply margin to hole cutouts"
+                tooltip="Interaction with holes"
               >
-                <ToggleButton
-                  label={marginAppliesToHoles ? "Expanded" : "Exact"}
-                  isToggled={!!marginAppliesToHoles}
-                  onToggle={() =>
-                    updateSettings({
-                      marginAppliesToHoles: !marginAppliesToHoles,
-                    })
-                  }
-                  icon={<Scissors size={16} />}
-                />
+                  <div className="relative">
+                    <select
+                      value={holeMode || 'default'}
+                      onChange={(e) =>
+                        updateSettings({
+                          holeMode: e.target.value as any,
+                        })
+                      }
+                      className="w-full bg-gray-800 border border-gray-700 rounded-lg pl-3 pr-10 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none appearance-none truncate"
+                    >
+                      <option value="default">Default</option>
+                      <option value="margin">Margin</option>
+                      <option value="avoid">Avoid</option>
+                    </select>
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
+                      <ChevronDown size={16} />
+                    </div>
+                  </div>
               </ControlField>
             </div>
           </div>

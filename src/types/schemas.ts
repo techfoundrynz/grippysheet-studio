@@ -19,15 +19,30 @@ export const BaseSettingsSchema = z.object({
 export const InlayItemSchema = z.object({
     id: z.string(),
     name: z.string().optional(),
-    shapes: ThreeObjectsSchema.default([]),
-    scale: z.number().default(1),
-    rotation: z.number().default(0),
-    mirror: z.boolean().default(false),
-    x: z.number().default(0),
-    y: z.number().default(0),
-    depth: z.number().default(0.6),
-    extend: z.number().default(0),
-    positionPreset: z.enum(['center', 'top', 'bottom', 'left', 'right', 'top-left', 'top-right', 'bottom-left', 'bottom-right', 'manual']).default('center'),
+    shapes: z.array(z.any()), // Array of THREE.Shape or object wrapper
+    valid: z.boolean().optional(),
+
+    // Transform
+    scale: z.number(),
+    rotation: z.number(),
+    mirror: z.boolean(),
+
+    // Mode
+    mode: z.enum(['single', 'tile']).optional(), // Default to 'single' if undefined
+    modifier: z.enum(['none', 'cut', 'mask', 'avoid']).optional(), // Default 'none'
+
+    // Position
+    x: z.number().optional(),
+    y: z.number().optional(),
+    positionPreset: z.enum(['center', 'top', 'bottom', 'left', 'right', 'top-left', 'top-right', 'bottom-left', 'bottom-right', 'manual']).optional(),
+
+    // Tiling (Only valid if mode === 'tile')
+    tileSpacing: z.number().optional(),
+    tilingDistribution: z.enum(['grid', 'offset', 'hex', 'radial', 'random', 'wave', 'zigzag', 'warped-grid']).optional(),
+
+    // Extrude
+    depth: z.number().optional(),
+    extend: z.number().optional(),
 });
 
 export type InlayItem = z.infer<typeof InlayItemSchema>;
@@ -58,7 +73,7 @@ export const GeometrySettingsSchema = z.object({
     isTiled: z.boolean().default(true),
     tileSpacing: z.number().default(10),
     patternMargin: z.number().default(3),
-    marginAppliesToHoles: z.boolean().default(false),
+    holeMode: z.enum(['default', 'margin', 'avoid']).default('default'),
     patternColor: z.string().default(DEFAULT_PATTERN_COLOR),
     clipToOutline: z.boolean().default(true),
     tilingDistribution: z.enum(['grid', 'offset', 'hex', 'radial', 'random', 'wave', 'zigzag', 'warped-grid']).default('offset'),

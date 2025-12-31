@@ -15,6 +15,7 @@ interface InlayInteractionHandlesProps {
     selectedInlayId: string | null;
     setSelectedInlayId?: (id: string | null) => void;
     setPreviewInlay?: (item: any) => void;
+    cutoutShapes?: any[] | null;
 }
 
 const HANDLE_PIXEL_SIZE = 12; // Desired size in screen pixels
@@ -100,7 +101,8 @@ export const InlayInteractionHandles: React.FC<InlayInteractionHandlesProps> = (
     thickness,
     selectedInlayId,
     setSelectedInlayId,
-    setPreviewInlay
+    setPreviewInlay,
+    cutoutShapes
 }) => {
     const { camera, gl } = useThree();
     const planeRef = useRef(new THREE.Plane(new THREE.Vector3(0, 0, 1), 0));
@@ -109,8 +111,8 @@ export const InlayInteractionHandles: React.FC<InlayInteractionHandlesProps> = (
     const groupRef = useRef<THREE.Group>(null);
     
     // Refs to hold latest props
-    const latestProps = useRef({ baseSettings, inlaySettings, onInlayChange, selectedInlayId });
-    latestProps.current = { baseSettings, inlaySettings, onInlayChange, selectedInlayId };
+    const latestProps = useRef({ baseSettings, inlaySettings, onInlayChange, selectedInlayId, cutoutShapes });
+    latestProps.current = { baseSettings, inlaySettings, onInlayChange, selectedInlayId, cutoutShapes };
 
     // Find Selected Item (Committed state)
     const selectedItem = useMemo(() => {
@@ -213,10 +215,10 @@ export const InlayInteractionHandles: React.FC<InlayInteractionHandlesProps> = (
                 
                 // Recalculate position if using a preset
                 if (newItem.positionPreset && newItem.positionPreset !== 'manual' && newItem.shapes && newItem.shapes.length > 0) {
-                    const { baseSettings } = latestProps.current;
+                    const { baseSettings, cutoutShapes } = latestProps.current;
                     const offset = calculateInlayOffset(
                         newItem.shapes,
-                        null,
+                        cutoutShapes || null,
                         baseSettings.size,
                         {
                             inlayScale: newItem.scale,
@@ -244,10 +246,10 @@ export const InlayInteractionHandles: React.FC<InlayInteractionHandlesProps> = (
              
              // Recalculate position if using a preset
              if (newItem.positionPreset && newItem.positionPreset !== 'manual' && newItem.shapes && newItem.shapes.length > 0) {
-                 const { baseSettings } = latestProps.current;
+                 const { baseSettings, cutoutShapes } = latestProps.current;
                  const offset = calculateInlayOffset(
                      newItem.shapes,
-                     null,
+                     cutoutShapes || null,
                      baseSettings.size,
                      {
                          inlayScale: newItem.scale || 1,
@@ -305,6 +307,10 @@ export const InlayInteractionHandles: React.FC<InlayInteractionHandlesProps> = (
     // 4. Initial Trigger
     const handlePointerDown = (e: ThreeEvent<PointerEvent>, type: 'move' | 'scale' | 'rotate') => {
         if (!selectedItem) return;
+        
+        // Disable drag-result move in tile mode (User request)
+        if (type === 'move' && selectedItem.mode === 'tile') return;
+
         e.stopPropagation();
         (e.target as HTMLElement).setPointerCapture(e.pointerId);
 
@@ -424,7 +430,10 @@ export const InlayInteractionHandles: React.FC<InlayInteractionHandlesProps> = (
         if (dragStartRef.current) return;
         
         switch (hovered) {
-            case 'body': setCursor(cursors.move); break;
+            case 'body': 
+                if (selectedItem?.mode === 'tile') setCursor('default');
+                else setCursor(cursors.move); 
+                break;
             case 'tl': setCursor(cursors.nwse); break;
             case 'tr': setCursor(cursors.nesw); break;
             case 'bl': setCursor(cursors.nesw); break;
@@ -433,7 +442,7 @@ export const InlayInteractionHandles: React.FC<InlayInteractionHandlesProps> = (
             default: setCursor('auto'); break;
         }
         return () => { if (!dragStartRef.current) setCursor('auto'); };
-    }, [hovered]);
+    }, [hovered, selectedItem]);
 
     if (!displayItem || !displayItem.shapes || displayItem.shapes.length === 0) return null;
 

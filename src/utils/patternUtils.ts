@@ -129,12 +129,27 @@ export const generateTilePositions = (
     orientation: 'none' | 'alternate' | 'random' | 'aligned' = 'none',
     direction: 'horizontal' | 'vertical' = 'horizontal',
     exclusionShapes: THREE.Shape[] | null = null,
-    inclusionShapes: THREE.Shape[] | null = null
+    inclusionShapes: THREE.Shape[] | null = null,
+    avoidShapes: THREE.Shape[] | null = null
 ): TileInstance[] => {
     // Safety check
     if (!bounds) return [];
 
     const positions: TileInstance[] = [];
+
+    // Pre-calculate Bounding Boxes AND Points for Avoid Shapes
+    const avoidBounds: THREE.Box2[] = [];
+    const avoidPointsCache: THREE.Vector2[][] = [];
+
+    if (avoidShapes && avoidShapes.length > 0) {
+        avoidShapes.forEach(shape => {
+            const b = new THREE.Box2();
+            const pts = shape.getPoints();
+            pts.forEach(p => b.expandByPoint(p));
+            avoidBounds.push(b);
+            avoidPointsCache.push(pts);
+        });
+    }
 
     // Buffer for edge checking
     // Unused variables removed for cleanup
@@ -157,6 +172,38 @@ export const generateTilePositions = (
             new THREE.Vector2(px + halfW, py + halfH),
             new THREE.Vector2(px - halfW, py + halfH)
         ];
+
+        // 0. Check Avoid Zones (Strict Removal)
+        if (avoidShapes && avoidShapes.length > 0) {
+            // Check 1: Bounding Box Intersection (Fast & Catch-All for "Hole Inside Tile")
+            const tileBox = new THREE.Box2(
+                new THREE.Vector2(px - halfW, py - halfH),
+                new THREE.Vector2(px + halfW, py + halfH)
+            );
+
+            for (let i = 0; i < avoidBounds.length; i++) {
+                if (tileBox.intersectsBox(avoidBounds[i])) {
+                    // Possible Overlap. Do Detailed Checks.
+
+                    // Check A: Is Tile inside Shape? (Tile vertices in Shape)
+                    // We check all 5 test points against this specific shape
+                    // (Loop optimization: check only this shape 'i', not all shapes)
+                    for (const pt of testPoints) {
+                        if (isPointInShape(pt, avoidShapes[i])) return false;
+                    }
+
+                    // Check B: Is Shape inside Tile? (Shape vertices in Tile)
+                    // This handles thin shapes traversing a tile, or small shapes inside a tile.
+                    const shapePts = avoidPointsCache[i];
+                    for (const sp of shapePts) {
+                        if (tileBox.containsPoint(sp)) return false;
+                    }
+
+                    // Note: This still misses "Cross" intersection where NO vertices are inside each other.
+                    // But for dense grids and typical shapes, this covers 99% of cases better than BBox alone.
+                }
+            }
+        }
 
         // 1. Check Exclusion Zones
         if (exclusionShapes && exclusionShapes.length > 0) {

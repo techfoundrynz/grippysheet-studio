@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAlert } from '../context/AlertContext';
-import { X, Check, Pipette, Palette, Droplet, Pencil, Square, Circle, Eraser, Ban } from 'lucide-react';
+import { X, Check, Pipette, Palette, Droplet, Pencil, Square, Circle, Eraser } from 'lucide-react';
 import * as THREE from 'three';
 import { COLORS } from '../constants/colors';
 import { flattenColors } from '../utils/colorUtils';
@@ -25,7 +25,7 @@ const SVGPaintModal: React.FC<SVGPaintModalProps> = ({ isOpen, onClose, shapes, 
     // Viewport State
     // Viewport State
     const [vbParams, setVbParams] = useState({ x: 0, y: 0, w: 500, h: 500 });
-    const [activeTool, setActiveTool] = useState<'paint' | 'draw' | 'rectangle' | 'circle' | 'eraser' | 'text' | 'exclude'>('paint');
+    const [activeTool, setActiveTool] = useState<'paint' | 'draw' | 'rectangle' | 'circle' | 'eraser' | 'text'>('paint');
     const [currentPath, setCurrentPath] = useState<THREE.Vector2[]>([]);
     
     // Zoom/Pan State
@@ -83,27 +83,6 @@ const SVGPaintModal: React.FC<SVGPaintModalProps> = ({ isOpen, onClose, shapes, 
             const newShapes = [...localShapes];
             newShapes.splice(index, 1);
             setLocalShapes(newShapes);
-        } else if (activeTool === 'exclude') {
-            const newShapes = [...localShapes];
-            const currentMode = newShapes[index].gripMode;
-            let nextMode: 'exclude' | 'include' | undefined;
-            
-            if (!currentMode && !newShapes[index].excludePattern) {
-                // First click -> Exclude
-                nextMode = 'exclude';
-            } else if (currentMode === 'exclude' || newShapes[index].excludePattern) {
-                // Second click -> Include
-                nextMode = 'include';
-            } else {
-                // Third click -> Reset
-                nextMode = undefined;
-            }
-            
-            // Clear legacy property if present, rely on gripMode
-            if (newShapes[index].excludePattern) delete newShapes[index].excludePattern;
-            
-            newShapes[index] = { ...newShapes[index], gripMode: nextMode };
-            setLocalShapes(newShapes);
         }
     };
 
@@ -135,7 +114,7 @@ const SVGPaintModal: React.FC<SVGPaintModalProps> = ({ isOpen, onClose, shapes, 
             return;
         }
         
-        if (activeTool === 'paint' || activeTool === 'eraser' || activeTool === 'exclude') return;
+        if (activeTool === 'paint' || activeTool === 'eraser') return;
 
         if (activeTool === 'draw' || activeTool === 'rectangle' || activeTool === 'circle') {
             const pt = getSVGPoint(e);
@@ -425,25 +404,18 @@ const SVGPaintModal: React.FC<SVGPaintModalProps> = ({ isOpen, onClose, shapes, 
                                         const isTransparent = item.color === 'transparent';
                                         const displayColor = item.color === 'base' ? baseColor : item.color;
                                         
-                                        // Determine visual style based on gripMode (or legacy excludePattern)
-                                        const mode = item.gripMode || (item.excludePattern ? 'exclude' : undefined);
-                                        const isExcluded = mode === 'exclude';
-                                        const isIncluded = mode === 'include';
-                                        
                                         let strokeColor = (selectedColor === 'transparent' ? '#ffffff' : (isTransparent ? '#4b5563' : displayColor));
-                                        if (isExcluded) strokeColor = '#f97316'; // Orange
-                                        if (isIncluded) strokeColor = '#22c55e'; // Green
-
+                                        
                                         return (
                                             <path 
                                                 key={index}
                                                 d={d}
                                                 fill={isTransparent ? 'rgba(0,0,0,0)' : displayColor}
                                                 stroke={strokeColor}
-                                                strokeWidth={(isExcluded || isIncluded) ? 3 : (isTransparent ? 1 : 0)}
-                                                strokeDasharray={(isExcluded || isIncluded) ? "4,2" : (isTransparent ? "2,2" : "none")}
+                                                strokeWidth={isTransparent ? 1 : 0}
+                                                strokeDasharray={isTransparent ? "2,2" : "none"}
                                                 // Make interactive only if NOT handling text or draw active
-                                                className={`transition-opacity ${(activeTool === 'paint' || activeTool === 'eraser' || activeTool === 'exclude' || isEyedropperActive) ? 'cursor-pointer hover:opacity-80' : 'pointer-events-none'}`}
+                                                className={`transition-opacity ${(activeTool === 'paint' || activeTool === 'eraser' || isEyedropperActive) ? 'cursor-pointer hover:opacity-80' : 'pointer-events-none'}`}
                                                 onClick={() => handleShapeClick(index)}
                                                 vectorEffect="non-scaling-stroke"
                                                 pointerEvents="all"
@@ -515,14 +487,7 @@ const SVGPaintModal: React.FC<SVGPaintModalProps> = ({ isOpen, onClose, shapes, 
                                      Erase
                                  </button>
 
-                                 <button
-                                     onClick={() => setActiveTool('exclude')}
-                                     className={`flex items-center justify-center gap-2 py-2 rounded-md text-sm font-medium transition-all ${activeTool === 'exclude' ? 'bg-orange-500/20 text-orange-400 shadow-sm border border-orange-500/50' : 'text-gray-400 hover:text-orange-400 hover:bg-orange-500/10'}`}
-                                     title="Toggle Grip Exclusion Zone"
-                                 >
-                                     <Ban size={16} />
-                                     Exclude
-                                 </button>
+
                                  
                                  {/* Shape Menu Toggle */}
                                  <div className="relative">

@@ -9,10 +9,14 @@ import {
   Plus,
   Trash2,
   GripVertical,
+  Grid3x3,
+  MousePointer2,
+  ChevronDown,
 } from "lucide-react";
 import ShapeUploader from "../ShapeUploader";
 import ControlField from "../ui/ControlField";
 import DebouncedInput from "../DebouncedInput";
+import SegmentedControl from "../ui/SegmentedControl";
 import ToggleButton from "../ui/ToggleButton";
 import PatternLibraryModal from "../PatternLibraryModal";
 import SVGPaintModal from "../SVGPaintModal";
@@ -392,47 +396,137 @@ const InlayControls: React.FC<InlayControlsProps> = ({
             />
           </ControlField>
 
-          <ControlField label="Position" tooltip="Choose a preset position or manual for custom X/Y">
-            <select
-              value={selectedItem.positionPreset || 'manual'}
-              onChange={(e) => {
-                const preset = e.target.value as 'center' | 'top' | 'bottom' | 'left' | 'right' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'manual';
-                
-                if (preset !== 'manual' && selectedItem.shapes && selectedItem.shapes.length > 0) {
-                  const offset = calculateInlayOffset(
-                    selectedItem.shapes,
-                    cutoutShapes || null,
-                    baseSize,
-                    {
-                      inlayScale: selectedItem.scale || 1,
-                      inlayRotation: selectedItem.rotation || 0,
-                      inlayMirror: selectedItem.mirror || false,
-                      inlayPosition: preset,
-                    }
-                  );
-                  updateItem(selectedItem.id, { 
-                    positionPreset: preset,
-                    x: offset.x,
-                    y: offset.y
-                  });
-                } else {
-                  updateItem(selectedItem.id, { positionPreset: preset });
-                }
+          
+          
+          {/* Mode Switch: Place vs Tile */}
+          <div className="space-y-2 mb-4">
+             <label className="text-sm font-medium text-gray-300">
+              Layout Mode
+            </label>
+            <SegmentedControl
+              value={selectedItem.mode || 'single'}
+              onChange={(val) => {
+                  updateItem(selectedItem.id, { mode: val as 'single' | 'tile' });
               }}
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none"
-            >
-              <option value="center">Center</option>
-              <option value="top">Top</option>
-              <option value="bottom">Bottom</option>
-              <option value="left">Left</option>
-              <option value="right">Right</option>
-              <option value="top-left">Top Left</option>
-              <option value="top-right">Top Right</option>
-              <option value="bottom-left">Bottom Left</option>
-              <option value="bottom-right">Bottom Right</option>
-              <option value="manual">Manual</option>
-            </select>
+              options={[
+                { value: 'single', label: 'Place', icon: <MousePointer2 size={16} /> },
+                { value: 'tile', label: 'Tile', icon: <Grid3x3 size={16} /> },
+              ]}
+            />
+          </div>
+
+          {/* Modifier: None | Cut | Mask */}
+          <div className="mb-4">
+          <ControlField label="Modifier" tooltip="How this layer interacts with the grip geometry">
+            <div className="relative">
+              <select
+                value={selectedItem.modifier || 'none'}
+                onChange={(e) => updateItem(selectedItem.id, { modifier: e.target.value as any })}
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg pl-3 pr-10 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none appearance-none truncate"
+              >
+                <option value="none">None</option>
+                <option value="cut">Cut</option>
+                <option value="mask">Recolor</option>
+                <option value="avoid">Avoid</option>
+              </select>
+              <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
+                <ChevronDown size={16} />
+              </div>
+            </div>
           </ControlField>
+          </div>
+
+          {/* Place Mode Controls */}
+          {selectedItem.mode !== 'tile' && (
+          <ControlField label="Position" tooltip="Choose a preset position or manual for custom X/Y">
+            <div className="relative">
+              <select
+                value={selectedItem.positionPreset || 'manual'}
+                onChange={(e) => {
+                  const preset = e.target.value as any; 
+                  
+                  if (preset !== 'manual' && selectedItem.shapes && selectedItem.shapes.length > 0) {
+                    const offset = calculateInlayOffset(
+                      selectedItem.shapes,
+                      cutoutShapes || null,
+                      baseSize,
+                      {
+                        inlayScale: selectedItem.scale || 1,
+                        inlayRotation: selectedItem.rotation || 0,
+                        inlayMirror: selectedItem.mirror || false,
+                        inlayPosition: preset,
+                      }
+                    );
+                    updateItem(selectedItem.id, { 
+                      positionPreset: preset,
+                      x: offset.x,
+                      y: offset.y
+                    });
+                  } else {
+                    updateItem(selectedItem.id, { positionPreset: preset });
+                  }
+                }}
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg pl-3 pr-10 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none appearance-none truncate"
+              >
+                <option value="center">Center</option>
+                <option value="top">Top</option>
+                <option value="bottom">Bottom</option>
+                <option value="left">Left</option>
+                <option value="right">Right</option>
+                <option value="top-left">Top Left</option>
+                <option value="top-right">Top Right</option>
+                <option value="bottom-left">Bottom Left</option>
+                <option value="bottom-right">Bottom Right</option>
+                <option value="manual">Manual</option>
+              </select>
+              <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
+                <ChevronDown size={16} />
+              </div>
+            </div>
+          </ControlField>
+          )}
+
+          {/* Tiling Controls */}
+          {selectedItem.mode === 'tile' && (
+            <div className="flex gap-4">
+              <div className="flex-1 min-w-0">
+                <ControlField label="Spacing (mm)" tooltip="Distance between tiled shapes">
+                  <DebouncedInput
+                    type="number"
+                    value={selectedItem.tileSpacing || 0} // Default to 0 if undefined
+                    onChange={(val) =>
+                      updateItem(selectedItem.id, { tileSpacing: Number(val) })
+                    }
+                    step="0.1"
+                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white outline-none"
+                  />
+                </ControlField>
+              </div>
+              <div className="flex-1 min-w-0">
+                <ControlField label="Distribution" tooltip="Pattern layout style">
+                  <div className="relative">
+                    <select
+                      value={selectedItem.tilingDistribution || 'grid'}
+                      onChange={(e) => updateItem(selectedItem.id, { tilingDistribution: e.target.value as any })}
+                      className="w-full bg-gray-800 border border-gray-700 rounded-lg pl-3 pr-10 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none appearance-none truncate"
+                    >
+                      <option value="grid">Grid</option>
+                      <option value="offset">Offset</option>
+                      <option value="hex">Hexagonal</option>
+                      <option value="radial">Radial</option>
+                      <option value="random">Random</option>
+                      <option value="wave">Wave</option>
+                      <option value="zigzag">Zigzag</option>
+                      <option value="warped-grid">Warped</option>
+                    </select>
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
+                      <ChevronDown size={16} />
+                    </div>
+                  </div>
+                </ControlField>
+              </div>
+            </div>
+          )}
 
           {(selectedItem.positionPreset === 'manual') && (
             <div className="flex gap-4">
@@ -440,7 +534,7 @@ const InlayControls: React.FC<InlayControlsProps> = ({
                 <ControlField label="X (mm)">
                   <DebouncedInput
                     type="number"
-                    value={selectedItem.x}
+                    value={selectedItem.x ?? 0}
                     onChange={(val) =>
                       updateItem(selectedItem.id, { x: Number(val), positionPreset: 'manual' })
                     }
@@ -452,7 +546,7 @@ const InlayControls: React.FC<InlayControlsProps> = ({
                 <ControlField label="Y (mm)">
                   <DebouncedInput
                     type="number"
-                    value={selectedItem.y}
+                    value={selectedItem.y ?? 0}
                     onChange={(val) =>
                       updateItem(selectedItem.id, { y: Number(val), positionPreset: 'manual' })
                     }

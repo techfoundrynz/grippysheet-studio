@@ -50,7 +50,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
       isTiled, tileSpacing, patternMargin, 
       tilingDistribution, tilingDirection, tilingOrientation,
       clipToOutline, debugMode, patternColor: geomPatternColor, rotationClamp,
-      marginAppliesToHoles
+      holeMode
   } = geometrySettings;
 
   const [viewState, setViewState] = useState<ViewState>({ type: 'ortho', timestamp: Date.now() });
@@ -456,7 +456,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
                 rotationClamp={rotationClamp}
                 patternMaxHeight={geometrySettings.patternMaxHeight === '' ? undefined : Number(geometrySettings.patternMaxHeight)}
                 clipToOutline={clipToOutline}
-                marginAppliesToHoles={marginAppliesToHoles}
+                holeMode={holeMode}
                 
                 inlayItems={inlaySettings.items}
                 
@@ -486,6 +486,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
                 selectedInlayId={selectedInlayId || null}
                 setSelectedInlayId={setSelectedInlayId}
                 setPreviewInlay={setPreviewInlay}
+                cutoutShapes={cutoutShapes}
             />
         )}
         
