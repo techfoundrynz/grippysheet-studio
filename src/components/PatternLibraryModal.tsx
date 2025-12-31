@@ -29,7 +29,9 @@ const PRESETS: PatternPreset[] = [
     
     // Inlays
     { name: 'GrippySheet', file: 'grippysheet.svg', type: 'svg', category: 'inlays', keepOriginalColors: true },
+    { name: 'GrippySheet Alt', file: 'grippysheetalt.svg', type: 'svg', category: 'inlays', keepOriginalColors: true },
     { name: 'GrippySheet Badge', file: 'grippysheetbadge.svg', type: 'svg', category: 'inlays', keepOriginalColors: true },
+    { name: 'GrippySheet Alt Badge', file: 'grippysheetbadgealt.svg', type: 'svg', category: 'inlays', keepOriginalColors: true },
     { name: 'Pubmote', file: 'pubmote.svg', type: 'svg', category: 'inlays', keepOriginalColors: true },
     { name: 'Trogdor the Burninator', file: 'trogdor.svg', type: 'svg', category: 'inlays', keepOriginalColors: true },
     { name: 'Spooderman', file: 'spooderman.svg', type: 'svg', category: 'inlays', keepOriginalColors: true },
