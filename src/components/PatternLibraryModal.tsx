@@ -35,9 +35,9 @@ const PRESETS: PatternPreset[] = [
     { name: 'Pubmote', file: 'pubmote.svg', type: 'svg', category: 'inlays', keepOriginalColors: true },
     { name: 'Trogdor the Burninator', file: 'trogdor.svg', type: 'svg', category: 'inlays', keepOriginalColors: true },
     { name: 'Spooderman', file: 'spooderman.svg', type: 'svg', category: 'inlays', keepOriginalColors: true },
-    { name: "Dolan Duck", file: "dolan.svg", type: "svg", category: "inlays", keepOriginalColors: true },
-    { name: "Gooby", file: "gooby.svg", type: "svg", category: "inlays", keepOriginalColors: true },
-    { name: "MatixBuilt", file: "matixbuilt.svg", type: "svg", category: "inlays", keepOriginalColors: true },
+    { name: 'Dolan Duck', file: 'dolan.svg', type: 'svg', category: 'inlays', keepOriginalColors: true },
+    { name: 'Gooby', file: 'gooby.svg', type: 'svg', category: 'inlays', keepOriginalColors: true },
+    { name: 'MatixBuilt', file: 'matixbuilt.svg', type: 'svg', category: 'inlays', keepOriginalColors: true },
 
     // Outlines
     { name: 'XR Stock', file: 'xrstock.dxf', type: 'dxf', category: 'outlines', infoUrl: 'https://www.printables.com/model/968803' },
@@ -52,7 +52,8 @@ const PRESETS: PatternPreset[] = [
     { name: 'GT Kush Wide', file: 'gtkushwide.dxf', type: 'dxf', category: 'outlines', infoUrl: 'https://www.printables.com/model/968803' },
     { name: 'GT Mushies', file: 'gtmushies.dxf', type: 'dxf', category: 'outlines', infoUrl: 'https://www.printables.com/model/968803' },
     { name: 'Pint', file: 'pint.dxf', type: 'dxf', category: 'outlines', infoUrl: 'https://www.printables.com/model/968803' },
-    { name: 'Pint Matix', file: 'pintmatix.dxf', type: 'dxf', category: 'outlines' }
+    { name: 'Pint Matix', file: 'pintmatix.dxf', type: 'dxf', category: 'outlines' },
+    { name: 'Gosmilo X7', file: 'gosmilox7.dxf', type: 'dxf', category: 'outlines' }
 ];
 
 interface PatternLibraryModalProps {
