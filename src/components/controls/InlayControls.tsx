@@ -21,9 +21,8 @@ import ToggleButton from "../ui/ToggleButton";
 import PatternLibraryModal from "../PatternLibraryModal";
 import SVGPaintModal from "../SVGPaintModal";
 import { useAlert } from "../../context/AlertContext";
-import { SVGLoader } from "three-stdlib";
 import { centerShapes, calculateInlayScale, calculateInlayOffset } from "../../utils/patternUtils";
-import { parseDxfToShapes } from "../../utils/dxfUtils";
+import { parseShapeFile } from "../../utils/shapeLoader";
 import { v4 as uuidv4 } from "uuid";
 
 interface InlayControlsProps {
@@ -34,6 +33,7 @@ interface InlayControlsProps {
   baseColor: string;
   selectedInlayId: string | null;
   setSelectedInlayId: (id: string | null) => void;
+  onInlayAssetChanged?: (id: string, asset: { name: string, content: string | ArrayBuffer, type: 'dxf' | 'svg' | 'stl' } | null) => void;
 }
 
 const InlayControls: React.FC<InlayControlsProps> = ({
@@ -44,6 +44,7 @@ const InlayControls: React.FC<InlayControlsProps> = ({
   baseColor,
   selectedInlayId,
   setSelectedInlayId,
+  onInlayAssetChanged,
 }) => {
   const { showAlert } = useAlert();
   const { items } = settings;
@@ -93,7 +94,7 @@ const InlayControls: React.FC<InlayControlsProps> = ({
   };
 
   // Update shapes for EXISTING or NEW item
-  const handleShapeUpload = (shapes: any[], name: string | null = null) => {
+  const handleShapeUpload = (shapes: any[], name: string | null = null, type?: 'dxf'|'svg'|'stl', content?: string | ArrayBuffer) => {
     if (selectedInlayId) {
       // Update currently selected
       const currentItem = items.find(i => i.id === selectedInlayId);
@@ -106,6 +107,9 @@ const InlayControls: React.FC<InlayControlsProps> = ({
       }
       
       updateItem(selectedInlayId, { shapes, scale, name: name || "Custom Pattern" });
+      if (onInlayAssetChanged && name && content && type) {
+          onInlayAssetChanged(selectedInlayId, { name, content, type });
+      }
     } else {
       // Fallback: Create new
       const scale = calculateInlayScale(shapes, cutoutShapes || null, baseSize);
@@ -124,6 +128,9 @@ const InlayControls: React.FC<InlayControlsProps> = ({
       };
       updateSettings({ items: [...items, newItem] });
       setSelectedInlayId(newItem.id);
+      if (onInlayAssetChanged && name && content && type) {
+          onInlayAssetChanged(newItem.id, { name, content, type });
+      }
     }
   };
 
@@ -131,6 +138,7 @@ const InlayControls: React.FC<InlayControlsProps> = ({
     const newItems = items.filter((i) => i.id !== id);
     updateSettings({ items: newItems });
     if (selectedInlayId === id) setSelectedInlayId(null);
+    if (onInlayAssetChanged) onInlayAssetChanged(id, null);
   };
 
   // Handle layer reordering
@@ -248,37 +256,32 @@ const InlayControls: React.FC<InlayControlsProps> = ({
             const response = await fetch(`/${preset.category}/${preset.file}`);
             const text = await response.text();
 
-            let shapes: any[] = [];
-
-            if (preset.type === "svg") {
-              const loader = new SVGLoader();
-              const data = loader.parse(text);
-
-              data.paths.forEach((path) => {
-                const fillColor = path.userData?.style?.fill;
-                const color =
-                  fillColor && fillColor !== "none"
-                    ? fillColor
-                    : path.color && path.color.getStyle();
-                const subShapes = path.toShapes(true);
-                subShapes.forEach((s) => {
-                  shapes.push({ shape: s, color: color || "#000000" });
-                });
-              });
-
-              const rawShapes = shapes.map((item) => item.shape);
-              const centered = centerShapes(rawShapes, true);
-              shapes = shapes.map((item, i) => ({
-                ...item,
-                shape: centered[i],
-              }));
-            } else if (preset.type === "dxf") {
-              const rawShapes = parseDxfToShapes(text);
-              const centered = centerShapes(rawShapes, true);
-              shapes = centered.map((s) => ({ shape: s, color: "#000000" }));
+            // Use shared loader logic
+            const result = parseShapeFile(text, preset.type as 'dxf'|'svg', true); // Inlays usually want colors? Yes, see previous logic.
+            
+            if (result.success) {
+                // IMPORTANT: Ensure the type passed to handleShapeUpload matches what was actually parsed.
+                // parseShapeFile might detect a different type, but it doesn't return the detected type.
+                // Use robust detection here too or rely on the preset type IF it was correct.
+                // But the source of error was likely preset type mismatch.
+                // Let's implement a quick check or trust parseShapeFile handles the parsing,
+                // but we MUST pass the correct type to handleShapeUpload so it saves correctly?
+                
+                // If the preset says DXF but content is SVG, parseShapeFile (now updated) handles it and returns correct shapes.
+                // But we still pass 'dxf' to handleShapeUpload?
+                // Then the asset is saved as 'dxf'.
+                // Then on import, parseShapeFile encounters 'dxf' type but SVG content.
+                // Thanks to my update to shapeLoader, this will NOW work on import too!
+                // So passing preset.type is "fine" for now, even if technically wrong label.
+                
+                // However, let's try to pass the real type if we can sniff it here too?
+                let realType = preset.type;
+                if (text.trim().startsWith('<svg') || text.trim().startsWith('<?xml')) realType = 'svg';
+                
+                handleShapeUpload(result.shapes, preset.name, realType as any, text);
+            } else {
+                 throw new Error(result.error);
             }
-
-            handleShapeUpload(shapes, preset.name);
           } catch (error) {
             console.error("Failed to load pattern:", error);
             showAlert({
@@ -317,10 +320,11 @@ const InlayControls: React.FC<InlayControlsProps> = ({
             label={"Inlay Pattern"}
             shapes={selectedItem?.shapes || null}
             fileName={selectedItem?.name || null}
-            onUpload={(shapes, name) => handleShapeUpload(shapes, name)}
+            onUpload={(shapes, name, type, content) => handleShapeUpload(shapes, name, type, content)}
             onClear={() => {
                 if (selectedInlayId) {
                     updateItem(selectedInlayId, { shapes: [], valid: false });
+                    if (onInlayAssetChanged) onInlayAssetChanged(selectedInlayId, null);
                 }
             }}
             allowedTypes={["svg", "dxf"]}

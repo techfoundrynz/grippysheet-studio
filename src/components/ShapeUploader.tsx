@@ -1,16 +1,15 @@
 import React, { useMemo } from 'react';
 import { X, Upload, Box } from 'lucide-react';
-import { parseDxfToShapes, generateSVGPath } from '../utils/dxfUtils';
-import { centerShapes } from '../utils/patternUtils';
-import { SVGLoader, STLLoader } from 'three-stdlib';
-import * as THREE from 'three';
+import { generateSVGPath } from '../utils/dxfUtils';
 import ControlField from './ui/ControlField';
+import * as THREE from 'three';
+import { parseShapeFile } from '../utils/shapeLoader';
 
 interface ShapeUploaderProps {
   label: string;
   shapes: any[] | null;
   fileName: string | null;
-  onUpload: (shapes: any[], fileName: string, type: 'dxf' | 'svg' | 'stl') => void;
+  onUpload: (shapes: any[], fileName: string, type: 'dxf' | 'svg' | 'stl', fileContent?: string | ArrayBuffer) => void;
   onClear: () => void;
   className?: string;
   allowedTypes?: ('dxf' | 'svg' | 'stl')[];
@@ -87,8 +86,8 @@ const ShapeUploader: React.FC<ShapeUploaderProps> = (props) => {
     }
 
     // Helper to emit
-    const emit = (loadedShapes: any[], type: 'dxf'|'svg'|'stl') => {
-        onUpload(loadedShapes, file.name, type);
+    const emit = (loadedShapes: any[], type: 'dxf'|'svg'|'stl', content?: string | ArrayBuffer) => {
+        onUpload(loadedShapes, file.name, type, content);
     };
 
     if (isStl) {
@@ -96,10 +95,10 @@ const ShapeUploader: React.FC<ShapeUploaderProps> = (props) => {
         reader.onload = (e) => {
             const buffer = e.target?.result as ArrayBuffer;
             if (buffer) {
-                const loader = new STLLoader();
-                const geometry = loader.parse(buffer);
-                geometry.center(); 
-                emit([geometry], 'stl');
+                const result = parseShapeFile(buffer, 'stl', props.extractColors);
+                if (result.success) {
+                    emit(result.shapes, 'stl', buffer);
+                }
             }
         };
         reader.readAsArrayBuffer(file);
@@ -110,43 +109,12 @@ const ShapeUploader: React.FC<ShapeUploaderProps> = (props) => {
     reader.onload = (e) => {
       const text = e.target?.result as string;
       if (text) {
-           let loadedShapes: any[] = []; 
+           const type = isSvg ? 'svg' : 'dxf';
+           const result = parseShapeFile(text, type, props.extractColors);
            
-           if (isSvg) {
-               const loader = new SVGLoader();
-               const data = loader.parse(text);
-               
-               data.paths.forEach((path) => {
-                   const fillColor = path.userData?.style?.fill;
-                   const color = (fillColor && fillColor !== 'none') ? fillColor : (path.color && path.color.getStyle());
-                   
-                   const subShapes = path.toShapes(true);
-                   subShapes.forEach(s => {
-                       if (props.extractColors) {
-                           loadedShapes.push({ shape: s, color: color || '#000000' });
-                       } else {
-                           loadedShapes.push(s);
-                       }
-                   });
-               });
-               
-               if (props.extractColors) {
-                   const rawShapes = loadedShapes.map(item => item.shape);
-                   const centered = centerShapes(rawShapes, true);
-                   loadedShapes = loadedShapes.map((item, i) => ({ ...item, shape: centered[i] }));
-               } else {
-                   loadedShapes = centerShapes(loadedShapes as THREE.Shape[], true);
-               }
-               
-           } else {
-               // DXF
-               loadedShapes = parseDxfToShapes(text); 
-               if (props.extractColors) { 
-                   loadedShapes = loadedShapes.map(s => ({ shape: s, color: '#000000' })); 
-               }
+           if (result.success) {
+               emit(result.shapes, type, text);
            }
-           
-           emit(loadedShapes, isSvg ? 'svg' : 'dxf');
       }
     };
     reader.readAsText(file);

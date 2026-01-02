@@ -7,29 +7,34 @@ import ControlField from '../ui/ControlField';
 import DebouncedInput from '../DebouncedInput';
 import ToggleButton from '../ui/ToggleButton';
 import PatternLibraryModal, { PatternPreset } from '../PatternLibraryModal';
-import { parseDxfToShapes } from '../../utils/dxfUtils';
 import { useAlert } from '../../context/AlertContext';
+import { parseShapeFile } from '../../utils/shapeLoader';
 
 interface BaseControlsProps {
   settings: BaseSettings;
   updateSettings: (updates: Partial<BaseSettings>) => void;
   onOutlineLoaded: (shapes: any[]) => void;
+  onOutlineAssetChanged?: (asset: { name: string, content: string | ArrayBuffer, type: 'dxf' | 'svg' } | null) => void;
 }
 
 const BaseControls: React.FC<BaseControlsProps> = ({
   settings,
   updateSettings,
-  onOutlineLoaded
+  onOutlineLoaded,
+  onOutlineAssetChanged
 }) => {
   const { size, thickness, color, cutoutShapes } = settings;
   const [fileName, setFileName] = React.useState<string | null>(null);
   const [showLibrary, setShowLibrary] = React.useState(false);
   const { showAlert } = useAlert();
 
-  const handleOutlineLoaded = (shapes: any[], name: string | null) => {
+  const handleOutlineLoaded = (shapes: any[], name: string | null, type?: 'dxf'|'svg'|'stl', content?: string | ArrayBuffer) => {
       updateSettings({ cutoutShapes: shapes });
       setFileName(name);
       onOutlineLoaded(shapes);
+      if (name && content && type && onOutlineAssetChanged) {
+          onOutlineAssetChanged({ name, content, type: type as 'dxf' | 'svg' });
+      }
   };
 
   return (
@@ -39,10 +44,11 @@ const BaseControls: React.FC<BaseControlsProps> = ({
             label="Upload Outline" 
             shapes={cutoutShapes || null}
             fileName={fileName}
-            onUpload={(loadedShapes, name) => handleOutlineLoaded(loadedShapes, name)}
+            onUpload={(loadedShapes, name, type, content) => handleOutlineLoaded(loadedShapes, name, type, content)}
             onClear={() => {
                 updateSettings({ cutoutShapes: [] });
                 setFileName(null);
+                if (onOutlineAssetChanged) onOutlineAssetChanged(null);
             }}
             allowedTypes={['dxf']}
             adornment={
@@ -67,13 +73,13 @@ const BaseControls: React.FC<BaseControlsProps> = ({
                     if (!response.ok) throw new Error('Failed to fetch');
                     const text = await response.text();
                     
-                    if (preset.type === 'dxf') {
-                        const shapes = parseDxfToShapes(text);
-                        // Wrap shapes if needed to match expected structure or pass directly?
-                        // ShapeUploader usually passes arrays of shapes. Inlay controls wraps them. 
-                        // BaseControls `cutoutShapes` usually expects plain shapes or shapes with holes.
-                        // `parseDxfToShapes` returns `THREE.Shape[]`.
-                        handleOutlineLoaded(shapes, preset.name);
+                    if (preset.type === 'dxf' || preset.type === 'svg') {
+                        const result = parseShapeFile(text, preset.type as 'dxf'|'svg');
+                        if (result.success) {
+                            handleOutlineLoaded(result.shapes, preset.name, preset.type, text);
+                        } else {
+                            throw new Error(result.error);
+                        }
                     }
                 } catch (error) {
                     console.error("Failed to load outline:", error);

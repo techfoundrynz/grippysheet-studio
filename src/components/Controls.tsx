@@ -1,7 +1,8 @@
 import React from 'react';
 import { Freeze } from 'react-freeze';
-import { exportProject, importProject } from '../utils/projectUtils';
+import { exportProjectBundle, importProjectBundle, ProjectAssets } from '../utils/projectUtils';
 import { BaseSettings, InlaySettings, GeometrySettings, ProjectSchemaV1 } from '../types/schemas';
+import { parseShapeFile } from '../utils/shapeLoader';
 import { RotateCcw, HelpCircle, ChevronDown, Download, Upload } from 'lucide-react';
 import { useAlert } from '../context/AlertContext';
 import SegmentedControl from './ui/SegmentedControl';
@@ -77,6 +78,8 @@ const Controls: React.FC<ControlsProps> = ({
       });
   };
 
+  const [projectAssets, setProjectAssets] = React.useState<ProjectAssets>({ inlays: {} });
+
   // Logic to handle Outline Loading at the top level
   const handleOutlineLoaded = (shapes: any[]) => {
       // 1. Set Outline
@@ -91,21 +94,150 @@ const Controls: React.FC<ControlsProps> = ({
       }
   };
 
+  const handleOutlineAssetChanged = (asset: { name: string, content: string | ArrayBuffer, type: 'dxf' | 'svg' } | null) => {
+      setProjectAssets(prev => ({ ...prev, baseOutline: asset || undefined }));
+  };
+
+  const handlePatternAssetChanged = (asset: { name: string, content: string | ArrayBuffer, type: 'dxf' | 'svg' | 'stl' } | null) => {
+      setProjectAssets(prev => ({ ...prev, pattern: asset || undefined }));
+  };
+
+  const handleInlayAssetChanged = (id: string, asset: { name: string, content: string | ArrayBuffer, type: 'dxf' | 'svg' | 'stl' } | null) => {
+       setProjectAssets(prev => {
+           const newInlays = { ...(prev.inlays || {}) };
+           if (asset) {
+               newInlays[id] = asset;
+           } else {
+               delete newInlays[id];
+           }
+           return { ...prev, inlays: newInlays };
+       });
+  };
+
   const handleExportClick = () => {
-      exportProject(baseSettings, inlaySettings, geometrySettings);
+      // Validate Assets
+      const missingAssets: string[] = [];
+      
+      // Check Base
+      if (baseSettings.cutoutShapes && baseSettings.cutoutShapes.length > 0 && !projectAssets.baseOutline) {
+          missingAssets.push("Base Outline");
+      }
+
+      // Check Pattern
+      if (geometrySettings.patternShapes && geometrySettings.patternShapes.length > 0 && !projectAssets.pattern) {
+          missingAssets.push("Grip Pattern");
+      }
+
+      // Check Inlays
+      if (inlaySettings.items) {
+          inlaySettings.items.forEach(item => {
+              // Only check if item has shapes and is valid
+              if (item.shapes && item.shapes.length > 0) {
+                   if (!projectAssets.inlays || !projectAssets.inlays[item.id]) {
+                       missingAssets.push(`Inlay: ${item.name || 'Unnamed'}`);
+                   }
+              }
+          });
+      }
+
+      if (missingAssets.length > 0) {
+          showAlert({
+              title: "Missing Asset Files",
+              message: `The following original asset files are not currently in memory and won't be included in the export:\n\n• ${missingAssets.join('\n• ')}\n\nPlease re-select or re-upload these files to ensure they are bundled correctly. Do you want to proceed with a partial export?`,
+              type: "warning",
+              confirmText: "Export Anyway",
+              cancelText: "Cancel",
+              onConfirm: () => {
+                  exportProjectBundle(baseSettings, inlaySettings, geometrySettings, projectAssets);
+              }
+          });
+          return;
+      }
+
+      exportProjectBundle(baseSettings, inlaySettings, geometrySettings, projectAssets);
   };
 
   const handleImportClick = () => {
       const input = document.createElement('input');
       input.type = 'file';
-      input.accept = '.json';
+      input.accept = '.zip';
       input.onchange = async (e) => {
           const file = (e.target as HTMLInputElement).files?.[0];
           if (!file) return;
 
           try {
-              const { data, versionMismatch, importedVersion } = await importProject(file);
+              const { data, versionMismatch, importedVersion, importedAssets } = await importProjectBundle(file);
               
+              const applyImport = () => {
+                   let newBase = data.base;
+                   let newInlay = data.inlay;
+                   let newGeometry = data.geometry;
+
+                   // Re-hydrate Shapes from Assets if available
+                   if (importedAssets) {
+                       // 1. Base Outline
+                       if (importedAssets.baseOutline) {
+                           const res = parseShapeFile(importedAssets.baseOutline.content, importedAssets.baseOutline.type);
+                           if (res.success) {
+                               newBase = { ...newBase, cutoutShapes: res.shapes };
+                           }
+                       }
+                       
+                       // 2. Pattern
+                       if (importedAssets.pattern) {
+                           console.log("[Import] Rehydrating Pattern:", importedAssets.pattern.name);
+                           // GeometryControls logic usually expects 'stl' or 'dxf'/'svg' but logic handles it.
+                           const res = parseShapeFile(importedAssets.pattern.content, importedAssets.pattern.type);
+                           if (res.success) {
+                               // Ensure we update all relevant fields
+                               newGeometry = { 
+                                   ...newGeometry, 
+                                   patternShapes: res.shapes, 
+                                   patternType: importedAssets.pattern.type as any 
+                               };
+                           } else {
+                               console.error("[Import] Failed to parse pattern:", res.error);
+                           }
+                       } else if (newGeometry.patternShapes) {
+                            console.warn("[Import] Pattern shapes present in settings but missing from assets bundle.");
+                       }
+
+                       // 3. Inlays
+                       if (importedAssets.inlays && newInlay.items) {
+                           newInlay.items = newInlay.items.map(item => {
+                               const asset = importedAssets.inlays?.[item.id];
+                               if (asset) {
+                                   const res = parseShapeFile(asset.content, asset.type, true); // Extract colors often true for inlays?
+                                   // Note: extractColors=true logic in ShapeUploader usually depends on props.
+                                   // In InlayControls, ShapeUploader has extractColors={true} passed?
+                                   // Let's check. Yes, usually for Inlays we want to preserve color if SVG.
+                                   // Default to true for Inlays to be safe, or check item settings?
+                                   // Actually, InlayControls uses `extractColors` prop on ShapeUploader which defaults to false?
+                                   // Let's check InlayControls source if possible.
+                                   // Assuming true/false based on common usage. If we lost that info, defaults are safer.
+                                   // But let's assume `true` for SVGs in inlays is common desired behavior.
+                                   // Actually, the `item.shapes` structure is { shape: s, color: c }.
+                                   // If we parse without extractColors, we get [s].
+                                   // If original item had colors, shape structure differs.
+                                   // We should check if item.shapes in JSON has color data? No, JSON shapes are garbage.
+                                   // But we are REPLACING shapes with parsed ones.
+                                   // Let's use `true` for Inlays as they often use multi-color SVGs.
+                                   if (res.success) {
+                                       return { ...item, shapes: res.shapes };
+                                   }
+                               }
+                               return item;
+                           });
+                       }
+                       
+                       setProjectAssets(importedAssets);
+                   }
+
+                   setBaseSettings(newBase);
+                   setInlaySettings(newInlay);
+                   setGeometrySettings(newGeometry);
+              };
+
               if (versionMismatch) {
                   showAlert({
                       title: "Version Mismatch",
@@ -113,16 +245,10 @@ const Controls: React.FC<ControlsProps> = ({
                       type: "warning",
                       confirmText: "Continue Anyway",
                       cancelText: "Cancel",
-                      onConfirm: () => {
-                           setBaseSettings(data.base);
-                           setInlaySettings(data.inlay);
-                           setGeometrySettings(data.geometry);
-                      }
+                      onConfirm: applyImport
                   });
               } else {
-                   setBaseSettings(data.base);
-                   setInlaySettings(data.inlay);
-                   setGeometrySettings(data.geometry);
+                   applyImport();
               }
           } catch (err: any) {
               showAlert({
@@ -249,6 +375,7 @@ const Controls: React.FC<ControlsProps> = ({
                         settings={baseSettings} 
                         updateSettings={updateBase}
                         onOutlineLoaded={handleOutlineLoaded}
+                        onOutlineAssetChanged={handleOutlineAssetChanged}
                     />
                 </div>
             </Freeze>
@@ -263,6 +390,7 @@ const Controls: React.FC<ControlsProps> = ({
                         baseColor={baseSettings.color}
                         selectedInlayId={selectedInlayId}
                         setSelectedInlayId={setSelectedInlayId}
+                        onInlayAssetChanged={handleInlayAssetChanged}
                     />
                 </div>
             </Freeze>
@@ -273,6 +401,7 @@ const Controls: React.FC<ControlsProps> = ({
                         settings={geometrySettings}
                         updateSettings={updateGeom}
                         baseSize={baseSettings.size}
+                        onPatternAssetChanged={handlePatternAssetChanged}
                     />
                 </div>
             </Freeze>

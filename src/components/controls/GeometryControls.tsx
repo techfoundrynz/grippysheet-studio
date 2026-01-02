@@ -18,17 +18,20 @@ import PatternLibraryModal from "../PatternLibraryModal";
 import { useAlert } from "../../context/AlertContext";
 import { STLLoader } from "three-stdlib";
 import { getShapesBounds } from "../../utils/patternUtils";
+import { parseShapeFile } from "../../utils/shapeLoader";
 
 interface GeometryControlsProps {
   settings: GeometrySettings;
   updateSettings: (updates: Partial<GeometrySettings>) => void;
   baseSize: number;
+  onPatternAssetChanged?: (asset: { name: string, content: string | ArrayBuffer, type: 'dxf' | 'svg' | 'stl' } | null) => void;
 }
 
 const GeometryControls: React.FC<GeometryControlsProps> = ({
   settings,
   updateSettings,
   baseSize,
+  onPatternAssetChanged,
 }) => {
   const { showAlert } = useAlert();
   const {
@@ -108,7 +111,7 @@ const GeometryControls: React.FC<GeometryControlsProps> = ({
     return 1;
   };
 
-  const handlePatternLoaded = (shapes: any[], type?: "dxf" | "svg" | "stl") => {
+  const handlePatternLoaded = (shapes: any[], type?: "dxf" | "svg" | "stl", name?: string, content?: string | ArrayBuffer) => {
     const pType = type || null;
     const newScale = calculateAutoPatternScale(
       shapes,
@@ -123,6 +126,7 @@ const GeometryControls: React.FC<GeometryControlsProps> = ({
       isTiled,
       newScale,
       shapeCount: shapes.length,
+      name
     });
 
     updateSettings({
@@ -130,6 +134,10 @@ const GeometryControls: React.FC<GeometryControlsProps> = ({
       patternType: pType,
       ...(newScale !== null ? { patternScale: newScale } : {}),
     });
+
+    if (onPatternAssetChanged && name && content && type) {
+        onPatternAssetChanged({ name, content, type });
+    }
   };
 
   return (
@@ -140,8 +148,8 @@ const GeometryControls: React.FC<GeometryControlsProps> = ({
           patternShapes && patternShapes.length > 0 ? patternShapes : null
         }
         fileName={libraryPatternName}
-        onUpload={(shapes, name, type) => {
-          handlePatternLoaded(shapes, type);
+        onUpload={(shapes, name, type, content) => {
+          handlePatternLoaded(shapes, type, name, content);
           setLibraryPatternName(name);
         }}
         onClear={() => {
@@ -150,6 +158,7 @@ const GeometryControls: React.FC<GeometryControlsProps> = ({
             patternType: null,
           });
           setLibraryPatternName(null);
+          if (onPatternAssetChanged) onPatternAssetChanged(null);
         }}
         allowedTypes={["stl"]}
         adornment={
@@ -171,19 +180,28 @@ const GeometryControls: React.FC<GeometryControlsProps> = ({
         onSelect={async (preset) => {
           setShowPatternLibrary(false);
           try {
-            const response = await fetch(`/${preset.category}/${preset.file}`);
-            const buffer = await response.arrayBuffer();
-
-            let shapes: any[] = [];
-
             if (preset.type === "stl") {
+               const response = await fetch(`/${preset.category}/${preset.file}`);
+               const buffer = await response.arrayBuffer();
+               
               const loader = new STLLoader();
               const geometry = loader.parse(buffer);
               geometry.center(); // Auto-center STLs
-              shapes = [geometry];
+              handlePatternLoaded([geometry], preset.type, preset.name, buffer);
+
+            } else {
+               // For DXF/SVG, we need text content
+               const response = await fetch(`/${preset.category}/${preset.file}`);
+               const text = await response.text();
+               
+               const result = parseShapeFile(text, preset.type as 'dxf' | 'svg');
+               if (result.success) {
+                   handlePatternLoaded(result.shapes, preset.type, preset.name, text);
+               } else {
+                   console.error("Failed to parse library pattern:", result.error);
+               }
             }
 
-            handlePatternLoaded(shapes, preset.type);
             setLibraryPatternName(preset.name);
           } catch (error) {
             console.error("Failed to load pattern:", error);
