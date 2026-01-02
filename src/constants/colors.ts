@@ -16,7 +16,7 @@ export const COLORS: Record<string, string> = {
     'Fuchsia': '#d946ef',
     'Pink': '#ec4899',
     'Rose': '#f43f5e',
-    'Black': '#000000',
+    'Black': '#202020',
     'Dark Gray': '#555555',
     'Light Gray': '#aaaaaa',
     'White': '#ffffff',
