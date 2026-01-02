@@ -276,29 +276,27 @@ const Controls: React.FC<ControlsProps> = ({
                 </Button>
             )}
 
-            {/* Debug Import/Export */}
-            {geometrySettings.debugMode && (
-                <div className="grid grid-cols-2 gap-2 pt-2">
-                    <Button
-                        onClick={handleImportClick}
-                        variant="secondary"
-                        size="sm"
-                        leftIcon={<Download size={14} />}
-                        title="Import Project JSON"
-                    >
-                        Import Settings
-                    </Button>
-                    <Button
-                        onClick={handleExportClick}
-                        variant="secondary"
-                        size="sm"
-                        leftIcon={<Upload size={14} />}
-                        title="Export Project JSON"
-                    >
-                        Export Settings
-                    </Button>
-                </div>
-            )}
+
+            <div className="grid grid-cols-2 gap-2 pt-2">
+                <Button
+                    onClick={handleImportClick}
+                    variant="secondary"
+                    size="sm"
+                    leftIcon={<Download size={14} />}
+                    title="Import Project JSON"
+                >
+                    Import Project
+                </Button>
+                <Button
+                    onClick={handleExportClick}
+                    variant="secondary"
+                    size="sm"
+                    leftIcon={<Upload size={14} />}
+                    title="Export Project JSON"
+                >
+                    Export Project
+                </Button>
+            </div>
 
             {/* Export Buttons */}
             {exportControls && (
