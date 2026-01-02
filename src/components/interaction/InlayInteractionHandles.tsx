@@ -52,7 +52,8 @@ const Handle = ({ position, id, setHovered, onDown, inlayScale }: {
             scaleFactor = pixelSize * HANDLE_PIXEL_SIZE;
         }
         
-        const invScale = 1 / (inlayScale || 1);
+        const parentScale = ref.current.parent ? ref.current.parent.scale.x : (inlayScale || 1);
+        const invScale = 1 / parentScale;
         ref.current.scale.set(scaleFactor * invScale, scaleFactor * invScale, 1);
     });
 

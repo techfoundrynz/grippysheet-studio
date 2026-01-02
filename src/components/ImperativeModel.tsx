@@ -578,7 +578,12 @@ const ImperativeModel = React.forwardRef((props: ImperativeModelProps, ref: Reac
                 if (shapeColor === 'transparent') return;
     
                 const totalDepth = (item.depth || 0.6) + Number(item.extend || 0) + ((i + 1) * 0.001);
-                const mat = createMaterial(shapeColor === 'base' ? color : shapeColor, false, 1.0, wireframeInlay);
+                const mat = createMaterial(
+                    shapeColor === 'base' ? color : shapeColor, 
+                    (inlayOpacity || 1.0) < 1.0, 
+                    inlayOpacity || 1.0, 
+                    wireframeInlay
+                );
                 
                 // Fix Z-fighting with base
                 mat.polygonOffset = true;
@@ -728,7 +733,7 @@ const ImperativeModel = React.forwardRef((props: ImperativeModelProps, ref: Reac
     });
     });
 
-  }, [inlayItems, thickness, color, wireframeInlay, clipToOutline, filledCutoutShapes, holeShapes, displayMode, isDragging, debugShowHoleCutter, debugShowInlayCutter, previewInlay]);
+  }, [inlayItems, thickness, color, wireframeInlay, clipToOutline, filledCutoutShapes, holeShapes, displayMode, isDragging, debugShowHoleCutter, debugShowInlayCutter, previewInlay, inlayOpacity]);
 
     // Subscribe to Event Bus for high-performance live preview updates
     // This allows us to move meshes during drag without React re-renders or regenerating geometry
