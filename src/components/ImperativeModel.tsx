@@ -608,7 +608,7 @@ const ImperativeModel = React.forwardRef((props: ImperativeModelProps, ref: Reac
             // LIFT slightly primarily to avoid Z-fighting
             // Add slight Z-offset based on shape index to prevent z-fighting between stacked inlay shapes
             const shapeZOffset = shapeIdx * 0.002;
-            geo.translate(0, 0, thickness - (item.depth || 0.6) + 0.1 + shapeZOffset);
+            geo.translate(0, 0, thickness - (item.depth || 0.6)  + shapeZOffset);
             
             geo.applyMatrix4(new THREE.Matrix4().makeScale(item.scale, item.scale, 1));
             
