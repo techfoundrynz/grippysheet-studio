@@ -24,8 +24,10 @@ const PRESETS: PatternPreset[] = [
     { name: 'Hexyramid', file: 'hexyramid.stl', type: 'stl', category: 'patterns' },
     { name: 'Bevelled Cube', file: 'bevelled-cube.stl', type: 'stl', category: 'patterns' },
     { name: 'Skewed Pyramid', file: 'pyramid-skewed.stl', type: 'stl', category: 'patterns' },
-    {name: 'Nipple', file: 'nipple.stl', type: 'stl', category: 'patterns' },
+    { name: 'Nipple', file: 'nipple.stl', type: 'stl', category: 'patterns' },
     { name: 'PubGrip', file: 'pubgrip.stl', type: 'stl', category: 'patterns' },
+    { name: 'Polypore by VOW', file: 'Polypore by VOW.stl', type: 'stl', category: 'patterns' },
+    { name: 'Polypore Flower by VOW', file: 'Polypore flower by VOW.stl', type: 'stl', category: 'patterns' },
     
     // Inlays
     { name: 'GrippySheet', file: 'grippysheet.svg', type: 'svg', category: 'inlays', keepOriginalColors: true },
