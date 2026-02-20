@@ -51,6 +51,7 @@ const PRESETS: PatternPreset[] = [
     { name: 'GT Stock', file: 'gtstock.dxf', type: 'dxf', category: 'outlines', infoUrl: 'https://www.printables.com/model/968803' },
     { name: 'GT Kush Wide', file: 'gtkushwide.dxf', type: 'dxf', category: 'outlines', infoUrl: 'https://www.printables.com/model/968803' },
     { name: 'GT Mushies', file: 'gtmushies.dxf', type: 'dxf', category: 'outlines', infoUrl: 'https://www.printables.com/model/968803' },
+    { name: 'GT FST', file: 'gtfst.dxf', type: 'dxf', category: 'outlines' },
     { name: 'Pint', file: 'pint.dxf', type: 'dxf', category: 'outlines', infoUrl: 'https://www.printables.com/model/968803' },
     { name: 'Pint Matix', file: 'pintmatix.dxf', type: 'dxf', category: 'outlines' },
     { name: 'Gosmilo X7', file: 'gosmilox7.dxf', type: 'dxf', category: 'outlines' }
