@@ -45,14 +45,15 @@ const ScreenshotManager: React.FC<ScreenshotManagerProps> = ({ triggerRef, size 
                 shotCamera.lookAt(0, 0, 0);
                 shotCamera.updateProjectionMatrix();
 
-                // 4. Hide Helpers (Grid, Gizmos if any)
+                // 4. Hide Helpers (Grid, Gizmos, Interaction Handles)
                 const hiddenObjects: THREE.Object3D[] = [];
                 scene.traverse((obj) => {
                     if (
                         obj instanceof THREE.GridHelper || 
                         obj.type === 'GridHelper' || 
                         obj.type === 'AxesHelper' ||
-                        obj.name.startsWith('Debug_')
+                        obj.name.startsWith('Debug_') ||
+                        obj.name === 'InlayHandles'
                     ) {
                         if (obj.visible) {
                             obj.visible = false;

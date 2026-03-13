@@ -465,6 +465,7 @@ export const InlayInteractionHandles: React.FC<InlayInteractionHandlesProps> = (
     return (
         <group
             ref={groupRef}
+            name="InlayHandles"
             position={[displayItem.x, displayItem.y, thickness]} 
             rotation={[0, 0, (displayItem.rotation || 0) * (Math.PI / 180)]}
             scale={[displayItem.scale || 1, displayItem.scale || 1, 1]}

@@ -57,16 +57,27 @@ export const parseDxfToShapes = (dxfString: string): THREE.Shape[] => {
     if (!dxf || !dxf.entities || dxf.entities.length === 0) return [];
 
     let scaleFactor = 1.0;
-    if (dxf.header && dxf.header['$INSUNITS']) {
-        const units = dxf.header['$INSUNITS'];
-        switch (units) {
-            case 1: scaleFactor = 25.4; break;
-            case 2: scaleFactor = 304.8; break;
-            case 4: scaleFactor = 1.0; break;
-            case 5: scaleFactor = 10.0; break;
-            case 6: scaleFactor = 1000.0; break;
+    const insUnits = dxf.header?.['$INSUNITS'];
+    if (insUnits !== undefined && insUnits !== 0) {
+        // $INSUNITS present and non-zero → use it directly
+        switch (insUnits) {
+            case 1: scaleFactor = 25.4; break;   // Inches → mm
+            case 2: scaleFactor = 304.8; break;  // Feet → mm
+            case 4: scaleFactor = 1.0; break;    // mm (already correct)
+            case 5: scaleFactor = 10.0; break;   // cm → mm
+            case 6: scaleFactor = 1000.0; break; // m → mm
             default: scaleFactor = 1.0;
         }
+    } else {
+        // No $INSUNITS (or 0 = unspecified) — fall back to $MEASUREMENT.
+        // $MEASUREMENT: 0 = Imperial (inches), 1 = Metric (mm).
+        // Older DXF exports (e.g. AC1014 legacy headers) often omit $INSUNITS
+        // but still declare imperial vs metric via $MEASUREMENT.
+        const measurement = dxf.header?.['$MEASUREMENT'];
+        if (measurement === 0) {
+            scaleFactor = 25.4; // inches → mm
+        }
+        // measurement === 1 or undefined → keep scaleFactor = 1.0 (assume mm)
     }
 
     const segments: PathSegment[] = [];

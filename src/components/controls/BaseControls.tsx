@@ -104,11 +104,13 @@ const BaseControls: React.FC<BaseControlsProps> = ({
         </ControlField>
       )}
 
-      <ControlField label="Thickness (mm)" tooltip="Total thickness (height) of the base sheet">
+      <ControlField label="Thickness (mm)" tooltip="Total thickness (height) of the base sheet (min 0.5mm)">
         <DebouncedInput
           type="number"
           value={thickness}
-          onChange={(val) => updateSettings({ thickness: Number(val) })}
+          onChange={(val) => updateSettings({ thickness: Math.max(0.5, Number(val)) })}
+          step="0.1"
+          min="0.5"
           className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none"
         />
       </ControlField>

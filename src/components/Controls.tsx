@@ -385,6 +385,7 @@ const Controls: React.FC<ControlsProps> = ({
                         updateSettings={updateInlay}
                         cutoutShapes={baseSettings.cutoutShapes}
                         baseSize={baseSettings.size}
+                        baseThickness={baseSettings.thickness}
                         baseColor={baseSettings.color}
                         selectedInlayId={selectedInlayId}
                         setSelectedInlayId={setSelectedInlayId}

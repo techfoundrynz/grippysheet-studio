@@ -30,6 +30,7 @@ interface InlayControlsProps {
   updateSettings: (updates: Partial<InlaySettings>) => void;
   cutoutShapes: any[] | null | undefined;
   baseSize: number;
+  baseThickness: number;
   baseColor: string;
   selectedInlayId: string | null;
   setSelectedInlayId: (id: string | null) => void;
@@ -41,11 +42,14 @@ const InlayControls: React.FC<InlayControlsProps> = ({
   updateSettings,
   cutoutShapes,
   baseSize,
+  baseThickness,
   baseColor,
   selectedInlayId,
   setSelectedInlayId,
   onInlayAssetChanged,
 }) => {
+  // Max allowed depth = thickness - 0.1mm (must always leave a floor)
+  const maxDepth = Math.max(0.1, parseFloat((baseThickness - 0.1).toFixed(2)));
   const { showAlert } = useAlert();
   const { items } = settings;
 
@@ -62,6 +66,18 @@ const InlayControls: React.FC<InlayControlsProps> = ({
       setSelectedInlayId(null);
     }
   }, [items && items.length]);
+
+  // When base thickness changes, clamp any items whose depth now exceeds the new max
+  useEffect(() => {
+    if (!items || items.length === 0) return;
+    const newMax = Math.max(0.1, parseFloat((baseThickness - 0.1).toFixed(2)));
+    const clamped = items.map(item => {
+      const d = item.depth ?? 0.6;
+      return d > newMax ? { ...item, depth: newMax } : item;
+    });
+    const anyChanged = clamped.some((item, i) => item !== items[i]);
+    if (anyChanged) updateSettings({ items: clamped });
+  }, [baseThickness]);
 
   const selectedItem = items?.find((i) => i.id === selectedInlayId);
 
@@ -618,14 +634,15 @@ const InlayControls: React.FC<InlayControlsProps> = ({
             <div className="flex-1 min-w-0">
               <ControlField
                 label="Inlay Depth (mm)"
-                tooltip="How deep this inlay cuts into the base"
+                tooltip={`How deep this inlay cuts into the base (max ${maxDepth}mm)`}
               >
                 <DebouncedInput
                   type="number"
                   value={selectedItem.depth || 0.6}
-                  onChange={(val) => updateItem(selectedItem.id, { depth: Number(val) })}
+                  onChange={(val) => updateItem(selectedItem.id, { depth: Math.min(maxDepth, Math.max(0.1, Number(val))) })}
                   step="0.1"
                   min="0.1"
+                  max={maxDepth}
                   className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none"
                 />
               </ControlField>

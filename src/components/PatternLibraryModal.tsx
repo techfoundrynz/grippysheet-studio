@@ -24,8 +24,12 @@ const PRESETS: PatternPreset[] = [
     { name: 'Hexyramid', file: 'hexyramid.stl', type: 'stl', category: 'patterns' },
     { name: 'Bevelled Cube', file: 'bevelled-cube.stl', type: 'stl', category: 'patterns' },
     { name: 'Skewed Pyramid', file: 'pyramid-skewed.stl', type: 'stl', category: 'patterns' },
-    {name: 'Nipple', file: 'nipple.stl', type: 'stl', category: 'patterns' },
+    { name: 'Nipple', file: 'nipple.stl', type: 'stl', category: 'patterns' },
     { name: 'PubGrip', file: 'pubgrip.stl', type: 'stl', category: 'patterns' },
+    { name: 'Thane Classic', file: 'thane-classic.stl', type: 'stl', category: 'patterns' },
+    { name: 'Mitsi', file: 'mitsi.stl', type: 'stl', category: 'patterns' },
+    { name: 'Polypore Single', file: 'polypore-single.stl', type: 'stl', category: 'patterns' },
+    { name: 'Polypore Flower', file: 'polypore-flower.stl', type: 'stl', category: 'patterns' },
     
     // Inlays
     { name: 'GrippySheet', file: 'grippysheet.svg', type: 'svg', category: 'inlays', keepOriginalColors: true },
@@ -52,6 +56,7 @@ const PRESETS: PatternPreset[] = [
     { name: 'GT Kush Wide', file: 'gtkushwide.dxf', type: 'dxf', category: 'outlines', infoUrl: 'https://www.printables.com/model/968803' },
     { name: 'GT Mushies', file: 'gtmushies.dxf', type: 'dxf', category: 'outlines', infoUrl: 'https://www.printables.com/model/968803' },
     { name: 'GT FST', file: 'gtfst.dxf', type: 'dxf', category: 'outlines' },
+    { name: 'GT Lowboy Flared', file: 'gtlowboyflared.dxf', type: 'dxf', category: 'outlines' },
     { name: 'Pint', file: 'pint.dxf', type: 'dxf', category: 'outlines', infoUrl: 'https://www.printables.com/model/968803' },
     { name: 'Pint Matix', file: 'pintmatix.dxf', type: 'dxf', category: 'outlines' },
     { name: 'Gosmilo X7', file: 'gosmilox7.dxf', type: 'dxf', category: 'outlines' }
