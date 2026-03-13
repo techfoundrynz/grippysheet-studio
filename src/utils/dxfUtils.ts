@@ -471,19 +471,23 @@ export const generateSVGPath = (shapes: THREE.Shape[]): string => {
     shapes.forEach(shape => {
         const points = shape.getPoints();
         if (points.length > 0) {
+            // Outer contour — close it first
             pathData += `M ${points[0].x} ${points[0].y} `;
             for (let i = 1; i < points.length; i++) pathData += `L ${points[i].x} ${points[i].y} `;
+            pathData += "Z ";
+
+            // Hole subpaths — must come AFTER outer Z, wound in reverse so evenodd rule cuts them out
             if (shape.holes && shape.holes.length > 0) {
                 shape.holes.forEach(hole => {
                     const holePoints = hole.getPoints();
                     if (holePoints.length > 0) {
-                        pathData += `M ${holePoints[0].x} ${holePoints[0].y} `;
-                        for (let k = 1; k < holePoints.length; k++) pathData += `L ${holePoints[k].x} ${holePoints[k].y} `;
+                        // Append in reverse order to ensure opposite winding from the outer path
+                        pathData += `M ${holePoints[holePoints.length - 1].x} ${holePoints[holePoints.length - 1].y} `;
+                        for (let k = holePoints.length - 2; k >= 0; k--) pathData += `L ${holePoints[k].x} ${holePoints[k].y} `;
                         pathData += "Z ";
                     }
                 });
             }
-            pathData += "Z ";
         }
     });
     return pathData;
