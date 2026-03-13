@@ -47,7 +47,7 @@ export const parseShapeFile = (
                 const fillColor = path.userData?.style?.fill;
                 const color = (fillColor && fillColor !== 'none') ? fillColor : (path.color && path.color.getStyle());
 
-                const subShapes = path.toShapes(true);
+                const subShapes = SVGLoader.createShapes(path);
                 subShapes.forEach(s => {
                     if (extractColors) {
                         loadedShapes.push({ shape: s, color: color || '#000000' });
