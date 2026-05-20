@@ -373,23 +373,41 @@ export const ColorFlowControls: React.FC<Props> = ({ baseSettings, setBaseSettin
         <section className={layers.length > 0 ? '' : 'opacity-40 pointer-events-none'}>
           <h3 className="text-xs uppercase tracking-widest text-gray-400 mb-2">④ Print</h3>
           <div className="grid grid-cols-2 gap-2 text-xs text-gray-400">
-            <label>total mm
-              <input type="number" step={0.1} min={0.4} max={10} value={settings.totalMm}
-                onChange={(e) => {
-                  const v = Math.max(0.4, Math.min(10, +e.target.value));
-                  setSettings((s) => ({ ...s, totalMm: v, baseMm: Math.min(s.baseMm, v - 0.1) }));
-                }}
-                className="w-full mt-1 bg-gray-900 border border-gray-700 rounded px-2 py-1" />
-            </label>
             <label>base mm
-              <input type="number" step={0.1} min={0.2} max={5} value={settings.baseMm}
+              <input
+                type="number"
+                step={0.1}
+                min={0.2}
+                max={5}
+                value={settings.baseMm}
                 onChange={(e) => {
-                  const v = Math.max(0.2, Math.min(5, +e.target.value));
-                  setSettings((s) => ({ ...s, baseMm: Math.min(v, s.totalMm - 0.1) }));
+                  const v = Math.max(0.2, Math.min(5, +e.target.value || 1));
+                  setSettings((s) => ({ ...s, baseMm: v }));
                 }}
-                className="w-full mt-1 bg-gray-900 border border-gray-700 rounded px-2 py-1" />
+                className="w-full mt-1 bg-gray-900 border border-gray-700 rounded px-2 py-1"
+              />
+            </label>
+            <label>layer mm
+              <input
+                type="number"
+                step={0.05}
+                min={0.05}
+                max={2}
+                value={settings.colorLayerMm}
+                onChange={(e) => {
+                  const v = Math.max(0.05, Math.min(2, +e.target.value || 0.4));
+                  setSettings((s) => ({ ...s, colorLayerMm: v }));
+                }}
+                className="w-full mt-1 bg-gray-900 border border-gray-700 rounded px-2 py-1"
+              />
             </label>
           </div>
+          {palette.length > 0 && (
+            <p className="text-[10px] text-gray-500 mt-2">
+              total {(settings.baseMm + palette.length * settings.colorLayerMm).toFixed(2)}mm
+              ({settings.baseMm.toFixed(2)} base + {palette.length} × {settings.colorLayerMm.toFixed(2)}mm)
+            </p>
+          )}
         </section>
 
         <section className={layers.length > 0 ? '' : 'opacity-40 pointer-events-none'}>
