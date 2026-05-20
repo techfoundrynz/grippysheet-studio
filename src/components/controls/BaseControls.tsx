@@ -36,11 +36,16 @@ const BaseControls: React.FC<BaseControlsProps> = ({
     const res = await fetch(entry.file);
     const text = await res.text();
     const parsed = parseShapeFile(text, 'dxf');
-    if (parsed.success) onOutlineLoaded(parsed.shapes);
+    if (parsed.success) {
+      updateSettings({ cutoutShapes: parsed.shapes, outlineSlug: slug });
+      setFileName(entry.name);
+      onOutlineLoaded(parsed.shapes);
+    }
   };
 
   const handleOutlineLoaded = (shapes: any[], name: string | null, type?: 'dxf'|'svg'|'stl', content?: string | ArrayBuffer) => {
-      updateSettings({ cutoutShapes: shapes });
+      // Custom upload clears the library slug.
+      updateSettings({ cutoutShapes: shapes, outlineSlug: null });
       setFileName(name);
       onOutlineLoaded(shapes);
       if (name && content && type && onOutlineAssetChanged) {
@@ -55,7 +60,7 @@ const BaseControls: React.FC<BaseControlsProps> = ({
           <label className="block text-xs text-gray-400 mb-1">Outline Library</label>
           <select
             onChange={(e) => handlePickPreset(e.target.value)}
-            defaultValue=""
+            value={settings.outlineSlug ?? ''}
             className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-1 text-sm"
           >
             <option value="">— upload your own DXF below —</option>
