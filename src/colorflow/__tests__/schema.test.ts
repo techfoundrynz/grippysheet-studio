@@ -10,14 +10,14 @@ describe('ColorFlowSettingsSchema', () => {
     expect(parsed.detail).toBe(1);
     expect(parsed.smooth).toBe(true);
     expect(parsed.sort).toBe('luma');
-    expect(parsed.totalMm).toBe(2.0);
-    expect(parsed.baseMm).toBe(1.0);
-    expect(parsed.outlineSlug).toBeNull();
     expect(parsed.colorLayerMm).toBe(0.4);
     expect(parsed.imageOffsetMm).toEqual({ x: 0, y: 0 });
     expect(parsed.imageScale).toBe(1.0);
     expect(parsed.layerOrder).toBeNull();
-    // Removed field: colorLayerHeights should NOT exist on the parsed object
+    // Removed fields: lived on BaseSettings now (outlineSlug) or were redundant (baseMm, totalMm, colorLayerHeights).
+    expect('outlineSlug' in parsed).toBe(false);
+    expect('baseMm' in parsed).toBe(false);
+    expect('totalMm' in parsed).toBe(false);
     expect('colorLayerHeights' in parsed).toBe(false);
   });
 
@@ -40,11 +40,6 @@ describe('ColorFlowSettingsSchema', () => {
     expect(() => ColorFlowSettingsSchema.parse({ colorCount: 11 })).toThrow();
   });
 
-  it('rejects baseMm >= totalMm-equivalent constraint at parse time? no — both numeric, ranges only', () => {
-    // baseMm < totalMm is enforced at use time, not at schema parse time
-    const ok = ColorFlowSettingsSchema.parse({ baseMm: 5, totalMm: 1 });
-    expect(ok.baseMm).toBe(5);
-  });
 });
 
 describe('ProjectSchema v2', () => {

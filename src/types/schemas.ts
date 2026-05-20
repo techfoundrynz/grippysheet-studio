@@ -15,6 +15,8 @@ export const BaseSettingsSchema = z.object({
     cutoutShapes: ThreeShapeSchema.nullable().optional().default(null),
     baseOutlineRotation: z.number().default(0),
     baseOutlineMirror: z.boolean().default(false),
+    /** Slug from the outline library when the base came from a preset; null for custom uploads. */
+    outlineSlug: z.string().nullable().default(null),
 });
 
 export const InlayItemSchema = z.object({
