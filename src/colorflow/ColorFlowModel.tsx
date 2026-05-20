@@ -55,6 +55,16 @@ export const ColorFlowModel = React.forwardRef<THREE.Group, Props>(({ baseGeom, 
       mesh.name = `Color_${i + 1}_${hex}`;
       group.add(mesh);
     }
+
+    return () => {
+      // Dispose on unmount to release GPU memory.
+      group.traverse((obj) => {
+        if (obj instanceof THREE.Mesh) {
+          obj.geometry.dispose();
+          if (obj.material instanceof THREE.Material) obj.material.dispose();
+        }
+      });
+    };
   }, [baseGeom, layers, displayMode]);
 
   return <group ref={localGroupRef} />;
