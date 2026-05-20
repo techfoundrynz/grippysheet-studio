@@ -143,21 +143,46 @@ async function handleExtrude(req: Extract<Request, { kind: 'extrude' }>) {
   const positionByCentroid = new Map<number, number>();
   for (let i = 0; i < stackOrder.length; i++) positionByCentroid.set(stackOrder[i], i);
 
+  // STACKED-LEVEL MODEL (print-efficient):
+  // For each level k ∈ [0, N), emit ONE merged mesh containing the union of
+  // every traced polygon whose color sits at stack position >= k. That mesh
+  // occupies z=[baseMm + k*layer, baseMm + (k+1)*layer] and is assigned the
+  // color of stackOrder[k]. Result: the printed object is a stair-step where
+  // each tier uses a single filament across all polygons of that height —
+  // no mid-layer filament swaps, exactly what the slicer wants. Each
+  // emitted entry's `centroidIndex` is the COLOR for this level (so the 3D
+  // viewer + 3MF naming still tag by color), and `position` is the level k.
   const layerGeoms: { centroidIndex: number; position: number; geom: TransferredGeom }[] = [];
-  for (const entry of layers) {
-    const ci = entry.centroidIndex;
-    const pos = positionByCentroid.get(ci);
-    if (pos === undefined) continue; // centroid not in stackOrder — skip
-    const zBottom = baseMm;
-    const zTop = baseMm + (pos + 1) * colorLayerMm;
+  for (let level = 0; level < stackOrder.length; level++) {
+    const zBottom = baseMm + level * colorLayerMm;
+    const zTop = baseMm + (level + 1) * colorLayerMm;
     if (zTop <= zBottom + 1e-6) continue;
-    const m = extrudePolygon(entry.polygon.outer, entry.polygon.holes, zBottom, zTop);
-    if (!m) continue;
-    layerGeoms.push({ centroidIndex: ci, position: pos, geom: m });
-  }
 
-  // Sort by stack position so consumers can iterate in stack order.
-  layerGeoms.sort((a, b) => a.position - b.position);
+    // Merge all polygons whose color's stack position >= this level.
+    const positions: number[] = [];
+    const indices: number[] = [];
+    let vertexOffset = 0;
+    for (const entry of layers) {
+      const pos = positionByCentroid.get(entry.centroidIndex);
+      if (pos === undefined || pos < level) continue;
+      const m = extrudePolygon(entry.polygon.outer, entry.polygon.holes, zBottom, zTop);
+      if (!m) continue;
+      const nVerts = m.positions.length / 3;
+      for (let i = 0; i < m.positions.length; i++) positions.push(m.positions[i]);
+      for (let i = 0; i < m.indices.length; i++) indices.push(m.indices[i] + vertexOffset);
+      vertexOffset += nVerts;
+    }
+    if (indices.length === 0) continue;
+
+    layerGeoms.push({
+      centroidIndex: stackOrder[level],
+      position: level,
+      geom: {
+        positions: new Float32Array(positions),
+        indices: new Uint32Array(indices),
+      },
+    });
+  }
 
   const transfer: Transferable[] = [baseMesh.positions.buffer, baseMesh.indices.buffer];
   for (const entry of layerGeoms) {

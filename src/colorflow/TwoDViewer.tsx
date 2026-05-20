@@ -1,9 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import * as THREE from 'three';
-import {
-  shapeToPolygon,
-  type OutlinePolygon,
-} from './outlineToPolygon';
+import { type OutlinePolygon } from './outlineToPolygon';
 import { generateTilePositions } from '../utils/patternUtils';
 import { pointInPolygon, assignTilesToColors, type TileAssignment } from './spikes';
 import type { Centroid } from './pipeline/quantize';
@@ -23,7 +20,51 @@ interface Props {
 }
 
 const PAD_PX = 40; // canvas inset
-const TILE_DOT_RATIO = 0.45; // dot diameter relative to tile cell
+
+/** 2D convex hull (Andrew's monotone chain). Used to flatten a pattern STL
+ *  into its bottom-projection outline so spike footprints retain their shape
+ *  (hex/square/dome) instead of becoming generic dots. */
+function convexHull2D(points: Array<[number, number]>): Array<[number, number]> {
+  if (points.length < 3) return points.slice();
+  const pts = points.slice().sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const cross = (o: [number, number], a: [number, number], b: [number, number]) =>
+    (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const lower: Array<[number, number]> = [];
+  for (const p of pts) {
+    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) lower.pop();
+    lower.push(p);
+  }
+  const upper: Array<[number, number]> = [];
+  for (let i = pts.length - 1; i >= 0; i--) {
+    const p = pts[i];
+    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) upper.pop();
+    upper.push(p);
+  }
+  upper.pop(); lower.pop();
+  return lower.concat(upper);
+}
+
+/** Cache: WeakMap from BufferGeometry → 2D footprint (convex hull in shape-local mm). */
+const footprintCache = new WeakMap<THREE.BufferGeometry, Array<[number, number]>>();
+
+function patternFootprint2D(patternShape: unknown): Array<[number, number]> | null {
+  if (patternShape instanceof THREE.Shape) {
+    return patternShape.getPoints(48).map((p) => [p.x, p.y] as [number, number]);
+  }
+  if (patternShape instanceof THREE.BufferGeometry) {
+    const cached = footprintCache.get(patternShape);
+    if (cached) return cached;
+    const posAttr = patternShape.attributes.position;
+    if (!posAttr) return null;
+    const arr = posAttr.array as Float32Array;
+    const pts: Array<[number, number]> = [];
+    for (let i = 0; i < arr.length; i += 3) pts.push([arr[i], arr[i + 1]]);
+    const hull = convexHull2D(pts);
+    footprintCache.set(patternShape, hull);
+    return hull;
+  }
+  return null;
+}
 
 /**
  * 2D top-down preview of the ColorFlow design. Cheaper than the 3D Canvas:
@@ -129,6 +170,8 @@ export const TwoDViewer: React.FC<Props> = ({
       const pb = positionByCentroid.get(b.centroidIndex) ?? -1;
       return pa - pb;
     });
+    // Track polygon centroids per color so we can annotate with layer numbers.
+    const layerLabels: Array<{ x: number; y: number; layerNum: number; color: Centroid }> = [];
     for (const entry of sortedLayers) {
       const c = palette[entry.centroidIndex];
       if (!c) continue;
@@ -137,23 +180,40 @@ export const TwoDViewer: React.FC<Props> = ({
       for (const hole of entry.polygon.holes) pathRing(path, hole);
       ctx.fillStyle = `rgb(${c.r}, ${c.g}, ${c.b})`;
       ctx.fill(path, 'evenodd');
+      // Faint outline so adjacent same-color polygons read as distinct regions.
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.18)';
+      ctx.lineWidth = 0.8;
+      ctx.stroke(path);
+
+      // Polygon centroid (simple ring-mean — good enough for labeling).
+      const stackPos = positionByCentroid.get(entry.centroidIndex);
+      if (stackPos !== undefined && entry.polygon.outer.length > 0) {
+        let cx = 0, cy = 0;
+        for (const [px, py] of entry.polygon.outer) { cx += px; cy += py; }
+        cx /= entry.polygon.outer.length;
+        cy /= entry.polygon.outer.length;
+        layerLabels.push({ x: cx, y: cy, layerNum: stackPos + 1, color: c });
+      }
     }
 
-    // 3. Spike tile dots — only if a pattern shape exists.
+    // 3. Spike tile footprints — render the pattern's actual 2D silhouette
+    //    (convex hull of the STL projected to XY, or the THREE.Shape polygon
+    //    for shape patterns) at each tile transform. Far more informative than
+    //    flat dots — the user sees the actual bump shape: hex / square / dome
+    //    outline. Tinted darker than the region underneath for contrast.
     const patternShape = geometrySettings.patternShapes?.[0];
-    if (patternShape && palette.length > 0) {
+    const footprint = patternFootprint2D(patternShape);
+    if (footprint && footprint.length >= 3 && palette.length > 0) {
       const patternScale = geometrySettings.patternScale ?? 1;
       let tileW = 0, tileH = 0;
-      if (patternShape instanceof THREE.Shape) {
-        const tp = shapeToPolygon(patternShape, 32);
-        tileW = (tp.maxX - tp.minX) * patternScale;
-        tileH = (tp.maxY - tp.minY) * patternScale;
-      } else if (patternShape instanceof THREE.BufferGeometry) {
-        if (!patternShape.boundingBox) patternShape.computeBoundingBox();
-        const bb = patternShape.boundingBox!;
-        tileW = (bb.max.x - bb.min.x) * patternScale;
-        tileH = (bb.max.y - bb.min.y) * patternScale;
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      for (const [px, py] of footprint) {
+        if (px < minX) minX = px; if (px > maxX) maxX = px;
+        if (py < minY) minY = py; if (py > maxY) maxY = py;
       }
+      tileW = (maxX - minX) * patternScale;
+      tileH = (maxY - minY) * patternScale;
+
       if (tileW > 0.05 && tileH > 0.05) {
         const tileBounds = new THREE.Box2(
           new THREE.Vector2(outlinePolygon.minX, outlinePolygon.minY),
@@ -174,30 +234,62 @@ export const TwoDViewer: React.FC<Props> = ({
         const colorPolygons = layersInMm.map((l) => ({ centroidIndex: l.centroidIndex, polygon: l.polygon }));
         const assignments: TileAssignment[] = assignTilesToColors(tilesIn, colorPolygons, stackOrder);
 
-        // Single radius based on tile cell size + spacing.
-        const tileCellPx = Math.max(2, Math.min(tileW, tileH) * scale * TILE_DOT_RATIO);
         const fallbackColor = geometrySettings.patternColor;
 
         for (const tile of assignments) {
-          const cx = wx(tile.x);
-          const cy = wy(tile.y);
           let fill = fallbackColor;
           if (spikeColorMatch && tile.colorIndex >= 0) {
             const c = palette[tile.colorIndex];
             if (c) {
-              // Slightly darken color so dots read distinctly against region fill.
-              fill = `rgb(${Math.max(0, c.r - 35)}, ${Math.max(0, c.g - 35)}, ${Math.max(0, c.b - 35)})`;
+              fill = `rgb(${Math.max(0, c.r - 40)}, ${Math.max(0, c.g - 40)}, ${Math.max(0, c.b - 40)})`;
             }
           }
+          const cos = Math.cos(tile.rotation);
+          const sin = Math.sin(tile.rotation);
+          const sx = tile.scale * patternScale;
+          const path = new Path2D();
+          for (let i = 0; i < footprint.length; i++) {
+            const [px, py] = footprint[i];
+            const lx = px * sx;
+            const ly = py * sx;
+            const rx = lx * cos - ly * sin + tile.x;
+            const ry = lx * sin + ly * cos + tile.y;
+            if (i === 0) path.moveTo(wx(rx), wy(ry));
+            else path.lineTo(wx(rx), wy(ry));
+          }
+          path.closePath();
           ctx.fillStyle = fill;
-          ctx.beginPath();
-          ctx.arc(cx, cy, tileCellPx / 2, 0, Math.PI * 2);
-          ctx.fill();
+          ctx.fill(path);
+          ctx.strokeStyle = 'rgba(0, 0, 0, 0.4)';
+          ctx.lineWidth = 0.6;
+          ctx.stroke(path);
         }
       }
     }
 
-    // 4. Dimension lines + size labels
+    // 4. Layer-number annotations at each polygon centroid. Drawn after the
+    //    spike footprints so labels stay readable above the bumps.
+    if (layerLabels.length > 0) {
+      ctx.font = '600 11px ui-sans-serif, system-ui';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      for (const label of layerLabels) {
+        const lx = wx(label.x);
+        const ly = wy(label.y);
+        const luma = 0.2126 * label.color.r + 0.7152 * label.color.g + 0.0722 * label.color.b;
+        const textColor = luma < 140 ? 'rgba(255, 255, 255, 0.95)' : 'rgba(15, 23, 42, 0.95)';
+        const haloColor = luma < 140 ? 'rgba(0, 0, 0, 0.55)' : 'rgba(255, 255, 255, 0.7)';
+        // Halo for legibility against busy spike grids.
+        ctx.fillStyle = haloColor;
+        ctx.beginPath();
+        ctx.arc(lx, ly, 10, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = textColor;
+        ctx.fillText(`L${label.layerNum}`, lx, ly + 0.5);
+      }
+    }
+
+    // 5. Dimension lines + size labels
     drawDimensionLines(ctx, outlinePolygon, offsetX, offsetY, renderW, renderH, scale);
 
     // 5. Layer-order legend (right strip)
