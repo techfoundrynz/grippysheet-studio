@@ -229,6 +229,7 @@ const App = () => {
                   colorFlowGeom={colorFlowGeomWithSpikes}
                   colorFlowImageName={projectAssets.image?.name}
                   colorFlowOutlineSlug={baseSettings.outlineSlug}
+                  baseColor={baseSettings.color}
                 />
               }
               colorFlowSpikeDiag={spikeDiag}
