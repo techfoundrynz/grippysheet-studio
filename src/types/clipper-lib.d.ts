@@ -33,8 +33,35 @@ declare module 'clipper-lib' {
         ptClip = 1
     }
 
+    export enum PolyFillType {
+        pftEvenOdd = 0,
+        pftNonZero = 1,
+        pftPositive = 2,
+        pftNegative = 3
+    }
+
+    export class PolyNode {
+        Contour(): Path;
+        Childs(): PolyNode[];
+        Parent(): PolyNode | null;
+        IsHole(): boolean;
+    }
+
+    export class PolyTree extends PolyNode {
+        Total(): number;
+        Clear(): void;
+    }
+
     export class Clipper {
         static CleanPolygons(polys: Paths, distance?: number): void;
+        AddPath(path: Path, polyType: PolyType, closed: boolean): boolean;
+        AddPaths(paths: Paths, polyType: PolyType, closed: boolean): boolean;
+        Execute(
+            clipType: ClipType,
+            solution: Paths | PolyTree,
+            subjFillType: PolyFillType,
+            clipFillType: PolyFillType,
+        ): boolean;
     }
 
     export class ClipperOffset {

@@ -58,6 +58,24 @@ describe('unionPolygons', () => {
   it('returns [] for empty input', () => {
     expect(unionPolygons([])).toEqual([]);
   });
+
+  it('preserves a hole when a second (non-overlapping) polygon is also in the input', () => {
+    // Donut (10×10 outer with 4×4 hole) + isolated 5×5 square far away.
+    // Exercises the hole-reversal path with a multi-polygon input — was
+    // uncovered by the single-polygon hole test.
+    const result = unionPolygons([
+      {
+        outer: [[0, 0], [10, 0], [10, 10], [0, 10]],
+        holes: [[[3, 3], [7, 3], [7, 7], [3, 7]]],
+      },
+      { outer: [[20, 0], [25, 0], [25, 5], [20, 5]], holes: [] },
+    ]);
+    expect(result).toHaveLength(2);
+    const donut = result.find((p) => p.holes.length === 1);
+    expect(donut).toBeDefined();
+    expect(Math.abs(polygonArea(donut!.outer) - 100)).toBeLessThan(0.1);
+    expect(Math.abs(polygonArea(donut!.holes[0]) - 16)).toBeLessThan(0.1);
+  });
 });
 
 function polygonArea(ring: Array<[number, number]>): number {

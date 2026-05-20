@@ -45,7 +45,13 @@ export function unionPolygons(polygons: LayerPolygon[]): LayerPolygon[] {
     ClipperLib.PolyFillType.pftNonZero,
     ClipperLib.PolyFillType.pftNonZero,
   );
-  if (!ok) return [];
+  if (!ok) {
+    // Should be unreachable for valid input — Clipper only returns false on
+    // truly malformed paths. Surface to devtools so a swallowed empty level
+    // doesn't become a debugging black hole inside the worker.
+    console.warn('unionPolygons: clipper.Execute returned false for', polygons.length, 'polygons');
+    return [];
+  }
 
   const result: LayerPolygon[] = [];
   // Top-level children of the PolyTree are outer rings; their children are holes.
