@@ -5,6 +5,7 @@ import { type ColorFlowSettings } from './schema';
 import { OUTLINE_LIBRARY, getOutlineBySlug } from './outlineLibrary';
 import { parseShapeFile } from '../utils/shapeLoader';
 import { useColorFlowWorker } from './useColorFlowWorker';
+import { ImageTransformPreview } from './ImageTransformPreview';
 import {
   shapeToPolygon,
   outlineCanvasSize,
@@ -278,6 +279,13 @@ export const ColorFlowControls: React.FC<Props> = ({ baseSettings, setBaseSettin
               ? <span className="text-green-400">✓ {imageName} · {imageDims?.w}×{imageDims?.h}</span>
               : <span>drag image / click to browse</span>}
           </div>
+          <ImageTransformPreview
+            imageBitmap={imageBitmap}
+            outline={outlinePolygon}
+            offsetMm={settings.imageOffsetMm}
+            scale={settings.imageScale}
+            onCommit={(offsetMm, scale) => setSettings((s) => ({ ...s, imageOffsetMm: offsetMm, imageScale: scale }))}
+          />
           {hasImage && (
             <div className="mt-3 grid grid-cols-3 gap-2 text-xs text-gray-400">
               <label>x mm
