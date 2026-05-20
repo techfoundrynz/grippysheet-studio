@@ -4,6 +4,8 @@ import {
   shapeToPolygon,
   fitOutlineInImage,
   pixelToMm,
+  CANVAS_PX_PER_MM,
+  outlineCanvasSize,
   type Bounds,
 } from '../outlineToPolygon';
 
@@ -74,5 +76,26 @@ describe('pixelToMm', () => {
     const [mx, my] = pixelToMm(15, 17, placement, bounds);
     expect(mx).toBeCloseTo(101);
     expect(my).toBeCloseTo(209);
+  });
+});
+
+describe('outlineCanvasSize', () => {
+  it('returns px = mm * CANVAS_PX_PER_MM', () => {
+    const size = outlineCanvasSize({ minX: 0, minY: 0, maxX: 10, maxY: 20 });
+    expect(size.w).toBe(10 * CANVAS_PX_PER_MM);
+    expect(size.h).toBe(20 * CANVAS_PX_PER_MM);
+  });
+
+  it('rounds to integer px', () => {
+    const size = outlineCanvasSize({ minX: 0, minY: 0, maxX: 232.9, maxY: 219.7 });
+    expect(Number.isInteger(size.w)).toBe(true);
+    expect(Number.isInteger(size.h)).toBe(true);
+    expect(size.w).toBe(Math.round(232.9 * CANVAS_PX_PER_MM));
+  });
+
+  it('caps at MAX_CANVAS_DIM by reducing effective px-per-mm', () => {
+    // 500mm × 5 px/mm = 2500px — should clamp to 1500
+    const size = outlineCanvasSize({ minX: 0, minY: 0, maxX: 500, maxY: 100 });
+    expect(Math.max(size.w, size.h)).toBeLessThanOrEqual(1500);
   });
 });

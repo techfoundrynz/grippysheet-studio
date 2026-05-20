@@ -12,6 +12,20 @@ export interface OutlinePolygon extends Bounds {
   holes: Array<Array<[number, number]>>;
 }
 
+export const CANVAS_PX_PER_MM = 5;
+export const MAX_CANVAS_DIM = 1500;
+
+export function outlineCanvasSize(bounds: Bounds): { w: number; h: number } {
+  const wMm = bounds.maxX - bounds.minX;
+  const hMm = bounds.maxY - bounds.minY;
+  const naturalMax = Math.max(wMm, hMm) * CANVAS_PX_PER_MM;
+  const scale = naturalMax > MAX_CANVAS_DIM ? MAX_CANVAS_DIM / naturalMax : 1;
+  return {
+    w: Math.round(wMm * CANVAS_PX_PER_MM * scale),
+    h: Math.round(hMm * CANVAS_PX_PER_MM * scale),
+  };
+}
+
 /**
  * Convert a THREE.Shape (curves allowed) into a polygon ring + holes.
  * `divisions` controls curve tessellation; default 64 matches DXF/SVG outlines well.
