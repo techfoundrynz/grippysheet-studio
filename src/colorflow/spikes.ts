@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 import type { ExtrudedGeometry } from './pipeline/extrude';
 import { extrudePolygon } from './pipeline/extrude';
 
@@ -163,6 +164,91 @@ export function buildSpikeGeometriesForColors(
 
     if (indices.length === 0) continue;
 
+    result.push({
+      centroidIndex,
+      geom: {
+        positions: new Float32Array(positions),
+        indices: new Uint32Array(indices),
+      },
+    });
+  }
+
+  return result;
+}
+
+/**
+ * Build per-color spike geometries from a 3D mesh pattern (e.g. an STL bump like
+ * a Pyramid or Dome). For each tile, the source mesh is cloned, scaled by
+ * `patternScale` in X/Y (natural Z preserved), rotated about Z, and translated
+ * so its base sits at the tile's color region top. All instances within a color
+ * group are merged into one position+index buffer.
+ *
+ * The pattern's bottom is anchored to z=0 by translating by -boundingBox.min.z
+ * before the per-tile transform.
+ */
+export function buildSpikesFromMesh(
+  patternGeom: THREE.BufferGeometry,
+  tileAssignments: TileAssignment[],
+  baseMm: number,
+  colorLayerMm: number,
+  stackOrder: number[],
+  patternScale: number,
+): Array<{ centroidIndex: number; geom: ExtrudedGeometry }> {
+  const posAttr = patternGeom.attributes.position;
+  if (!posAttr) return [];
+  const sourcePositions = posAttr.array as Float32Array;
+  const numVerts = sourcePositions.length / 3;
+  if (numVerts === 0) return [];
+
+  // Indices may be present (indexed geom) or absent (each three vertices is a triangle).
+  const sourceIndex = patternGeom.index ? (patternGeom.index.array as Uint32Array | Uint16Array) : null;
+
+  // Anchor pattern bottom at z=0.
+  if (!patternGeom.boundingBox) patternGeom.computeBoundingBox();
+  const bbox = patternGeom.boundingBox!;
+  const zOffset = -bbox.min.z;
+
+  const positionByCentroid = new Map<number, number>();
+  for (let i = 0; i < stackOrder.length; i++) positionByCentroid.set(stackOrder[i], i);
+
+  const groups = new Map<number, TileAssignment[]>();
+  for (const tile of tileAssignments) {
+    const arr = groups.get(tile.colorIndex) ?? [];
+    arr.push(tile);
+    groups.set(tile.colorIndex, arr);
+  }
+
+  const result: Array<{ centroidIndex: number; geom: ExtrudedGeometry }> = [];
+
+  for (const [centroidIndex, tiles] of groups) {
+    const pos = centroidIndex >= 0 ? positionByCentroid.get(centroidIndex) ?? -1 : -1;
+    const bottomZ = pos >= 0 ? baseMm + (pos + 1) * colorLayerMm : baseMm;
+
+    const positions: number[] = [];
+    const indices: number[] = [];
+    let vertexOffset = 0;
+
+    for (const tile of tiles) {
+      const cos = Math.cos(tile.rotation);
+      const sin = Math.sin(tile.rotation);
+      const xyScale = tile.scale * patternScale;
+      for (let i = 0; i < numVerts; i++) {
+        const x = sourcePositions[i * 3] * xyScale;
+        const y = sourcePositions[i * 3 + 1] * xyScale;
+        const z = sourcePositions[i * 3 + 2] + zOffset;
+        const rx = x * cos - y * sin;
+        const ry = x * sin + y * cos;
+        positions.push(rx + tile.x, ry + tile.y, z + bottomZ);
+      }
+      if (sourceIndex) {
+        for (let i = 0; i < sourceIndex.length; i++) indices.push(sourceIndex[i] + vertexOffset);
+      } else {
+        for (let i = 0; i < numVerts; i++) indices.push(i + vertexOffset);
+      }
+      vertexOffset += numVerts;
+    }
+
+    if (indices.length === 0) continue;
     result.push({
       centroidIndex,
       geom: {
