@@ -1,9 +1,9 @@
 /// <reference lib="webworker" />
 import imagetracer from './vendor/imagetracer';
-import { kmeans, assignAll, type Centroid } from './pipeline/quantize';
+import { kmeans, assignAll } from './pipeline/quantize';
 import { modeFilter, SIMPLIFY_KERNELS } from './pipeline/modeFilter';
 import { trace } from './pipeline/trace';
-import { layerToPolygons, type LayerPolygon } from './pipeline/polygonize';
+import { layerToPolygons } from './pipeline/polygonize';
 import { extrudePolygon } from './pipeline/extrude';
 import { mulberry32 } from './pipeline/random';
 import type { Request, Response, TransferredGeom, TracedLayerEntry } from './workerProtocol';
