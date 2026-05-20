@@ -13,7 +13,22 @@ describe('ColorFlowSettingsSchema', () => {
     expect(parsed.totalMm).toBe(2.0);
     expect(parsed.baseMm).toBe(1.0);
     expect(parsed.outlineSlug).toBeNull();
-    expect(parsed.colorLayerHeights).toEqual([]);
+    expect(parsed.colorLayerMm).toBe(0.4);
+    expect(parsed.imageOffsetMm).toEqual({ x: 0, y: 0 });
+    expect(parsed.imageScale).toBe(1.0);
+    expect(parsed.layerOrder).toBeNull();
+    // Removed field: colorLayerHeights should NOT exist on the parsed object
+    expect('colorLayerHeights' in parsed).toBe(false);
+  });
+
+  it('rejects imageScale outside 0.2..3', () => {
+    expect(() => ColorFlowSettingsSchema.parse({ imageScale: 0.1 })).toThrow();
+    expect(() => ColorFlowSettingsSchema.parse({ imageScale: 3.1 })).toThrow();
+  });
+
+  it('clamps offsetMm via schema range -200..200', () => {
+    expect(() => ColorFlowSettingsSchema.parse({ imageOffsetMm: { x: -201, y: 0 } })).toThrow();
+    expect(() => ColorFlowSettingsSchema.parse({ imageOffsetMm: { x: 0, y: 201 } })).toThrow();
   });
 
   it('defaultColorFlowSettings matches the schema defaults', () => {
