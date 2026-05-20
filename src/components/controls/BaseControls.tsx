@@ -9,6 +9,7 @@ import ToggleButton from '../ui/ToggleButton';
 import PatternLibraryModal, { PatternPreset } from '../PatternLibraryModal';
 import { useAlert } from '../../context/AlertContext';
 import { parseShapeFile } from '../../utils/shapeLoader';
+import { OUTLINE_LIBRARY, getOutlineBySlug } from '../../colorflow/outlineLibrary';
 
 interface BaseControlsProps {
   settings: BaseSettings;
@@ -28,6 +29,16 @@ const BaseControls: React.FC<BaseControlsProps> = ({
   const [showLibrary, setShowLibrary] = React.useState(false);
   const { showAlert } = useAlert();
 
+  const handlePickPreset = async (slug: string) => {
+    if (!slug) return;
+    const entry = getOutlineBySlug(slug);
+    if (!entry) return;
+    const res = await fetch(entry.file);
+    const text = await res.text();
+    const parsed = parseShapeFile(text, 'dxf');
+    if (parsed.success) onOutlineLoaded(parsed.shapes);
+  };
+
   const handleOutlineLoaded = (shapes: any[], name: string | null, type?: 'dxf'|'svg'|'stl', content?: string | ArrayBuffer) => {
       updateSettings({ cutoutShapes: shapes });
       setFileName(name);
@@ -40,7 +51,24 @@ const BaseControls: React.FC<BaseControlsProps> = ({
   return (
     <section className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
       <div className="space-y-2">
-        <ShapeUploader 
+        <div className="mb-3">
+          <label className="block text-xs text-gray-400 mb-1">Outline Library</label>
+          <select
+            onChange={(e) => handlePickPreset(e.target.value)}
+            defaultValue=""
+            className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-1 text-sm"
+          >
+            <option value="">— upload your own DXF below —</option>
+            {(['xr','gt','pint','other'] as const).map((g) => (
+              <optgroup key={g} label={g.toUpperCase()}>
+                {OUTLINE_LIBRARY.filter((o) => o.group === g).map((o) => (
+                  <option key={o.slug} value={o.slug}>{o.name} · {o.widthMm}×{o.heightMm}mm</option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+        </div>
+        <ShapeUploader
             label="Upload Outline" 
             shapes={cutoutShapes || null}
             fileName={fileName}
