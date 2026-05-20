@@ -5,32 +5,23 @@ import OutputPanel from "./components/OutputPanel";
 import * as THREE from 'three';
 import { AlertProvider } from './context/AlertContext';
 import { BaseSettings, InlaySettings, GeometrySettings } from './types/schemas';
-
 import { defaultBaseSettings, defaultInlaySettings, defaultGeometrySettings } from './utils/schemaDefaults';
 import WelcomeModal from "./components/WelcomeModal";
+import { ModeToggle, type StudioMode } from "./components/ui/ModeToggle";
+import { defaultColorFlowSettings, type ColorFlowSettings } from "./colorflow/schema";
 
 const App = () => {
-  // Base Settings
+  const [mode, setMode] = useState<StudioMode>('pattern');
+
   const [baseSettings, setBaseSettings] = useState<BaseSettings>(defaultBaseSettings);
-
-  // Geometry Settings
   const [geometrySettings, setGeometrySettings] = useState<GeometrySettings>(defaultGeometrySettings);
-
-  // Inlay Settings
   const [inlaySettings, setInlaySettings] = useState<InlaySettings>(defaultInlaySettings);
+  const [colorFlowSettings, setColorFlowSettings] = useState<ColorFlowSettings>(defaultColorFlowSettings);
 
-  // Selected Inlay
   const [selectedInlayId, setSelectedInlayId] = useState<string | null>(null);
-  
-  // Drag Preview Item (Lifted State)
   const [previewInlay, setPreviewInlay] = useState<any>(null);
 
-  // Welcome Modal State
-  const [showWelcome, setShowWelcome] = useState(() => {
-      // Check local storage on init
-      return !localStorage.getItem('welcome_modal_dismissed');
-  });
-
+  const [showWelcome, setShowWelcome] = useState(() => !localStorage.getItem('welcome_modal_dismissed'));
   const [isControlsCollapsed, setIsControlsCollapsed] = useState(false);
   const [activeTab, setActiveTab] = useState<'base' | 'inlay' | 'geometry'>('base');
 
@@ -43,77 +34,79 @@ const App = () => {
         setGeometrySettings(prev => ({ ...prev, debugMode: !prev.debugMode }));
       }
     };
-
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
   const handleReset = () => {
-      setBaseSettings(defaultBaseSettings);
-      setGeometrySettings(defaultGeometrySettings);
-      setInlaySettings(defaultInlaySettings);
-      setSelectedInlayId(null);
+    setBaseSettings(defaultBaseSettings);
+    setGeometrySettings(defaultGeometrySettings);
+    setInlaySettings(defaultInlaySettings);
+    setColorFlowSettings(defaultColorFlowSettings);
+    setSelectedInlayId(null);
   };
 
   return (
     <AlertProvider>
-    <div className="h-[100dvh] flex flex-col bg-gray-950 text-gray-100 overflow-hidden">
-      <main className="flex-1 flex flex-col md:flex-row overflow-hidden">
-        {/* Left Panel - 3D Viewer */}
-        <div className="h-1/2 md:h-auto flex-1 flex flex-col p-4 min-w-0">
+      <div className="h-[100dvh] flex flex-col bg-gray-950 text-gray-100 overflow-hidden">
+        <div className="absolute top-4 right-4 z-30">
+          <ModeToggle mode={mode} onChange={setMode} />
+        </div>
+
+        <main className="flex-1 flex flex-col md:flex-row overflow-hidden">
+          <div className="h-1/2 md:h-auto flex-1 flex flex-col p-4 min-w-0">
             <div className="flex-1 relative bg-gray-900 rounded-lg border border-gray-800 overflow-hidden shadow-inner">
-                <ModelViewer 
-                  baseSettings={baseSettings}
-                  inlaySettings={inlaySettings}
-                  onInlayChange={setInlaySettings}
-                  geometrySettings={geometrySettings}
-                  meshRef={meshRef} 
-                  activeTab={activeTab}
-                  selectedInlayId={selectedInlayId}
-                  setSelectedInlayId={setSelectedInlayId}
-                  previewInlay={previewInlay}
-                  setPreviewInlay={setPreviewInlay}
-                />
+              <ModelViewer
+                mode={mode}
+                baseSettings={baseSettings}
+                inlaySettings={inlaySettings}
+                onInlayChange={setInlaySettings}
+                geometrySettings={geometrySettings}
+                meshRef={meshRef}
+                activeTab={activeTab}
+                selectedInlayId={selectedInlayId}
+                setSelectedInlayId={setSelectedInlayId}
+                previewInlay={previewInlay}
+                setPreviewInlay={setPreviewInlay}
+              />
             </div>
-        </div>
+          </div>
 
-        {/* Right Panel - Controls & Output */}
-        <div className={`
-            md:h-auto w-full md:w-96 overflow-hidden flex flex-col md:p-4 bg-gray-950 md:bg-transparent transition-all duration-300 ease-in-out
-            ${isControlsCollapsed ? 'h-auto flex-shrink-0 md:flex-none' : 'h-1/2 flex-1 md:flex-none'}
-        `}>
-            <Controls 
-              activeTab={activeTab}
-              setActiveTab={setActiveTab}
-              baseSettings={baseSettings}
-              setBaseSettings={setBaseSettings}
-              inlaySettings={inlaySettings}
-              setInlaySettings={setInlaySettings}
-              geometrySettings={geometrySettings}
-              setGeometrySettings={setGeometrySettings}
-              onReset={handleReset}
-              selectedInlayId={selectedInlayId}
-              setSelectedInlayId={setSelectedInlayId}
-              onOpenWelcome={() => setShowWelcome(true)}
-              isCollapsed={isControlsCollapsed}
-              onToggleCollapse={() => setIsControlsCollapsed(!isControlsCollapsed)}
-              exportControls={
-                   <OutputPanel 
-                        meshRef={meshRef} 
-                        debugMode={geometrySettings.debugMode ?? false} 
-                        className="bg-transparent border-0 shadow-none p-0 !p-0"
-                   />
-               }
-            />
-            <div className={`flex-shrink-0 transition-opacity duration-300 ${isControlsCollapsed ? 'opacity-0 h-0 overflow-hidden md:opacity-100 md:h-auto md:overflow-visible' : 'opacity-100'}`}>
-               {/* OutputPanel moved to Controls */}
-            </div>
-        </div>
-      </main>
+          <div className={`md:h-auto w-full md:w-96 overflow-hidden flex flex-col md:p-4 bg-gray-950 md:bg-transparent transition-all duration-300 ease-in-out ${isControlsCollapsed ? 'h-auto flex-shrink-0 md:flex-none' : 'h-1/2 flex-1 md:flex-none'}`}>
+            {mode === 'pattern' ? (
+              <Controls
+                activeTab={activeTab}
+                setActiveTab={setActiveTab}
+                baseSettings={baseSettings}
+                setBaseSettings={setBaseSettings}
+                inlaySettings={inlaySettings}
+                setInlaySettings={setInlaySettings}
+                geometrySettings={geometrySettings}
+                setGeometrySettings={setGeometrySettings}
+                onReset={handleReset}
+                selectedInlayId={selectedInlayId}
+                setSelectedInlayId={setSelectedInlayId}
+                onOpenWelcome={() => setShowWelcome(true)}
+                isCollapsed={isControlsCollapsed}
+                onToggleCollapse={() => setIsControlsCollapsed(!isControlsCollapsed)}
+                exportControls={
+                  <OutputPanel
+                    meshRef={meshRef}
+                    debugMode={geometrySettings.debugMode ?? false}
+                    className="bg-transparent border-0 shadow-none p-0 !p-0"
+                  />
+                }
+              />
+            ) : (
+              <div className="bg-gray-800 rounded-lg border border-gray-700 p-6 text-gray-300 text-sm">
+                ColorFlow controls coming next task…
+              </div>
+            )}
+          </div>
+        </main>
 
-      {/* Welcome Modal */}
-      {showWelcome && <WelcomeModal onClose={() => setShowWelcome(false)} />}
-    </div>
+        {showWelcome && <WelcomeModal onClose={() => setShowWelcome(false)} />}
+      </div>
     </AlertProvider>
   );
 };

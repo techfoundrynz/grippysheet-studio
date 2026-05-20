@@ -15,6 +15,7 @@ import ScreenshotManager from './ScreenshotManager';
 import { generateTilePositions, getShapesBounds } from '../utils/patternUtils';
 
 interface ModelViewerProps {
+  mode?: 'pattern' | 'colorflow';
   baseSettings: BaseSettings;
   inlaySettings: InlaySettings;
   geometrySettings: GeometrySettings;
@@ -27,11 +28,12 @@ interface ModelViewerProps {
   activeTab?: string;
 }
 
-const ModelViewer: React.FC<ModelViewerProps> = ({ 
+const ModelViewer: React.FC<ModelViewerProps> = ({
+  mode: _mode = 'pattern',
   baseSettings,
   inlaySettings,
   geometrySettings,
-  meshRef, 
+  meshRef,
   onInlayChange,
   activeTab = 'base',
   selectedInlayId,
