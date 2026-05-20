@@ -8,8 +8,8 @@ import { parseShapeFile } from '../utils/shapeLoader';
 import { useColorFlowWorker } from './useColorFlowWorker';
 import { shapeToPolygon, fitOutlineInImage, buildOutlineMask, type OutlinePolygon } from './outlineToPolygon';
 import type { Centroid } from './pipeline/quantize';
-import type { LayerPolygon } from './pipeline/polygonize';
 import type { ExtrudedGeometry } from './pipeline/extrude';
+import type { Response as WorkerResponse, TracedLayerEntry } from './workerProtocol';
 import { build3MF } from './threeMfWriter';
 import { useAlert } from '../context/AlertContext';
 import { importProjectBundle } from '../utils/projectUtils';
@@ -65,9 +65,7 @@ export const ColorFlowControls: React.FC<Props> = ({ baseSettings, setBaseSettin
 
   const [palette, setPalette] = useState<Centroid[]>([]);
   const [assignments, setAssignments] = useState<Uint16Array | null>(null);
-  const [layers, setLayers] = useState<LayerPolygon[]>([]);
-  const [_layerSvgs, setLayerSvgs] = useState<Record<number, string>>({});
-  const [_combinedSvg, setCombinedSvg] = useState<string>('');
+  const [layers, setLayers] = useState<TracedLayerEntry[]>([]);
 
   const outlinePolygon = useMemo<OutlinePolygon | null>(() => {
     const shape = baseSettings.cutoutShapes?.[0];
@@ -126,7 +124,7 @@ export const ColorFlowControls: React.FC<Props> = ({ baseSettings, setBaseSettin
       try {
         const placement = fitOutlineInImage(outlinePolygon, imageDims.w, imageDims.h);
         const mask = buildOutlineMask(outlinePolygon, placement, imageDims.w, imageDims.h);
-        const resp: any = await request({
+        const resp = await request<Extract<WorkerResponse, { kind: 'quantized' }>>({
           kind: 'quantize',
           image: imageBitmap,
           mask,
@@ -150,7 +148,7 @@ export const ColorFlowControls: React.FC<Props> = ({ baseSettings, setBaseSettin
     let cancelled = false;
     (async () => {
       try {
-        const resp: any = await request({
+        const resp = await request<Extract<WorkerResponse, { kind: 'traced' }>>({
           kind: 'trace',
           assignments,
           palette,
@@ -160,8 +158,6 @@ export const ColorFlowControls: React.FC<Props> = ({ baseSettings, setBaseSettin
         });
         if (cancelled || resp.kind !== 'traced') return;
         setLayers(resp.layers);
-        setLayerSvgs(resp.layerSvgs);
-        setCombinedSvg(resp.combinedSvg);
       } catch (err) {
         showAlert({ title: 'Tracing failed', message: String(err), type: 'error' });
       }
@@ -177,17 +173,20 @@ export const ColorFlowControls: React.FC<Props> = ({ baseSettings, setBaseSettin
       try {
         // Convert pixel-space polygon coords back to mm-space for the 3D model.
         const placement = fitOutlineInImage(outlinePolygon, imageDims.w, imageDims.h);
-        const layersInMm: LayerPolygon[] = layers.map((p) => ({
-          outer: p.outer.map(([x, y]) => [(x - placement.offsetX) / placement.scale + outlinePolygon.minX,
-                                            (y - placement.offsetY) / placement.scale + outlinePolygon.minY] as [number, number]),
-          holes: p.holes.map((h) => h.map(([x, y]) => [(x - placement.offsetX) / placement.scale + outlinePolygon.minX,
-                                                       (y - placement.offsetY) / placement.scale + outlinePolygon.minY] as [number, number])),
+        const layersInMm: TracedLayerEntry[] = layers.map((entry) => ({
+          centroidIndex: entry.centroidIndex,
+          polygon: {
+            outer: entry.polygon.outer.map(([x, y]) => [(x - placement.offsetX) / placement.scale + outlinePolygon.minX,
+                                                           (y - placement.offsetY) / placement.scale + outlinePolygon.minY] as [number, number]),
+            holes: entry.polygon.holes.map((h) => h.map(([x, y]) => [(x - placement.offsetX) / placement.scale + outlinePolygon.minX,
+                                                                         (y - placement.offsetY) / placement.scale + outlinePolygon.minY] as [number, number])),
+          },
         }));
-        const outlineInMm: LayerPolygon = {
+        const outlineInMm = {
           outer: outlinePolygon.outer.map(([x, y]) => [x, y] as [number, number]),
           holes: outlinePolygon.holes.map((h) => h.map(([x, y]) => [x, y] as [number, number])),
         };
-        const resp: any = await request({
+        const resp = await request<Extract<WorkerResponse, { kind: 'extruded' }>>({
           kind: 'extrude',
           layers: layersInMm,
           outline: outlineInMm,
@@ -196,12 +195,8 @@ export const ColorFlowControls: React.FC<Props> = ({ baseSettings, setBaseSettin
         });
         if (cancelled || resp.kind !== 'extruded') return;
         if (onGeometryReady) {
-          // Pair each layer geom with its centroid. layers and palette align by index when
-          // we built one polygon per traced layer above, but layers can contain >1 polygon
-          // per color — for now we map best-effort by sequence; refine in Task 17 once we
-          // also surface centroid indices from the worker side.
-          const pairs = resp.layerGeoms.map((geom: ExtrudedGeometry, i: number) => ({
-            centroid: palette[i % palette.length],
+          const pairs = resp.layerGeoms.map(({ centroidIndex, geom }: { centroidIndex: number; geom: ExtrudedGeometry }) => ({
+            centroid: palette[centroidIndex],
             geom,
           }));
           onGeometryReady({ base: resp.baseGeom, layers: pairs });
@@ -218,25 +213,28 @@ export const ColorFlowControls: React.FC<Props> = ({ baseSettings, setBaseSettin
     if (!layers.length || !outlinePolygon || !imageDims) return;
     try {
       const placement = fitOutlineInImage(outlinePolygon, imageDims.w, imageDims.h);
-      const layersInMm: LayerPolygon[] = layers.map((p) => ({
-        outer: p.outer.map(([x, y]) => [(x - placement.offsetX) / placement.scale + outlinePolygon.minX,
-                                          (y - placement.offsetY) / placement.scale + outlinePolygon.minY] as [number, number]),
-        holes: p.holes.map((h) => h.map(([x, y]) => [(x - placement.offsetX) / placement.scale + outlinePolygon.minX,
-                                                     (y - placement.offsetY) / placement.scale + outlinePolygon.minY] as [number, number])),
+      const layersInMm: TracedLayerEntry[] = layers.map((entry) => ({
+        centroidIndex: entry.centroidIndex,
+        polygon: {
+          outer: entry.polygon.outer.map(([x, y]) => [(x - placement.offsetX) / placement.scale + outlinePolygon.minX,
+                                                         (y - placement.offsetY) / placement.scale + outlinePolygon.minY] as [number, number]),
+          holes: entry.polygon.holes.map((h) => h.map(([x, y]) => [(x - placement.offsetX) / placement.scale + outlinePolygon.minX,
+                                                                       (y - placement.offsetY) / placement.scale + outlinePolygon.minY] as [number, number])),
+        },
       }));
-      const outlineInMm: LayerPolygon = {
+      const outlineInMm = {
         outer: outlinePolygon.outer.map(([x, y]) => [x, y] as [number, number]),
         holes: outlinePolygon.holes.map((h) => h.map(([x, y]) => [x, y] as [number, number])),
       };
-      const resp: any = await request({
+      const resp = await request<Extract<WorkerResponse, { kind: 'extruded' }>>({
         kind: 'extrude', layers: layersInMm, outline: outlineInMm,
         baseMm: settings.baseMm, totalMm: settings.totalMm,
       });
       const parts = [{ name: 'base', mesh: resp.baseGeom }];
-      resp.layerGeoms.forEach((g: ExtrudedGeometry, i: number) => {
-        const c = palette[i % palette.length];
+      resp.layerGeoms.forEach(({ centroidIndex, geom }: { centroidIndex: number; geom: ExtrudedGeometry }, i: number) => {
+        const c = palette[centroidIndex];
         const hex = c ? `${c.r.toString(16).padStart(2,'0')}${c.g.toString(16).padStart(2,'0')}${c.b.toString(16).padStart(2,'0')}` : 'unk';
-        parts.push({ name: `color_${i + 1}_${hex}`, mesh: g });
+        parts.push({ name: `color_${i + 1}_${hex}`, mesh: geom });
       });
       const blob = await build3MF(parts, 'footpad_assembly');
       const url = URL.createObjectURL(blob);

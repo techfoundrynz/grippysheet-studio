@@ -6,7 +6,7 @@ import { trace } from './pipeline/trace';
 import { layerToPolygons, type LayerPolygon } from './pipeline/polygonize';
 import { extrudePolygon } from './pipeline/extrude';
 import { mulberry32 } from './pipeline/random';
-import type { Request, Response, TransferredGeom } from './workerProtocol';
+import type { Request, Response, TransferredGeom, TracedLayerEntry } from './workerProtocol';
 
 const ctx: DedicatedWorkerGlobalScope = self as unknown as DedicatedWorkerGlobalScope;
 
@@ -101,12 +101,12 @@ async function handleTrace(req: Extract<Request, { kind: 'trace' }>) {
   });
 
   // Polygons per layer (skip layer 0 = transparent slot)
-  const layerPolys: LayerPolygon[] = [];
+  const layerEntries: TracedLayerEntry[] = [];
   const layerSvgs: Record<number, string> = {};
   for (let li = 1; li < td.layers.length; li++) {
     const polys = layerToPolygons(td.layers[li]);
-    // Flatten ONE outer per polygon into the wire-level array; preserve holes.
-    for (const p of polys) layerPolys.push(p);
+    const centroidIndex = li - 1;
+    for (const p of polys) layerEntries.push({ centroidIndex, polygon: p });
     // For per-layer SVG, regenerate using a 2-color palette (background white, region centroid)
     const binary = new ImageData(width, height);
     const centroid = palette[li - 1];
@@ -126,7 +126,7 @@ async function handleTrace(req: Extract<Request, { kind: 'trace' }>) {
     layerSvgs[centroid.index] = layerSvg;
   }
 
-  post({ id, kind: 'traced', layers: layerPolys, layerSvgs, combinedSvg });
+  post({ id, kind: 'traced', layers: layerEntries, layerSvgs, combinedSvg });
 }
 
 async function handleExtrude(req: Extract<Request, { kind: 'extrude' }>) {
@@ -138,16 +138,16 @@ async function handleExtrude(req: Extract<Request, { kind: 'extrude' }>) {
     post({ id, kind: 'error', phase: 'extrude', message: 'Could not triangulate outline' });
     return;
   }
-  const layerGeoms: TransferredGeom[] = [];
-  for (const p of layers) {
-    const m = extrudePolygon(p.outer, p.holes, baseMm, totalMm);
+  const layerGeoms: { centroidIndex: number; geom: TransferredGeom }[] = [];
+  for (const entry of layers) {
+    const m = extrudePolygon(entry.polygon.outer, entry.polygon.holes, baseMm, totalMm);
     if (!m) continue;
-    layerGeoms.push(m);
+    layerGeoms.push({ centroidIndex: entry.centroidIndex, geom: m });
   }
 
   const transfer: Transferable[] = [baseMesh.positions.buffer, baseMesh.indices.buffer];
-  for (const g of layerGeoms) {
-    transfer.push(g.positions.buffer, g.indices.buffer);
+  for (const entry of layerGeoms) {
+    transfer.push(entry.geom.positions.buffer, entry.geom.indices.buffer);
   }
   post({ id, kind: 'extruded', baseGeom: baseMesh, layerGeoms }, transfer);
 }
