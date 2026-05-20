@@ -4,7 +4,6 @@ export default function earcut(
   dim?: number,
 ): number[];
 
-export function area(data: ArrayLike<number>, holeIndices?: number[] | null, dim?: number): number;
 export function deviation(
   data: ArrayLike<number>,
   holeIndices: number[] | null,
