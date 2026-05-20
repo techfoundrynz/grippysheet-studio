@@ -334,12 +334,18 @@ export const ColorFlowControls: React.FC<Props> = ({ baseSettings, setBaseSettin
           <div className="grid grid-cols-2 gap-2 text-xs text-gray-400">
             <label>total mm
               <input type="number" step={0.1} min={0.4} max={10} value={settings.totalMm}
-                onChange={(e) => setSettings((s) => ({ ...s, totalMm: +e.target.value }))}
+                onChange={(e) => {
+                  const v = Math.max(0.4, Math.min(10, +e.target.value));
+                  setSettings((s) => ({ ...s, totalMm: v, baseMm: Math.min(s.baseMm, v - 0.1) }));
+                }}
                 className="w-full mt-1 bg-gray-900 border border-gray-700 rounded px-2 py-1" />
             </label>
             <label>base mm
               <input type="number" step={0.1} min={0.2} max={5} value={settings.baseMm}
-                onChange={(e) => setSettings((s) => ({ ...s, baseMm: +e.target.value }))}
+                onChange={(e) => {
+                  const v = Math.max(0.2, Math.min(5, +e.target.value));
+                  setSettings((s) => ({ ...s, baseMm: Math.min(v, s.totalMm - 0.1) }));
+                }}
                 className="w-full mt-1 bg-gray-900 border border-gray-700 rounded px-2 py-1" />
             </label>
           </div>
