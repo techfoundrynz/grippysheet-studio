@@ -1,0 +1,102 @@
+import { describe, it, expect } from 'vitest';
+import {
+  pointInRing,
+  pointInPolygon,
+  effectiveSpikeMaxMm,
+  assignTilesToColors,
+  buildSpikeGeometriesForColors,
+} from '../spikes';
+
+const square = (cx: number, cy: number, half: number): Array<[number, number]> => [
+  [cx - half, cy - half],
+  [cx + half, cy - half],
+  [cx + half, cy + half],
+  [cx - half, cy + half],
+];
+
+describe('pointInRing', () => {
+  it('returns true for a point inside a square', () => {
+    expect(pointInRing(0, 0, square(0, 0, 5))).toBe(true);
+  });
+  it('returns false for a point outside a square', () => {
+    expect(pointInRing(10, 0, square(0, 0, 5))).toBe(false);
+  });
+});
+
+describe('pointInPolygon', () => {
+  it('subtracts holes', () => {
+    const polygon = { outer: square(0, 0, 10), holes: [square(0, 0, 3)] };
+    expect(pointInPolygon(7, 0, polygon)).toBe(true);  // inside outer, outside hole
+    expect(pointInPolygon(1, 0, polygon)).toBe(false); // inside hole
+    expect(pointInPolygon(20, 0, polygon)).toBe(false); // outside outer
+  });
+});
+
+describe('effectiveSpikeMaxMm', () => {
+  it('returns the auto value when raw is 0', () => {
+    expect(effectiveSpikeMaxMm(0, 1.0, 5, 0.4)).toBeCloseTo(1.0 + 5 * 0.4 + 1.0);
+  });
+  it('passes a non-zero raw through', () => {
+    expect(effectiveSpikeMaxMm(7.5, 1.0, 5, 0.4)).toBeCloseTo(7.5);
+  });
+  it('floors at baseMm + N×layer + 0.1 even if raw is too low', () => {
+    expect(effectiveSpikeMaxMm(0.5, 1.0, 5, 0.4)).toBeCloseTo(1.0 + 5 * 0.4 + 0.1);
+  });
+});
+
+describe('assignTilesToColors', () => {
+  it('assigns a tile to the topmost color region that contains it', () => {
+    // Two color polygons that overlap at (0, 0); 0 is at stack pos 0, 1 is at stack pos 1 (taller).
+    const polygons = [
+      { centroidIndex: 0, polygon: { outer: square(0, 0, 10), holes: [] } },
+      { centroidIndex: 1, polygon: { outer: square(0, 0, 5), holes: [] } },
+    ];
+    const tiles = [
+      { x: 0, y: 0, rotation: 0, scale: 1 },    // inside both → assigns to 1 (higher stack pos)
+      { x: 7, y: 0, rotation: 0, scale: 1 },    // inside only color 0
+      { x: 20, y: 0, rotation: 0, scale: 1 },   // outside both
+    ];
+    const result = assignTilesToColors(tiles, polygons, [0, 1]);
+    expect(result[0].colorIndex).toBe(1);
+    expect(result[1].colorIndex).toBe(0);
+    expect(result[2].colorIndex).toBe(-1);
+  });
+});
+
+describe('buildSpikeGeometriesForColors', () => {
+  const tileShape = { outer: square(0, 0, 1), holes: [] };
+
+  it('groups tiles by color and produces one merged geometry per group', () => {
+    const tiles = [
+      { x: 0, y: 0, rotation: 0, scale: 1, colorIndex: 0 },
+      { x: 5, y: 0, rotation: 0, scale: 1, colorIndex: 0 },
+      { x: 0, y: 5, rotation: 0, scale: 1, colorIndex: 1 },
+    ];
+    const result = buildSpikeGeometriesForColors(tiles, tileShape, 1.0, 0.4, [0, 1], 3.0);
+    const byColor = Object.fromEntries(result.map((r) => [r.centroidIndex, r]));
+    expect(byColor[0]).toBeDefined();
+    expect(byColor[1]).toBeDefined();
+    // Group 0 (pos=0, two tiles): expect more vertices than group 1 (pos=1, one tile).
+    expect(byColor[0].geom.positions.length).toBeGreaterThan(byColor[1].geom.positions.length);
+  });
+
+  it('places spikes at the correct Z range per color', () => {
+    const tiles = [
+      { x: 0, y: 0, rotation: 0, scale: 1, colorIndex: 1 }, // stack pos 1 → bottomZ = 1 + 2×0.4 = 1.8
+    ];
+    const result = buildSpikeGeometriesForColors(tiles, tileShape, 1.0, 0.4, [0, 1], 3.0);
+    const zs = new Set<number>();
+    for (let i = 2; i < result[0].geom.positions.length; i += 3) {
+      zs.add(+result[0].geom.positions[i].toFixed(3));
+    }
+    expect(zs.has(1.8)).toBe(true);
+    expect(zs.has(3.0)).toBe(true);
+  });
+
+  it('skips groups with degenerate Z range (spikeMax <= bottom)', () => {
+    const tiles = [{ x: 0, y: 0, rotation: 0, scale: 1, colorIndex: 1 }];
+    // bottomZ for color 1 = 1 + 2×0.4 = 1.8; topZ = 1.5 → degenerate, skipped.
+    const result = buildSpikeGeometriesForColors(tiles, tileShape, 1.0, 0.4, [0, 1], 1.5);
+    expect(result).toEqual([]);
+  });
+});

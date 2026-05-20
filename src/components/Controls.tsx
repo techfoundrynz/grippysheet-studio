@@ -43,6 +43,7 @@ interface ControlsProps {
   onColorFlowGeomReady?: (data: {
     base: ExtrudedGeometry;
     layers: { centroid: Centroid; position: number; geom: ExtrudedGeometry }[];
+    spikes: { centroidIndex: number; geom: ExtrudedGeometry; color: string }[];
   }) => void;
   onColorFlowImageAssetChanged?: (a: { name: string; bytes: ArrayBuffer } | null) => void;
   initialColorFlowImageAsset?: { name: string; bytes: ArrayBuffer } | null;
@@ -447,6 +448,7 @@ const Controls: React.FC<ControlsProps> = ({
                 <div className={activeTab === 'colorflow' ? 'block' : 'hidden'}>
                     <ColorFlowControls
                         baseSettings={baseSettings}
+                        geometrySettings={geometrySettings}
                         settings={colorFlowSettings}
                         setSettings={setColorFlowSettings}
                         onGeometryReady={onColorFlowGeomReady}

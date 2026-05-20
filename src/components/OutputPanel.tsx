@@ -16,6 +16,7 @@ interface OutputPanelProps {
   colorFlowGeom?: {
     base: ExtrudedGeometry;
     layers: { centroid: Centroid; position: number; geom: ExtrudedGeometry }[];
+    spikes: { centroidIndex: number; geom: ExtrudedGeometry; color: string }[];
   } | null;
   /** Optional filename prefix for the 3MF download. */
   colorFlowImageName?: string;
@@ -168,6 +169,10 @@ const OutputPanel: React.FC<OutputPanelProps> = ({ meshRef, debugMode = false, c
           const c = entry.centroid;
           const hex = `${c.r.toString(16).padStart(2,'0')}${c.g.toString(16).padStart(2,'0')}${c.b.toString(16).padStart(2,'0')}`;
           parts.push({ name: `color_${entry.position + 1}_${hex}`, mesh: entry.geom });
+        });
+        colorFlowGeom.spikes.forEach((spike, i) => {
+          const suffix = spike.centroidIndex >= 0 ? `c${spike.centroidIndex}` : `u${i}`;
+          parts.push({ name: `spikes_${suffix}`, mesh: spike.geom });
         });
         const blob = await build3MF(parts, 'footpad_assembly');
         const stem = (colorFlowImageName || 'design').replace(/\.[^.]+$/, '');

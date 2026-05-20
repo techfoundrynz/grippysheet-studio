@@ -24,6 +24,12 @@ export const ColorFlowSettingsSchema = z.object({
   }).default({ x: 0, y: 0 }),
   imageScale: z.number().min(0.2).max(3).default(1.0),
   layerOrder: z.array(z.number().int()).nullable().default(null),
+  /** Absolute top-Z of the spike pattern when GeometrySettings provides a tile shape.
+   *  0 = auto (baseMm + N×colorLayerMm + 1.0). Otherwise an absolute mm value. */
+  spikeMaxMm: z.number().min(0).max(20).default(0),
+  /** When true, each spike inherits the color of the region it sits on; when false,
+   *  spikes all use GeometrySettings.patternColor. */
+  spikeColorMatch: z.boolean().default(true),
 });
 
 export type ColorFlowSettings = z.infer<typeof ColorFlowSettingsSchema>;

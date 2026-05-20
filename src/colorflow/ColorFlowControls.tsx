@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { type BaseSettings } from '../types/schemas';
+import * as THREE from 'three';
+import { type BaseSettings, type GeometrySettings } from '../types/schemas';
 import { type ColorFlowSettings } from './schema';
 import { getOutlineBySlug } from './outlineLibrary';
 import { useColorFlowWorker } from './useColorFlowWorker';
@@ -16,15 +17,36 @@ import {
 import { computeImageDrawCoords } from './imageTransform';
 import { paletteCoverage, type Centroid } from './pipeline/quantize';
 import { resolvedStackOrder } from './stackOrder';
+import {
+  assignTilesToColors,
+  buildSpikeGeometriesForColors,
+  effectiveSpikeMaxMm,
+  pointInPolygon,
+} from './spikes';
+import { generateTilePositions } from '../utils/patternUtils';
 import type { ExtrudedGeometry } from './pipeline/extrude';
 import type { Response as WorkerResponse, TracedLayerEntry, ExtrudedLayerEntry } from './workerProtocol';
 import { useAlert } from '../context/AlertContext';
 
+export interface SpikeGroup {
+  centroidIndex: number; // -1 = no color underneath
+  geom: ExtrudedGeometry;
+  /** Resolved hex color for this spike group's material. */
+  color: string;
+}
+
+export interface ColorFlowGeomData {
+  base: ExtrudedGeometry;
+  layers: { centroid: Centroid; position: number; geom: ExtrudedGeometry }[];
+  spikes: SpikeGroup[];
+}
+
 interface Props {
   baseSettings: BaseSettings;
+  geometrySettings: GeometrySettings;
   settings: ColorFlowSettings;
   setSettings: React.Dispatch<React.SetStateAction<ColorFlowSettings>>;
-  onGeometryReady?: (data: { base: ExtrudedGeometry; layers: { centroid: Centroid; position: number; geom: ExtrudedGeometry }[] }) => void;
+  onGeometryReady?: (data: ColorFlowGeomData) => void;
   onImageAssetChanged?: (asset: { name: string; bytes: ArrayBuffer } | null) => void;
   initialImageAsset?: { name: string; bytes: ArrayBuffer } | null;
   /** Callback to switch the right-panel tabs to "Base". */
@@ -35,7 +57,7 @@ const SIMPLIFY_LABELS = ['off', 'light', 'medium', 'strong', 'max'] as const;
 const DETAIL_LABELS = ['sharp', 'balanced', 'smooth'] as const;
 const MAX_IMG_DIM = 1500;
 
-export const ColorFlowControls: React.FC<Props> = ({ baseSettings, settings, setSettings, onGeometryReady, onImageAssetChanged, initialImageAsset, onSwitchToBase }) => {
+export const ColorFlowControls: React.FC<Props> = ({ baseSettings, geometrySettings, settings, setSettings, onGeometryReady, onImageAssetChanged, initialImageAsset, onSwitchToBase }) => {
   const { request, status } = useColorFlowWorker();
   const { showAlert } = useAlert();
 
@@ -201,20 +223,74 @@ export const ColorFlowControls: React.FC<Props> = ({ baseSettings, settings, set
           stackOrder,
         });
         if (cancelled || resp.kind !== 'extruded') return;
+
+        // Build spike overlay if a pattern shape is configured.
+        const spikes: SpikeGroup[] = [];
+        const patternShape = geometrySettings.patternShapes?.[0];
+        if (patternShape instanceof THREE.Shape) {
+          const tilePoly = shapeToPolygon(patternShape, 32);
+          const patternScale = geometrySettings.patternScale ?? 1;
+          const tileWidth = (tilePoly.maxX - tilePoly.minX) * patternScale;
+          const tileHeight = (tilePoly.maxY - tilePoly.minY) * patternScale;
+          if (tileWidth > 0.05 && tileHeight > 0.05) {
+            const tileBounds = new THREE.Box2(
+              new THREE.Vector2(outlinePolygon.minX, outlinePolygon.minY),
+              new THREE.Vector2(outlinePolygon.maxX, outlinePolygon.maxY),
+            );
+            const rawTiles = generateTilePositions(
+              tileBounds,
+              tileWidth,
+              tileHeight,
+              geometrySettings.tileSpacing,
+              null,
+              0,
+              true,
+              geometrySettings.tilingDistribution,
+              geometrySettings.tilingOrientation,
+              geometrySettings.tilingDirection,
+            );
+            // Keep only tiles whose center sits inside the outline polygon.
+            const outlinePoly = { outer: outlinePolygon.outer, holes: outlinePolygon.holes };
+            const tilesInOutline = rawTiles
+              .filter((t) => pointInPolygon(t.position.x, t.position.y, outlinePoly))
+              .map((t) => ({ x: t.position.x, y: t.position.y, rotation: t.rotation, scale: patternScale * (t.scale ?? 1) }));
+
+            const colorPolygons = layersInMm.map((l) => ({ centroidIndex: l.centroidIndex, polygon: l.polygon }));
+            const tileAssignments = assignTilesToColors(tilesInOutline, colorPolygons, stackOrder);
+            const spikeTopMm = effectiveSpikeMaxMm(settings.spikeMaxMm, baseMm, palette.length, settings.colorLayerMm);
+            const groups = buildSpikeGeometriesForColors(
+              tileAssignments,
+              { outer: tilePoly.outer, holes: tilePoly.holes },
+              baseMm,
+              settings.colorLayerMm,
+              stackOrder,
+              spikeTopMm,
+            );
+            const fallback = geometrySettings.patternColor;
+            for (const group of groups) {
+              const c = group.centroidIndex >= 0 ? palette[group.centroidIndex] : null;
+              const color = settings.spikeColorMatch && c
+                ? `#${c.r.toString(16).padStart(2,'0')}${c.g.toString(16).padStart(2,'0')}${c.b.toString(16).padStart(2,'0')}`
+                : fallback;
+              spikes.push({ ...group, color });
+            }
+          }
+        }
+
         if (onGeometryReady) {
           const pairs = resp.layerGeoms.map((entry: ExtrudedLayerEntry) => ({
             centroid: palette[entry.centroidIndex],
             position: entry.position,
             geom: entry.geom,
           }));
-          onGeometryReady({ base: resp.baseGeom, layers: pairs });
+          onGeometryReady({ base: resp.baseGeom, layers: pairs, spikes });
         }
       } catch (err) {
         showAlert({ title: 'Extrusion failed', message: String(err), type: 'error' });
       }
     })();
     return () => { cancelled = true; };
-  }, [layers, outlinePolygon, palette, coverage, baseMm, settings.colorLayerMm, settings.sort, settings.layerOrder, request, onGeometryReady, showAlert]);
+  }, [layers, outlinePolygon, palette, coverage, baseMm, settings.colorLayerMm, settings.sort, settings.layerOrder, settings.spikeMaxMm, settings.spikeColorMatch, geometrySettings, request, onGeometryReady, showAlert]);
 
   const _dropRef = useRef<HTMLDivElement>(null);
 
@@ -384,6 +460,51 @@ export const ColorFlowControls: React.FC<Props> = ({ baseSettings, settings, set
             </p>
           )}
         </section>
+
+        {palette.length > 0 && (
+          <section>
+            <h3 className="text-xs uppercase tracking-widest text-gray-400 mb-2">Spike pattern</h3>
+            {geometrySettings.patternShapes?.[0] ? (
+              <>
+                <p className="text-[10px] text-gray-500 mb-2">
+                  Pattern tile + spacing come from the Geometry tab. Each spike rises from its
+                  color region's top to a unified spike-max height.
+                </p>
+                <div className="grid grid-cols-1 gap-2 text-xs text-gray-400">
+                  <label>spike max mm (0 = auto: max color + 1mm)
+                    <input
+                      type="number"
+                      step={0.1}
+                      min={0}
+                      max={20}
+                      value={settings.spikeMaxMm}
+                      onChange={(e) => {
+                        const v = Math.max(0, Math.min(20, +e.target.value || 0));
+                        setSettings((s) => ({ ...s, spikeMaxMm: v }));
+                      }}
+                      className="w-full mt-1 bg-gray-900 border border-gray-700 rounded px-2 py-1"
+                    />
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={settings.spikeColorMatch}
+                      onChange={(e) => setSettings((s) => ({ ...s, spikeColorMatch: e.target.checked }))}
+                    />
+                    color-match spikes to the region below
+                  </label>
+                </div>
+                <p className="text-[10px] text-gray-500 mt-2">
+                  resolved spike top: {effectiveSpikeMaxMm(settings.spikeMaxMm, baseMm, palette.length, settings.colorLayerMm).toFixed(2)}mm
+                </p>
+              </>
+            ) : (
+              <p className="text-[10px] text-gray-500">
+                No pattern tile configured — pick one in the Geometry tab to add a grip spike layer on top.
+              </p>
+            )}
+          </section>
+        )}
 
         {palette.length > 0 && (
           <section>

@@ -6,6 +6,7 @@ import type { ExtrudedGeometry } from './pipeline/extrude';
 interface Props {
   baseGeom: ExtrudedGeometry | null;
   layers: Array<{ centroid: Centroid; position: number; geom: ExtrudedGeometry }>;
+  spikes?: Array<{ centroidIndex: number; geom: ExtrudedGeometry; color: string }>;
   displayMode?: 'normal' | 'toon';
   /** Hex color string (or any THREE.Color-compatible) for the base mesh material. */
   baseColor?: string;
@@ -19,7 +20,7 @@ function makeBufferGeom(g: ExtrudedGeometry): THREE.BufferGeometry {
   return geom;
 }
 
-export const ColorFlowModel = React.forwardRef<THREE.Group, Props>(({ baseGeom, layers, displayMode = 'normal', baseColor }, ref) => {
+export const ColorFlowModel = React.forwardRef<THREE.Group, Props>(({ baseGeom, layers, spikes = [], displayMode = 'normal', baseColor }, ref) => {
   const localGroupRef = useRef<THREE.Group>(null);
 
   React.useImperativeHandle(ref, () => localGroupRef.current!, []);
@@ -59,6 +60,15 @@ export const ColorFlowModel = React.forwardRef<THREE.Group, Props>(({ baseGeom, 
       mesh.name = `Color_${position + 1}_${hex}`;
       group.add(mesh);
     }
+    for (const spike of spikes) {
+      const mat = displayMode === 'toon'
+        ? new THREE.MeshToonMaterial({ color: spike.color })
+        : new THREE.MeshStandardMaterial({ color: spike.color, flatShading: true });
+      const mesh = new THREE.Mesh(makeBufferGeom(spike.geom), mat);
+      const suffix = spike.centroidIndex >= 0 ? `c${spike.centroidIndex}` : 'unbound';
+      mesh.name = `Spikes_${suffix}`;
+      group.add(mesh);
+    }
 
     return () => {
       // Dispose on unmount to release GPU memory.
@@ -69,7 +79,7 @@ export const ColorFlowModel = React.forwardRef<THREE.Group, Props>(({ baseGeom, 
         }
       });
     };
-  }, [baseGeom, layers, displayMode, baseColor]);
+  }, [baseGeom, layers, spikes, displayMode, baseColor]);
 
   return <group ref={localGroupRef} />;
 });
