@@ -10,6 +10,8 @@ import WelcomeModal from "./components/WelcomeModal";
 import { ModeToggle, type StudioMode } from "./components/ui/ModeToggle";
 import { defaultColorFlowSettings, type ColorFlowSettings } from "./colorflow/schema";
 import { ColorFlowControls } from './colorflow/ColorFlowControls';
+import type { Centroid } from './colorflow/pipeline/quantize';
+import type { ExtrudedGeometry } from './colorflow/pipeline/extrude';
 
 const App = () => {
   const [mode, setMode] = useState<StudioMode>('pattern');
@@ -18,6 +20,7 @@ const App = () => {
   const [geometrySettings, setGeometrySettings] = useState<GeometrySettings>(defaultGeometrySettings);
   const [inlaySettings, setInlaySettings] = useState<InlaySettings>(defaultInlaySettings);
   const [colorFlowSettings, setColorFlowSettings] = useState<ColorFlowSettings>(defaultColorFlowSettings);
+  const [colorFlowGeom, setColorFlowGeom] = useState<{ base: ExtrudedGeometry; layers: { centroid: Centroid; geom: ExtrudedGeometry }[] } | null>(null);
 
   const [selectedInlayId, setSelectedInlayId] = useState<string | null>(null);
   const [previewInlay, setPreviewInlay] = useState<any>(null);
@@ -69,6 +72,7 @@ const App = () => {
                 setSelectedInlayId={setSelectedInlayId}
                 previewInlay={previewInlay}
                 setPreviewInlay={setPreviewInlay}
+                colorFlowGeom={colorFlowGeom}
               />
             </div>
           </div>
@@ -104,6 +108,7 @@ const App = () => {
                 setBaseSettings={setBaseSettings}
                 settings={colorFlowSettings}
                 setSettings={setColorFlowSettings}
+                onGeometryReady={setColorFlowGeom}
               />
             )}
           </div>

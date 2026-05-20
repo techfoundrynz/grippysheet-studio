@@ -13,6 +13,9 @@ import CameraRig, { ViewState } from './CameraRig';
 import FpsTracker from './FpsTracker';
 import ScreenshotManager from './ScreenshotManager';
 import { generateTilePositions, getShapesBounds } from '../utils/patternUtils';
+import { ColorFlowModel } from '../colorflow/ColorFlowModel';
+import type { Centroid } from '../colorflow/pipeline/quantize';
+import type { ExtrudedGeometry } from '../colorflow/pipeline/extrude';
 
 interface ModelViewerProps {
   mode?: 'pattern' | 'colorflow';
@@ -26,10 +29,11 @@ interface ModelViewerProps {
   previewInlay?: any;
   setPreviewInlay?: (item: any) => void;
   activeTab?: string;
+  colorFlowGeom?: { base: ExtrudedGeometry; layers: { centroid: Centroid; geom: ExtrudedGeometry }[] } | null;
 }
 
 const ModelViewer: React.FC<ModelViewerProps> = ({
-  mode: _mode = 'pattern',
+  mode = 'pattern',
   baseSettings,
   inlaySettings,
   geometrySettings,
@@ -39,7 +43,8 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
   selectedInlayId,
   setSelectedInlayId,
   previewInlay,
-  setPreviewInlay
+  setPreviewInlay,
+  colorFlowGeom
 }) => {
   const { size, thickness, color, cutoutShapes, baseOutlineRotation, baseOutlineMirror } = baseSettings;
   
@@ -436,8 +441,16 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
         <ambientLight intensity={0.5} />
         <directionalLight position={[100, -50, 100]} intensity={1} castShadow={false} />
         
-            {/* Imperative Model handles Base, Inlays, and Patterns */}
-            <ImperativeModel 
+            {/* Route to ColorFlowModel in colorflow mode, ImperativeModel in pattern mode */}
+            {mode === 'colorflow' ? (
+              <ColorFlowModel
+                ref={meshRef}
+                baseGeom={colorFlowGeom?.base ?? null}
+                layers={colorFlowGeom?.layers ?? []}
+                displayMode={displayMode}
+              />
+            ) : (
+              <ImperativeModel
                 ref={meshRef}
                 size={size}
                 thickness={thickness}
@@ -461,10 +474,10 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
                 patternMaxHeight={geometrySettings.patternMaxHeight === '' ? undefined : Number(geometrySettings.patternMaxHeight)}
                 clipToOutline={clipToOutline}
                 holeMode={holeMode}
-                
+
                 inlayItems={inlaySettings.items}
-                
-                
+
+
                 wireframeBase={wireframeState.base}
                 wireframeInlay={wireframeState.inlay}
                 wireframePattern={wireframeState.pattern}
@@ -478,9 +491,10 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
                 debugShowHoleCutter={debugState.holes}
                 isDragging={isDragging}
                 previewInlay={previewInlay}
-            />
+              />
+            )}
 
-        {activeTab === 'inlay' && onInlayChange && (
+        {mode === 'pattern' && activeTab === 'inlay' && onInlayChange && (
             <InlayInteractionHandles
                 baseSettings={baseSettings}
                 inlaySettings={inlaySettings}
