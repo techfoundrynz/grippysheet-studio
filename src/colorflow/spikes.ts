@@ -1,6 +1,10 @@
 import * as THREE from 'three';
 import type { ExtrudedGeometry } from './pipeline/extrude';
 import { extrudePolygon } from './pipeline/extrude';
+import { generateTilePositions } from '../utils/patternUtils';
+import { shapeToPolygon, type OutlinePolygon } from './outlineToPolygon';
+import type { Centroid } from './pipeline/quantize';
+import type { TracedLayerEntry } from './workerProtocol';
 
 export interface TileAssignment {
   /** Tile center in world mm. */
@@ -259,4 +263,108 @@ export function buildSpikesFromMesh(
   }
 
   return result;
+}
+
+/**
+ * End-to-end spike layer generation. Pure function with no React deps so it
+ * can run from anywhere (in particular: an App-level useMemo that updates as
+ * the Geometry tab is being edited, even while the ColorFlow tab is frozen).
+ *
+ * Returns an array of per-color spike groups (centroidIndex, merged geom,
+ * resolved hex color). Empty when:
+ *   - no pattern shape configured
+ *   - pattern's footprint is too small
+ *   - no tiles fall inside the outline
+ *   - palette empty
+ *
+ * `diag` is a human-readable status line for UI display.
+ */
+export function generateSpikes(input: {
+  outlinePolygon: OutlinePolygon;
+  layersInMm: TracedLayerEntry[];
+  palette: Centroid[];
+  stackOrder: number[];
+  baseMm: number;
+  colorLayerMm: number;
+  patternShape: unknown;
+  patternScale: number;
+  tileSpacing: number;
+  distribution: 'grid' | 'offset' | 'hex' | 'radial' | 'random' | 'wave' | 'zigzag' | 'warped-grid';
+  orientation: 'none' | 'alternate' | 'random' | 'aligned';
+  direction: 'horizontal' | 'vertical';
+  spikeMaxMm: number;
+  spikeColorMatch: boolean;
+  fallbackColor: string;
+}): { groups: Array<{ centroidIndex: number; geom: ExtrudedGeometry; color: string }>; diag: string } {
+  const {
+    outlinePolygon, layersInMm, palette, stackOrder, baseMm, colorLayerMm,
+    patternShape, patternScale, tileSpacing, distribution, orientation, direction,
+    spikeMaxMm, spikeColorMatch, fallbackColor,
+  } = input;
+
+  if (!palette.length) return { groups: [], diag: 'no palette yet' };
+  if (!patternShape) return { groups: [], diag: 'no pattern tile configured in Geometry tab' };
+
+  // Compute tile footprint + a builder function dispatched on the pattern type.
+  let tileWidth = 0;
+  let tileHeight = 0;
+  let buildForColor: ((assignments: TileAssignment[]) => Array<{ centroidIndex: number; geom: ExtrudedGeometry }>) | null = null;
+
+  if (patternShape instanceof THREE.Shape) {
+    const tilePoly = shapeToPolygon(patternShape, 32);
+    tileWidth = (tilePoly.maxX - tilePoly.minX) * patternScale;
+    tileHeight = (tilePoly.maxY - tilePoly.minY) * patternScale;
+    if (tileWidth < 0.05 || tileHeight < 0.05) {
+      return { groups: [], diag: `pattern tile too small (${tileWidth.toFixed(2)}×${tileHeight.toFixed(2)}mm)` };
+    }
+    const top = (spikeMaxMm > 0 ? spikeMaxMm : baseMm + palette.length * colorLayerMm + 1.0);
+    const minTop = baseMm + palette.length * colorLayerMm + 0.1;
+    const spikeTop = Math.max(top, minTop);
+    buildForColor = (assignments) => buildSpikeGeometriesForColors(
+      assignments, { outer: tilePoly.outer, holes: tilePoly.holes },
+      baseMm, colorLayerMm, stackOrder, spikeTop,
+    );
+  } else if (patternShape instanceof THREE.BufferGeometry) {
+    if (!patternShape.boundingBox) patternShape.computeBoundingBox();
+    const bbox = patternShape.boundingBox!;
+    tileWidth = (bbox.max.x - bbox.min.x) * patternScale;
+    tileHeight = (bbox.max.y - bbox.min.y) * patternScale;
+    if (tileWidth < 0.05 || tileHeight < 0.05) {
+      return { groups: [], diag: `pattern tile too small (${tileWidth.toFixed(2)}×${tileHeight.toFixed(2)}mm)` };
+    }
+    buildForColor = (assignments) => buildSpikesFromMesh(
+      patternShape, assignments, baseMm, colorLayerMm, stackOrder, patternScale,
+    );
+  } else {
+    return { groups: [], diag: `pattern shape type unsupported for spikes (${(patternShape as object).constructor?.name ?? 'unknown'})` };
+  }
+
+  const tileBounds = new THREE.Box2(
+    new THREE.Vector2(outlinePolygon.minX, outlinePolygon.minY),
+    new THREE.Vector2(outlinePolygon.maxX, outlinePolygon.maxY),
+  );
+  const rawTiles = generateTilePositions(
+    tileBounds, tileWidth, tileHeight, tileSpacing,
+    null, 0, true, distribution, orientation, direction,
+  );
+  const outlinePoly = { outer: outlinePolygon.outer, holes: outlinePolygon.holes };
+  const tilesInOutline = rawTiles
+    .filter((t) => pointInPolygon(t.position.x, t.position.y, outlinePoly))
+    .map((t) => ({ x: t.position.x, y: t.position.y, rotation: t.rotation, scale: t.scale ?? 1 }));
+
+  const colorPolygons = layersInMm.map((l) => ({ centroidIndex: l.centroidIndex, polygon: l.polygon }));
+  const tileAssignments = assignTilesToColors(tilesInOutline, colorPolygons, stackOrder);
+  const rawGroups = buildForColor(tileAssignments);
+
+  const groups: Array<{ centroidIndex: number; geom: ExtrudedGeometry; color: string }> = [];
+  for (const g of rawGroups) {
+    const c = g.centroidIndex >= 0 ? palette[g.centroidIndex] : null;
+    const color = spikeColorMatch && c
+      ? `#${c.r.toString(16).padStart(2,'0')}${c.g.toString(16).padStart(2,'0')}${c.b.toString(16).padStart(2,'0')}`
+      : fallbackColor;
+    groups.push({ ...g, color });
+  }
+
+  const diag = `${rawTiles.length} tiles raw, ${tilesInOutline.length} inside outline, ${rawGroups.length} color groups`;
+  return { groups, diag };
 }

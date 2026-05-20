@@ -10,7 +10,7 @@ import SegmentedControl from './ui/SegmentedControl';
 import Button from './ui/Button';
 import { calculateInlayScale } from '../utils/patternUtils';
 import * as THREE from 'three';
-import { ColorFlowControls } from '../colorflow/ColorFlowControls';
+import { ColorFlowControls, type ColorFlowGeomData } from '../colorflow/ColorFlowControls';
 import type { ColorFlowSettings } from '../colorflow/schema';
 import type { Centroid } from '../colorflow/pipeline/quantize';
 import type { ExtrudedGeometry } from '../colorflow/pipeline/extrude';
@@ -40,11 +40,9 @@ interface ControlsProps {
   colorFlowSettings: ColorFlowSettings;
   setColorFlowSettings: React.Dispatch<React.SetStateAction<ColorFlowSettings>>;
   colorFlowActive: boolean;
-  onColorFlowGeomReady?: (data: {
-    base: ExtrudedGeometry;
-    layers: { centroid: Centroid; position: number; geom: ExtrudedGeometry }[];
-    spikes: { centroidIndex: number; geom: ExtrudedGeometry; color: string }[];
-  }) => void;
+  onColorFlowGeomReady?: (data: ColorFlowGeomData) => void;
+  /** Latest spike-generation diagnostic line (for display in ColorFlow panel). */
+  colorFlowSpikeDiag?: string;
   onColorFlowImageAssetChanged?: (a: { name: string; bytes: ArrayBuffer } | null) => void;
   initialColorFlowImageAsset?: { name: string; bytes: ArrayBuffer } | null;
   onProjectImported?: (data: ProjectDataV2, assets: ProjectAssets) => void;
@@ -70,6 +68,7 @@ const Controls: React.FC<ControlsProps> = ({
   colorFlowSettings,
   setColorFlowSettings,
   colorFlowActive,
+  colorFlowSpikeDiag,
   onColorFlowGeomReady,
   onColorFlowImageAssetChanged,
   initialColorFlowImageAsset,
@@ -455,6 +454,7 @@ const Controls: React.FC<ControlsProps> = ({
                         onImageAssetChanged={onColorFlowImageAssetChanged}
                         initialImageAsset={initialColorFlowImageAsset}
                         onSwitchToBase={() => setActiveTab('base')}
+                        spikeDiag={colorFlowSpikeDiag}
                     />
                 </div>
             </Freeze>

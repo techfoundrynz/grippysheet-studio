@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from "react";
+import React, { useState, useRef, useCallback, useMemo } from "react";
 import ModelViewer from "./components/ModelViewer";
 import Controls from "./components/Controls";
 import OutputPanel from "./components/OutputPanel";
@@ -11,6 +11,8 @@ import WelcomeModal from "./components/WelcomeModal";
 import { defaultColorFlowSettings, type ColorFlowSettings } from "./colorflow/schema";
 import type { Centroid } from './colorflow/pipeline/quantize';
 import type { ExtrudedGeometry } from './colorflow/pipeline/extrude';
+import type { SpikeSource } from './colorflow/ColorFlowControls';
+import { generateSpikes } from './colorflow/spikes';
 import { exportProjectBundle, type ProjectAssets } from './utils/projectUtils';
 
 const App = () => {
@@ -21,7 +23,7 @@ const App = () => {
   const [colorFlowGeom, setColorFlowGeom] = useState<{
     base: ExtrudedGeometry;
     layers: { centroid: Centroid; position: number; geom: ExtrudedGeometry }[];
-    spikes: { centroidIndex: number; geom: ExtrudedGeometry; color: string }[];
+    source: SpikeSource;
   } | null>(null);
   const [projectAssets, setProjectAssets] = useState<ProjectAssets>({ inlays: {} });
 
@@ -76,10 +78,55 @@ const App = () => {
   const handleColorFlowGeomReady = useCallback((data: {
     base: ExtrudedGeometry;
     layers: { centroid: Centroid; position: number; geom: ExtrudedGeometry }[];
-    spikes: { centroidIndex: number; geom: ExtrudedGeometry; color: string }[];
+    source: SpikeSource;
   }) => {
     setColorFlowGeom(data);
   }, []);
+
+  // Spike layer is derived from the colorflow source + Geometry settings +
+  // ColorFlow spike settings. Lives here (not inside ColorFlowControls) so it
+  // updates live even while the ColorFlow tab is frozen.
+  const spikeResult = useMemo(() => {
+    if (!colorFlowGeom?.source) return { groups: [], diag: '' };
+    return generateSpikes({
+      outlinePolygon: colorFlowGeom.source.outlinePolygon,
+      layersInMm: colorFlowGeom.source.layersInMm,
+      palette: colorFlowGeom.source.palette,
+      stackOrder: colorFlowGeom.source.stackOrder,
+      baseMm: colorFlowGeom.source.baseMm,
+      colorLayerMm: colorFlowGeom.source.colorLayerMm,
+      patternShape: geometrySettings.patternShapes?.[0],
+      patternScale: geometrySettings.patternScale ?? 1,
+      tileSpacing: geometrySettings.tileSpacing,
+      distribution: geometrySettings.tilingDistribution,
+      orientation: geometrySettings.tilingOrientation,
+      direction: geometrySettings.tilingDirection,
+      spikeMaxMm: colorFlowSettings.spikeMaxMm,
+      spikeColorMatch: colorFlowSettings.spikeColorMatch,
+      fallbackColor: geometrySettings.patternColor,
+    });
+  }, [
+    colorFlowGeom?.source,
+    geometrySettings.patternShapes,
+    geometrySettings.patternScale,
+    geometrySettings.tileSpacing,
+    geometrySettings.tilingDistribution,
+    geometrySettings.tilingOrientation,
+    geometrySettings.tilingDirection,
+    geometrySettings.patternColor,
+    colorFlowSettings.spikeMaxMm,
+    colorFlowSettings.spikeColorMatch,
+  ]);
+
+  // Compose colorFlowGeom + derived spikes for downstream consumers.
+  const colorFlowGeomWithSpikes = useMemo(() => {
+    if (!colorFlowGeom) return null;
+    return {
+      base: colorFlowGeom.base,
+      layers: colorFlowGeom.layers,
+      spikes: spikeResult.groups,
+    };
+  }, [colorFlowGeom, spikeResult.groups]);
 
   const initialImageAsset = projectAssets.image
     ? { name: projectAssets.image.name, bytes: projectAssets.image.content as ArrayBuffer }
@@ -103,7 +150,7 @@ const App = () => {
                 setSelectedInlayId={setSelectedInlayId}
                 previewInlay={previewInlay}
                 setPreviewInlay={setPreviewInlay}
-                colorFlowGeom={colorFlowGeom}
+                colorFlowGeom={colorFlowGeomWithSpikes}
               />
             </div>
           </div>
@@ -129,11 +176,12 @@ const App = () => {
                   meshRef={meshRef}
                   debugMode={geometrySettings.debugMode ?? false}
                   className="bg-transparent border-0 shadow-none p-0 !p-0"
-                  colorFlowGeom={colorFlowGeom}
+                  colorFlowGeom={colorFlowGeomWithSpikes}
                   colorFlowImageName={projectAssets.image?.name}
                   colorFlowOutlineSlug={baseSettings.outlineSlug}
                 />
               }
+              colorFlowSpikeDiag={spikeResult.diag}
               colorFlowSettings={colorFlowSettings}
               setColorFlowSettings={setColorFlowSettings}
               colorFlowActive={colorFlowActive}

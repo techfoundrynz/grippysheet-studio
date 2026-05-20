@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import * as THREE from 'three';
 import { type BaseSettings, type GeometrySettings } from '../types/schemas';
 import { type ColorFlowSettings } from './schema';
 import { getOutlineBySlug } from './outlineLibrary';
@@ -17,14 +16,7 @@ import {
 import { computeImageDrawCoords } from './imageTransform';
 import { paletteCoverage, type Centroid } from './pipeline/quantize';
 import { resolvedStackOrder } from './stackOrder';
-import {
-  assignTilesToColors,
-  buildSpikeGeometriesForColors,
-  buildSpikesFromMesh,
-  effectiveSpikeMaxMm,
-  pointInPolygon,
-} from './spikes';
-import { generateTilePositions } from '../utils/patternUtils';
+import { effectiveSpikeMaxMm } from './spikes';
 import type { ExtrudedGeometry } from './pipeline/extrude';
 import type { Response as WorkerResponse, TracedLayerEntry, ExtrudedLayerEntry } from './workerProtocol';
 import { useAlert } from '../context/AlertContext';
@@ -37,10 +29,28 @@ export interface SpikeGroup {
   color: string;
 }
 
+/**
+ * Captures everything `generateSpikes` needs to rebuild the spike layer when
+ * the user changes the Geometry / spike settings. Stored alongside the base +
+ * color geometries so spike regeneration can run from anywhere (including
+ * while the ColorFlow tab is frozen).
+ */
+export interface SpikeSource {
+  outlinePolygon: { outer: Array<[number, number]>; holes: Array<Array<[number, number]>>;
+    minX: number; minY: number; maxX: number; maxY: number };
+  layersInMm: TracedLayerEntry[];
+  palette: Centroid[];
+  stackOrder: number[];
+  baseMm: number;
+  colorLayerMm: number;
+}
+
 export interface ColorFlowGeomData {
   base: ExtrudedGeometry;
   layers: { centroid: Centroid; position: number; geom: ExtrudedGeometry }[];
-  spikes: SpikeGroup[];
+  /** Source data used by App-level spike regeneration. Spikes themselves
+   *  are computed downstream so Geometry-tab changes flow live. */
+  source: SpikeSource;
 }
 
 interface Props {
@@ -53,13 +63,15 @@ interface Props {
   initialImageAsset?: { name: string; bytes: ArrayBuffer } | null;
   /** Callback to switch the right-panel tabs to "Base". */
   onSwitchToBase?: () => void;
+  /** Diagnostic line produced by App-level spike generation. */
+  spikeDiag?: string;
 }
 
 const SIMPLIFY_LABELS = ['off', 'light', 'medium', 'strong', 'max'] as const;
 const DETAIL_LABELS = ['sharp', 'balanced', 'smooth'] as const;
 const MAX_IMG_DIM = 1500;
 
-export const ColorFlowControls: React.FC<Props> = ({ baseSettings, geometrySettings, settings, setSettings, onGeometryReady, onImageAssetChanged, initialImageAsset, onSwitchToBase }) => {
+export const ColorFlowControls: React.FC<Props> = ({ baseSettings, geometrySettings, settings, setSettings, onGeometryReady, onImageAssetChanged, initialImageAsset, onSwitchToBase, spikeDiag }) => {
   const { request, status } = useColorFlowWorker();
   const { showAlert } = useAlert();
 
@@ -89,7 +101,6 @@ export const ColorFlowControls: React.FC<Props> = ({ baseSettings, geometrySetti
   const [assignments, setAssignments] = useState<Uint16Array | null>(null);
   const [layers, setLayers] = useState<TracedLayerEntry[]>([]);
   const [coverage, setCoverage] = useState<number[]>([]);
-  const [spikeDiag, setSpikeDiag] = useState<string>('');
 
   // Broadcast worker activity so the 3D viewer can show a spinner.
   useEffect(() => {
@@ -232,110 +243,35 @@ export const ColorFlowControls: React.FC<Props> = ({ baseSettings, geometrySetti
         });
         if (cancelled || resp.kind !== 'extruded') return;
 
-        // Build spike overlay if a pattern is configured.
-        const spikes: SpikeGroup[] = [];
-        const patternShape = geometrySettings.patternShapes?.[0];
-        const patternScale = geometrySettings.patternScale ?? 1;
-        let diag = '';
-
-        // Compute tile width/height + a "build spikes" function based on the pattern type.
-        let tileWidth = 0;
-        let tileHeight = 0;
-        let buildForColor: ((tiles: typeof tileAssignmentsEmpty) => Array<{ centroidIndex: number; geom: ExtrudedGeometry }>) | null = null;
-        const tileAssignmentsEmpty: Array<{ x: number; y: number; rotation: number; scale: number; colorIndex: number }> = [];
-
-        if (!patternShape) {
-          diag = 'no pattern tile configured in Geometry tab';
-        } else if (patternShape instanceof THREE.Shape) {
-          const tilePoly = shapeToPolygon(patternShape, 32);
-          tileWidth = (tilePoly.maxX - tilePoly.minX) * patternScale;
-          tileHeight = (tilePoly.maxY - tilePoly.minY) * patternScale;
-          if (tileWidth < 0.05 || tileHeight < 0.05) {
-            diag = `pattern tile too small (${tileWidth.toFixed(2)}×${tileHeight.toFixed(2)}mm)`;
-          } else {
-            buildForColor = (assignments) => {
-              const spikeTopMm = effectiveSpikeMaxMm(settings.spikeMaxMm, baseMm, palette.length, settings.colorLayerMm);
-              return buildSpikeGeometriesForColors(
-                assignments,
-                { outer: tilePoly.outer, holes: tilePoly.holes },
-                baseMm,
-                settings.colorLayerMm,
-                stackOrder,
-                spikeTopMm,
-              );
-            };
-          }
-        } else if (patternShape instanceof THREE.BufferGeometry) {
-          // STL/buffer-geometry pattern: keep natural Z, scale X/Y per tile.
-          if (!patternShape.boundingBox) patternShape.computeBoundingBox();
-          const bbox = patternShape.boundingBox!;
-          tileWidth = (bbox.max.x - bbox.min.x) * patternScale;
-          tileHeight = (bbox.max.y - bbox.min.y) * patternScale;
-          if (tileWidth < 0.05 || tileHeight < 0.05) {
-            diag = `pattern tile too small (${tileWidth.toFixed(2)}×${tileHeight.toFixed(2)}mm)`;
-          } else {
-            buildForColor = (assignments) =>
-              buildSpikesFromMesh(patternShape, assignments, baseMm, settings.colorLayerMm, stackOrder, patternScale);
-          }
-        } else {
-          diag = `pattern shape type unsupported for spikes (${(patternShape as object).constructor?.name ?? 'unknown'})`;
-        }
-
-        if (buildForColor) {
-          const tileBounds = new THREE.Box2(
-            new THREE.Vector2(outlinePolygon.minX, outlinePolygon.minY),
-            new THREE.Vector2(outlinePolygon.maxX, outlinePolygon.maxY),
-          );
-          const rawTiles = generateTilePositions(
-            tileBounds,
-            tileWidth,
-            tileHeight,
-            geometrySettings.tileSpacing,
-            null,
-            0,
-            true,
-            geometrySettings.tilingDistribution,
-            geometrySettings.tilingOrientation,
-            geometrySettings.tilingDirection,
-          );
-          const outlinePoly = { outer: outlinePolygon.outer, holes: outlinePolygon.holes };
-          const tilesInOutline = rawTiles
-            .filter((t) => pointInPolygon(t.position.x, t.position.y, outlinePoly))
-            .map((t) => ({ x: t.position.x, y: t.position.y, rotation: t.rotation, scale: t.scale ?? 1 }));
-
-          const colorPolygons = layersInMm.map((l) => ({ centroidIndex: l.centroidIndex, polygon: l.polygon }));
-          const tileAssignments = assignTilesToColors(tilesInOutline, colorPolygons, stackOrder);
-          const groups = buildForColor(tileAssignments);
-
-          const fallback = geometrySettings.patternColor;
-          for (const group of groups) {
-            const c = group.centroidIndex >= 0 ? palette[group.centroidIndex] : null;
-            const color = settings.spikeColorMatch && c
-              ? `#${c.r.toString(16).padStart(2,'0')}${c.g.toString(16).padStart(2,'0')}${c.b.toString(16).padStart(2,'0')}`
-              : fallback;
-            spikes.push({ ...group, color });
-          }
-          diag = `${rawTiles.length} tiles raw, ${tilesInOutline.length} inside outline, ${groups.length} color groups`;
-        }
-
-        // Silence unused-var lint for the empty seed used only for type inference.
-        void tileAssignmentsEmpty;
-        if (!cancelled) setSpikeDiag(diag);
-
         if (onGeometryReady) {
           const pairs = resp.layerGeoms.map((entry: ExtrudedLayerEntry) => ({
             centroid: palette[entry.centroidIndex],
             position: entry.position,
             geom: entry.geom,
           }));
-          onGeometryReady({ base: resp.baseGeom, layers: pairs, spikes });
+          // Spikes are derived at App level from this `source` so Geometry-tab
+          // changes flow live without re-running the extrude effect.
+          const source: SpikeSource = {
+            outlinePolygon: {
+              outer: outlinePolygon.outer.map(([x, y]) => [x, y] as [number, number]),
+              holes: outlinePolygon.holes.map((h) => h.map(([x, y]) => [x, y] as [number, number])),
+              minX: outlinePolygon.minX, minY: outlinePolygon.minY,
+              maxX: outlinePolygon.maxX, maxY: outlinePolygon.maxY,
+            },
+            layersInMm,
+            palette,
+            stackOrder,
+            baseMm,
+            colorLayerMm: settings.colorLayerMm,
+          };
+          onGeometryReady({ base: resp.baseGeom, layers: pairs, source });
         }
       } catch (err) {
         showAlert({ title: 'Extrusion failed', message: String(err), type: 'error' });
       }
     })();
     return () => { cancelled = true; };
-  }, [layers, outlinePolygon, palette, coverage, baseMm, settings.colorLayerMm, settings.sort, settings.layerOrder, settings.spikeMaxMm, settings.spikeColorMatch, geometrySettings, request, onGeometryReady, showAlert]);
+  }, [layers, outlinePolygon, palette, coverage, baseMm, settings.colorLayerMm, settings.sort, settings.layerOrder, request, onGeometryReady, showAlert]);
 
   const _dropRef = useRef<HTMLDivElement>(null);
 
