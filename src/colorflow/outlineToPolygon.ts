@@ -68,9 +68,17 @@ export function fitOutlineInImage(bounds: Bounds, imgW: number, imgH: number): P
   };
 }
 
-/** Inverse of fitOutlineInImage: convert pixel coords back to shape-mm. */
-export function pixelToMm(px: number, py: number, placement: Placement): [number, number] {
-  return [(px - placement.offsetX) / placement.scale, (py - placement.offsetY) / placement.scale];
+/**
+ * Inverse of `buildOutlineMask`'s pixel placement: convert a pixel coordinate
+ * back to the shape's absolute mm coordinate. Requires the polygon's bounds
+ * because `buildOutlineMask` translates by `-bounds.minX * scale` to draw
+ * shapes whose origin isn't (0, 0).
+ */
+export function pixelToMm(px: number, py: number, placement: Placement, bounds: Bounds): [number, number] {
+  return [
+    (px - placement.offsetX) / placement.scale + bounds.minX,
+    (py - placement.offsetY) / placement.scale + bounds.minY,
+  ];
 }
 
 /**
@@ -83,6 +91,10 @@ export function buildOutlineMask(
   imgW: number,
   imgH: number,
 ): Uint8Array {
+  if (polygon.outer.length === 0) {
+    return new Uint8Array(imgW * imgH);
+  }
+
   const canvas = document.createElement('canvas');
   canvas.width = imgW;
   canvas.height = imgH;

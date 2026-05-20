@@ -4,6 +4,7 @@ import {
   shapeToPolygon,
   fitOutlineInImage,
   pixelToMm,
+  type Bounds,
 } from '../outlineToPolygon';
 
 function unitSquare(): THREE.Shape {
@@ -51,13 +52,27 @@ describe('fitOutlineInImage', () => {
     expect(placement.scale).toBeCloseTo(2); // limited by width
     expect(placement.offsetY).toBeCloseTo(1); // vertical letterbox
   });
+
+  it('returns scale=1 fallback for zero-size bounds', () => {
+    const placement = fitOutlineInImage({ minX: 0, minY: 0, maxX: 0, maxY: 0 }, 4, 4);
+    expect(placement.scale).toBe(1);
+  });
 });
 
 describe('pixelToMm', () => {
-  it('inverts fitOutlineInImage', () => {
+  it('inverts fitOutlineInImage for a shape anchored at the origin', () => {
+    const bounds: Bounds = { minX: 0, minY: 0, maxX: 1, maxY: 1 };
     const placement = { scale: 10, offsetX: 5, offsetY: 7 };
-    const [mx, my] = pixelToMm(15, 17, placement);
+    const [mx, my] = pixelToMm(15, 17, placement, bounds);
     expect(mx).toBeCloseTo(1);
     expect(my).toBeCloseTo(1);
+  });
+
+  it('inverts fitOutlineInImage for a shifted-bounds shape', () => {
+    const bounds: Bounds = { minX: 100, minY: 200, maxX: 110, maxY: 210 };
+    const placement = { scale: 10, offsetX: 5, offsetY: 7 };
+    const [mx, my] = pixelToMm(15, 17, placement, bounds);
+    expect(mx).toBeCloseTo(101);
+    expect(my).toBeCloseTo(201);
   });
 });
