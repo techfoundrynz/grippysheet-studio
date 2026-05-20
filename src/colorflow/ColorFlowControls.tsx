@@ -173,13 +173,20 @@ export const ColorFlowControls: React.FC<Props> = ({ baseSettings, setBaseSettin
       try {
         // Convert pixel-space polygon coords back to mm-space for the 3D model.
         const placement = fitOutlineInImage(outlinePolygon, imageDims.w, imageDims.h);
+        const flipAndReverse = (pts: Array<[number, number]>): Array<[number, number]> => {
+          const flipped = pts.map(([x, y]) => [
+            (x - placement.offsetX) / placement.scale + outlinePolygon.minX,
+            outlinePolygon.maxY - (y - placement.offsetY) / placement.scale,
+          ] as [number, number]);
+          flipped.reverse();
+          return flipped;
+        };
+
         const layersInMm: TracedLayerEntry[] = layers.map((entry) => ({
           centroidIndex: entry.centroidIndex,
           polygon: {
-            outer: entry.polygon.outer.map(([x, y]) => [(x - placement.offsetX) / placement.scale + outlinePolygon.minX,
-                                                           (y - placement.offsetY) / placement.scale + outlinePolygon.minY] as [number, number]),
-            holes: entry.polygon.holes.map((h) => h.map(([x, y]) => [(x - placement.offsetX) / placement.scale + outlinePolygon.minX,
-                                                                         (y - placement.offsetY) / placement.scale + outlinePolygon.minY] as [number, number])),
+            outer: flipAndReverse(entry.polygon.outer),
+            holes: entry.polygon.holes.map(flipAndReverse),
           },
         }));
         const outlineInMm = {
@@ -213,13 +220,20 @@ export const ColorFlowControls: React.FC<Props> = ({ baseSettings, setBaseSettin
     if (!layers.length || !outlinePolygon || !imageDims) return;
     try {
       const placement = fitOutlineInImage(outlinePolygon, imageDims.w, imageDims.h);
+      const flipAndReverse = (pts: Array<[number, number]>): Array<[number, number]> => {
+        const flipped = pts.map(([x, y]) => [
+          (x - placement.offsetX) / placement.scale + outlinePolygon.minX,
+          outlinePolygon.maxY - (y - placement.offsetY) / placement.scale,
+        ] as [number, number]);
+        flipped.reverse();
+        return flipped;
+      };
+
       const layersInMm: TracedLayerEntry[] = layers.map((entry) => ({
         centroidIndex: entry.centroidIndex,
         polygon: {
-          outer: entry.polygon.outer.map(([x, y]) => [(x - placement.offsetX) / placement.scale + outlinePolygon.minX,
-                                                         (y - placement.offsetY) / placement.scale + outlinePolygon.minY] as [number, number]),
-          holes: entry.polygon.holes.map((h) => h.map(([x, y]) => [(x - placement.offsetX) / placement.scale + outlinePolygon.minX,
-                                                                       (y - placement.offsetY) / placement.scale + outlinePolygon.minY] as [number, number])),
+          outer: flipAndReverse(entry.polygon.outer),
+          holes: entry.polygon.holes.map(flipAndReverse),
         },
       }));
       const outlineInMm = {

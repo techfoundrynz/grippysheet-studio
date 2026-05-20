@@ -70,14 +70,14 @@ export function fitOutlineInImage(bounds: Bounds, imgW: number, imgH: number): P
 
 /**
  * Inverse of `buildOutlineMask`'s pixel placement: convert a pixel coordinate
- * back to the shape's absolute mm coordinate. Requires the polygon's bounds
- * because `buildOutlineMask` translates by `-bounds.minX * scale` to draw
- * shapes whose origin isn't (0, 0).
+ * back to the shape's absolute mm coordinate. Note that canvas Y is Y-down
+ * but the outline (and Three.js scene) is Y-up, so Y is flipped relative
+ * to bounds.maxY.
  */
 export function pixelToMm(px: number, py: number, placement: Placement, bounds: Bounds): [number, number] {
   return [
     (px - placement.offsetX) / placement.scale + bounds.minX,
-    (py - placement.offsetY) / placement.scale + bounds.minY,
+    bounds.maxY - (py - placement.offsetY) / placement.scale,
   ];
 }
 

@@ -65,7 +65,7 @@ describe('pixelToMm', () => {
     const placement = { scale: 10, offsetX: 5, offsetY: 7 };
     const [mx, my] = pixelToMm(15, 17, placement, bounds);
     expect(mx).toBeCloseTo(1);
-    expect(my).toBeCloseTo(1);
+    expect(my).toBeCloseTo(0);
   });
 
   it('inverts fitOutlineInImage for a shifted-bounds shape', () => {
@@ -73,6 +73,6 @@ describe('pixelToMm', () => {
     const placement = { scale: 10, offsetX: 5, offsetY: 7 };
     const [mx, my] = pixelToMm(15, 17, placement, bounds);
     expect(mx).toBeCloseTo(101);
-    expect(my).toBeCloseTo(201);
+    expect(my).toBeCloseTo(209);
   });
 });
