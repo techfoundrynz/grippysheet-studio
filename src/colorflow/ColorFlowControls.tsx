@@ -72,6 +72,10 @@ interface Props {
   onSwitchToBase?: () => void;
   /** Diagnostic line produced by App-level spike generation. */
   spikeDiag?: string;
+  canGenerateSpikes?: boolean;
+  spikesStale?: boolean;
+  hasSpikes?: boolean;
+  onGenerateSpikes?: () => void;
 }
 
 const MAX_IMG_DIM = 1500;
@@ -79,6 +83,7 @@ const MAX_IMG_DIM = 1500;
 export const ColorFlowControls: React.FC<Props> = ({
   baseSettings, geometrySettings, settings, setSettings,
   onGeometryReady, onImageAssetChanged, initialImageAsset, onSwitchToBase, spikeDiag,
+  canGenerateSpikes, spikesStale, hasSpikes, onGenerateSpikes,
 }) => {
   const { request, status } = useColorFlowWorker();
   const { showAlert } = useAlert();
@@ -341,6 +346,10 @@ export const ColorFlowControls: React.FC<Props> = ({
         settings={settings}
         setSettings={setSettings}
         spikeDiag={spikeDiag}
+        canGenerate={!!canGenerateSpikes}
+        isStale={!!spikesStale}
+        hasSpikes={!!hasSpikes}
+        onGenerate={onGenerateSpikes}
       />
 
       <LayerControls

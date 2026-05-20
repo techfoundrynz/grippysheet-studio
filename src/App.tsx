@@ -13,6 +13,7 @@ import type { Centroid } from './colorflow/pipeline/quantize';
 import type { ExtrudedGeometry } from './colorflow/pipeline/extrude';
 import type { SpikeSource } from './colorflow/ColorFlowControls';
 import { generateSpikes } from './colorflow/spikes';
+import { emitProcessing } from './utils/eventBus';
 import { exportProjectBundle, type ProjectAssets } from './utils/projectUtils';
 
 const App = () => {
@@ -83,52 +84,91 @@ const App = () => {
     setColorFlowGeom(data);
   }, []);
 
-  // Spike layer is derived from the colorflow source + Geometry settings +
-  // ColorFlow spike settings. Lives here (not inside ColorFlowControls) so it
-  // updates live even while the ColorFlow tab is frozen.
-  const spikeResult = useMemo(() => {
-    if (!colorFlowGeom?.source) return { groups: [], diag: '' };
-    return generateSpikes({
-      outlinePolygon: colorFlowGeom.source.outlinePolygon,
-      layersInMm: colorFlowGeom.source.layersInMm,
-      palette: colorFlowGeom.source.palette,
-      stackOrder: colorFlowGeom.source.stackOrder,
+  // Spikes are heavy enough that auto-regen on every slider/toggle freezes the
+  // page. They live in explicit state and only update when the user clicks the
+  // "Generate preview" button in the ColorFlow tab.
+  const [spikeGroups, setSpikeGroups] = useState<{ centroidIndex: number; geom: ExtrudedGeometry; color: string }[]>([]);
+  const [spikeDiag, setSpikeDiag] = useState<string>('');
+  const [generatedSpikeInputsKey, setGeneratedSpikeInputsKey] = useState<string | null>(null);
+
+  // Hash of every input that affects spike output. Compared against
+  // `generatedSpikeInputsKey` to know when spikes are stale.
+  const currentSpikeInputsKey = useMemo(() => {
+    if (!colorFlowGeom?.source) return null;
+    const hasPattern = !!geometrySettings.patternShapes?.[0];
+    if (!hasPattern) return null;
+    return JSON.stringify({
+      paletteVer: colorFlowGeom.source.palette.length,
+      stackOrderVer: colorFlowGeom.source.stackOrder.join(','),
       baseMm: colorFlowGeom.source.baseMm,
       colorLayerMm: colorFlowGeom.source.colorLayerMm,
-      patternShape: geometrySettings.patternShapes?.[0],
-      patternScale: geometrySettings.patternScale ?? 1,
+      patternShape: hasPattern,
+      patternScale: geometrySettings.patternScale,
       tileSpacing: geometrySettings.tileSpacing,
       patternMargin: geometrySettings.patternMargin,
-      distribution: geometrySettings.tilingDistribution,
-      orientation: geometrySettings.tilingOrientation,
-      direction: geometrySettings.tilingDirection,
+      tilingDistribution: geometrySettings.tilingDistribution,
+      tilingOrientation: geometrySettings.tilingOrientation,
+      tilingDirection: geometrySettings.tilingDirection,
+      patternColor: geometrySettings.patternColor,
       spikeMaxMm: colorFlowSettings.spikeMaxMm,
       spikeColorMatch: colorFlowSettings.spikeColorMatch,
-      fallbackColor: geometrySettings.patternColor,
     });
-  }, [
-    colorFlowGeom?.source,
-    geometrySettings.patternShapes,
-    geometrySettings.patternScale,
-    geometrySettings.tileSpacing,
-    geometrySettings.patternMargin,
-    geometrySettings.tilingDistribution,
-    geometrySettings.tilingOrientation,
-    geometrySettings.tilingDirection,
-    geometrySettings.patternColor,
-    colorFlowSettings.spikeMaxMm,
-    colorFlowSettings.spikeColorMatch,
-  ]);
+  }, [colorFlowGeom?.source, geometrySettings, colorFlowSettings.spikeMaxMm, colorFlowSettings.spikeColorMatch]);
 
-  // Compose colorFlowGeom + derived spikes for downstream consumers.
+  // When the underlying source (image quantize / outline / etc.) changes, any
+  // existing spikes reference the old color polygons. Drop them so the user
+  // doesn't see misaligned bumps until they regenerate.
+  React.useEffect(() => {
+    setSpikeGroups([]);
+    setSpikeDiag('');
+    setGeneratedSpikeInputsKey(null);
+  }, [colorFlowGeom?.source]);
+
+  const canGenerateSpikes = !!colorFlowGeom?.source && !!geometrySettings.patternShapes?.[0];
+  const spikesStale = canGenerateSpikes && currentSpikeInputsKey !== generatedSpikeInputsKey;
+
+  const handleGenerateSpikes = useCallback(() => {
+    if (!colorFlowGeom?.source || !canGenerateSpikes) return;
+    emitProcessing({ key: 'spikes:generate', busy: true, label: 'generating spikes' });
+    // Yield to the browser so the spinner paints before the heavy work runs.
+    setTimeout(() => {
+      try {
+        const result = generateSpikes({
+          outlinePolygon: colorFlowGeom.source.outlinePolygon,
+          layersInMm: colorFlowGeom.source.layersInMm,
+          palette: colorFlowGeom.source.palette,
+          stackOrder: colorFlowGeom.source.stackOrder,
+          baseMm: colorFlowGeom.source.baseMm,
+          colorLayerMm: colorFlowGeom.source.colorLayerMm,
+          patternShape: geometrySettings.patternShapes?.[0],
+          patternScale: geometrySettings.patternScale ?? 1,
+          tileSpacing: geometrySettings.tileSpacing,
+          patternMargin: geometrySettings.patternMargin,
+          distribution: geometrySettings.tilingDistribution,
+          orientation: geometrySettings.tilingOrientation,
+          direction: geometrySettings.tilingDirection,
+          spikeMaxMm: colorFlowSettings.spikeMaxMm,
+          spikeColorMatch: colorFlowSettings.spikeColorMatch,
+          fallbackColor: geometrySettings.patternColor,
+        });
+        setSpikeGroups(result.groups);
+        setSpikeDiag(result.diag);
+        setGeneratedSpikeInputsKey(currentSpikeInputsKey);
+      } finally {
+        emitProcessing({ key: 'spikes:generate', busy: false });
+      }
+    }, 16);
+  }, [colorFlowGeom?.source, canGenerateSpikes, geometrySettings, colorFlowSettings.spikeMaxMm, colorFlowSettings.spikeColorMatch, currentSpikeInputsKey]);
+
+  // Compose colorFlowGeom + spikes for downstream consumers.
   const colorFlowGeomWithSpikes = useMemo(() => {
     if (!colorFlowGeom) return null;
     return {
       base: colorFlowGeom.base,
       layers: colorFlowGeom.layers,
-      spikes: spikeResult.groups,
+      spikes: spikeGroups,
     };
-  }, [colorFlowGeom, spikeResult.groups]);
+  }, [colorFlowGeom, spikeGroups]);
 
   const initialImageAsset = projectAssets.image
     ? { name: projectAssets.image.name, bytes: projectAssets.image.content as ArrayBuffer }
@@ -183,7 +223,11 @@ const App = () => {
                   colorFlowOutlineSlug={baseSettings.outlineSlug}
                 />
               }
-              colorFlowSpikeDiag={spikeResult.diag}
+              colorFlowSpikeDiag={spikeDiag}
+              colorFlowCanGenerateSpikes={canGenerateSpikes}
+              colorFlowSpikesStale={spikesStale}
+              colorFlowHasSpikes={spikeGroups.length > 0}
+              onGenerateSpikes={handleGenerateSpikes}
               colorFlowSettings={colorFlowSettings}
               setColorFlowSettings={setColorFlowSettings}
               colorFlowActive={colorFlowActive}

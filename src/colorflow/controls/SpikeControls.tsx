@@ -10,14 +10,31 @@ interface Props {
   settings: ColorFlowSettings;
   setSettings: React.Dispatch<React.SetStateAction<ColorFlowSettings>>;
   spikeDiag?: string;
+  canGenerate: boolean;
+  isStale: boolean;
+  hasSpikes: boolean;
+  onGenerate?: () => void;
 }
 
 export const SpikeControls: React.FC<Props> = ({
   palette, geometrySettings, baseMm, settings, setSettings, spikeDiag,
+  canGenerate, isStale, hasSpikes, onGenerate,
 }) => {
   if (palette.length === 0) return null;
 
   const hasPattern = !!geometrySettings.patternShapes?.[0];
+
+  // Button label / style varies with state.
+  // - canGenerate=false: hidden (handled below)
+  // - !hasSpikes: "Generate preview" (primary)
+  // - hasSpikes + isStale: "Regenerate (changes pending)" (primary)
+  // - hasSpikes + !isStale: "Up to date" (secondary, disabled-feel)
+  const buttonLabel = !hasSpikes
+    ? 'Generate preview'
+    : isStale
+      ? 'Regenerate spikes'
+      : 'Up to date';
+  const buttonPrimary = !hasSpikes || isStale;
 
   return (
     <section>
@@ -26,7 +43,8 @@ export const SpikeControls: React.FC<Props> = ({
         <>
           <p className="text-[10px] text-gray-500 mb-2">
             Pattern tile + spacing come from the Geometry tab. Each spike rises from its
-            color region's top to a unified spike-max height.
+            color region's top to a unified spike-max height. Tweak settings then click
+            <span className="text-blue-400"> Generate preview</span> to render.
           </p>
           <div className="grid grid-cols-1 gap-2 text-xs text-gray-400">
             <label>spike max mm (0 = auto: max color + 0.4mm)
@@ -52,8 +70,24 @@ export const SpikeControls: React.FC<Props> = ({
           <p className="text-[10px] text-gray-500 mt-2">
             resolved spike top: {effectiveSpikeMaxMm(settings.spikeMaxMm, baseMm, palette.length, settings.colorLayerMm).toFixed(2)}mm
           </p>
+
+          <button
+            type="button"
+            onClick={onGenerate}
+            disabled={!canGenerate || (!isStale && hasSpikes)}
+            className={`w-full mt-3 px-3 py-2 rounded text-xs font-medium transition-colors ${
+              buttonPrimary
+                ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm'
+                : 'bg-gray-700 text-gray-400 cursor-default'
+            } disabled:opacity-60 disabled:cursor-not-allowed`}
+            title={!canGenerate ? 'Need an image + pattern to generate spikes' : isStale ? 'Inputs changed since last generation' : 'Spikes match current inputs'}
+          >
+            {buttonLabel}
+            {isStale && hasSpikes && <span className="ml-2 inline-block w-1.5 h-1.5 rounded-full bg-yellow-400 align-middle" />}
+          </button>
+
           {spikeDiag && (
-            <p className="text-[10px] text-blue-400 mt-1 font-mono">{spikeDiag}</p>
+            <p className="text-[10px] text-blue-400 mt-2 font-mono">{spikeDiag}</p>
           )}
         </>
       ) : (

@@ -43,6 +43,14 @@ interface ControlsProps {
   onColorFlowGeomReady?: (data: ColorFlowGeomData) => void;
   /** Latest spike-generation diagnostic line (for display in ColorFlow panel). */
   colorFlowSpikeDiag?: string;
+  /** Whether a spike preview can be generated (source + pattern both present). */
+  colorFlowCanGenerateSpikes?: boolean;
+  /** Whether spikes are stale relative to current inputs. */
+  colorFlowSpikesStale?: boolean;
+  /** Whether spikes have been generated at least once for the current source. */
+  colorFlowHasSpikes?: boolean;
+  /** Trigger spike generation. */
+  onGenerateSpikes?: () => void;
   onColorFlowImageAssetChanged?: (a: { name: string; bytes: ArrayBuffer } | null) => void;
   initialColorFlowImageAsset?: { name: string; bytes: ArrayBuffer } | null;
   onProjectImported?: (data: ProjectDataV2, assets: ProjectAssets) => void;
@@ -69,6 +77,10 @@ const Controls: React.FC<ControlsProps> = ({
   setColorFlowSettings,
   colorFlowActive,
   colorFlowSpikeDiag,
+  colorFlowCanGenerateSpikes,
+  colorFlowSpikesStale,
+  colorFlowHasSpikes,
+  onGenerateSpikes,
   onColorFlowGeomReady,
   onColorFlowImageAssetChanged,
   initialColorFlowImageAsset,
@@ -455,6 +467,10 @@ const Controls: React.FC<ControlsProps> = ({
                         initialImageAsset={initialColorFlowImageAsset}
                         onSwitchToBase={() => setActiveTab('base')}
                         spikeDiag={colorFlowSpikeDiag}
+                        canGenerateSpikes={!!colorFlowCanGenerateSpikes}
+                        spikesStale={!!colorFlowSpikesStale}
+                        hasSpikes={!!colorFlowHasSpikes}
+                        onGenerateSpikes={onGenerateSpikes}
                     />
                 </div>
             </Freeze>
