@@ -65,10 +65,17 @@ function drawPreview(
   ctx.drawImage(imageBitmap, dx, dy, w, h);
   ctx.restore();
 
+  // World→canvas transform: world Y-up maps to canvas Y-down by flipping sy
+  // and shifting by maxY. Must match buildOutlineCanvasMask so the preview's
+  // visible silhouette matches the actual mask used by the pipeline.
+  const applyWorldToCanvas = () => {
+    ctx.translate(-outline.minX * sx, outline.maxY * sy);
+    ctx.scale(sx, -sy);
+  };
+
   // Full-opacity image clipped to the actual outline shape — this is what will print.
   ctx.save();
-  ctx.translate(-outline.minX * sx, -outline.minY * sy);
-  ctx.scale(sx, sy);
+  applyWorldToCanvas();
   ctx.clip(buildOutlinePath(), 'evenodd');
   ctx.setTransform(1, 0, 0, 1, 0, 0); // back to canvas-px space so dx/dy/w/h apply correctly
   ctx.drawImage(imageBitmap, dx, dy, w, h);
@@ -76,8 +83,7 @@ function drawPreview(
 
   // Dashed amber outline overlay on top.
   ctx.save();
-  ctx.translate(-outline.minX * sx, -outline.minY * sy);
-  ctx.scale(sx, sy);
+  applyWorldToCanvas();
   ctx.strokeStyle = '#f59e0b';
   ctx.lineWidth = 1.5 / Math.min(sx, sy);
   ctx.setLineDash([4 / Math.min(sx, sy), 3 / Math.min(sx, sy)]);

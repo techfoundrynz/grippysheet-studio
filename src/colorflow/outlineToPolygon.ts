@@ -129,8 +129,11 @@ export function buildOutlineCanvasMask(
   const sy = h / hMm;
 
   ctx.save();
-  ctx.translate(-polygon.minX * sx, -polygon.minY * sy);
-  ctx.scale(sx, sy);
+  // World Y is up; canvas Y is down. Mapping must put world maxY at canvas y=0
+  // so the mask matches `pixelToMmOnOutlineCanvas`'s inverse mapping and lines
+  // up with the image's top-row-at-canvas-y=0 placement.
+  ctx.translate(-polygon.minX * sx, polygon.maxY * sy);
+  ctx.scale(sx, -sy);
 
   const path = new Path2D();
   const [ox, oy] = polygon.outer[0];

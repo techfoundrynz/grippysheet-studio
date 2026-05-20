@@ -43,7 +43,7 @@ export const ColorFlowModel = React.forwardRef<THREE.Group, Props>(({ baseGeom, 
         makeBufferGeom(baseGeom),
         displayMode === 'toon'
           ? new THREE.MeshToonMaterial({ color })
-          : new THREE.MeshStandardMaterial({ color }),
+          : new THREE.MeshStandardMaterial({ color, flatShading: true }),
       );
       mesh.name = 'Base';
       group.add(mesh);
@@ -51,9 +51,10 @@ export const ColorFlowModel = React.forwardRef<THREE.Group, Props>(({ baseGeom, 
     for (let i = 0; i < layers.length; i++) {
       const { centroid: c, position, geom } = layers[i];
       const hex = `${c.r.toString(16).padStart(2,'0')}${c.g.toString(16).padStart(2,'0')}${c.b.toString(16).padStart(2,'0')}`;
+      const threeColor = new THREE.Color(c.r / 255, c.g / 255, c.b / 255);
       const mat = displayMode === 'toon'
-        ? new THREE.MeshToonMaterial({ color: new THREE.Color(c.r / 255, c.g / 255, c.b / 255) })
-        : new THREE.MeshStandardMaterial({ color: new THREE.Color(c.r / 255, c.g / 255, c.b / 255) });
+        ? new THREE.MeshToonMaterial({ color: threeColor })
+        : new THREE.MeshStandardMaterial({ color: threeColor, flatShading: true });
       const mesh = new THREE.Mesh(makeBufferGeom(geom), mat);
       mesh.name = `Color_${position + 1}_${hex}`;
       group.add(mesh);
