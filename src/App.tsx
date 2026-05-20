@@ -129,7 +129,7 @@ const App = () => {
                   className="bg-transparent border-0 shadow-none p-0 !p-0"
                   colorFlowGeom={colorFlowGeom}
                   colorFlowImageName={projectAssets.image?.name}
-                  colorFlowOutlineSlug={colorFlowSettings.outlineSlug}
+                  colorFlowOutlineSlug={baseSettings.outlineSlug}
                 />
               }
               colorFlowSettings={colorFlowSettings}

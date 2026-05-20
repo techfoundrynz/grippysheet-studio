@@ -1,9 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import * as THREE from 'three';
 import { type BaseSettings } from '../types/schemas';
 import { type ColorFlowSettings } from './schema';
-import { OUTLINE_LIBRARY, getOutlineBySlug } from './outlineLibrary';
-import { parseShapeFile } from '../utils/shapeLoader';
+import { getOutlineBySlug } from './outlineLibrary';
 import { useColorFlowWorker } from './useColorFlowWorker';
 import { ImageTransformPreview } from './ImageTransformPreview';
 import {
@@ -11,6 +9,7 @@ import {
   outlineCanvasSize,
   buildOutlineCanvasMask,
   pixelToMmOnOutlineCanvas,
+  transformOutlinePolygon,
   CANVAS_PX_PER_MM,
   type OutlinePolygon,
 } from './outlineToPolygon';
@@ -23,19 +22,20 @@ import { useAlert } from '../context/AlertContext';
 
 interface Props {
   baseSettings: BaseSettings;
-  setBaseSettings: React.Dispatch<React.SetStateAction<BaseSettings>>;
   settings: ColorFlowSettings;
   setSettings: React.Dispatch<React.SetStateAction<ColorFlowSettings>>;
   onGeometryReady?: (data: { base: ExtrudedGeometry; layers: { centroid: Centroid; position: number; geom: ExtrudedGeometry }[] }) => void;
   onImageAssetChanged?: (asset: { name: string; bytes: ArrayBuffer } | null) => void;
   initialImageAsset?: { name: string; bytes: ArrayBuffer } | null;
+  /** Callback to switch the right-panel tabs to "Base". */
+  onSwitchToBase?: () => void;
 }
 
 const SIMPLIFY_LABELS = ['off', 'light', 'medium', 'strong', 'max'] as const;
 const DETAIL_LABELS = ['sharp', 'balanced', 'smooth'] as const;
 const MAX_IMG_DIM = 1500;
 
-export const ColorFlowControls: React.FC<Props> = ({ baseSettings, setBaseSettings, settings, setSettings, onGeometryReady, onImageAssetChanged, initialImageAsset }) => {
+export const ColorFlowControls: React.FC<Props> = ({ baseSettings, settings, setSettings, onGeometryReady, onImageAssetChanged, initialImageAsset, onSwitchToBase }) => {
   const { request, status } = useColorFlowWorker();
   const { showAlert } = useAlert();
 
@@ -43,7 +43,6 @@ export const ColorFlowControls: React.FC<Props> = ({ baseSettings, setBaseSettin
   const [imageName, setImageName] = useState<string>('');
   const [imageDims, setImageDims] = useState<{ w: number; h: number } | null>(null);
 
-  // --- Hydrate saved image from imported project bundle ---
   useEffect(() => {
     if (!initialImageAsset) return;
     let cancelled = false;
@@ -67,38 +66,25 @@ export const ColorFlowControls: React.FC<Props> = ({ baseSettings, setBaseSettin
   const [layers, setLayers] = useState<TracedLayerEntry[]>([]);
   const [coverage, setCoverage] = useState<number[]>([]);
 
+  // Apply Base tab's rotation + mirror to the polygon used for canvas, mask, and extrusion.
   const outlinePolygon = useMemo<OutlinePolygon | null>(() => {
     const shape = baseSettings.cutoutShapes?.[0];
-    return shape ? shapeToPolygon(shape, 64) : null;
-  }, [baseSettings.cutoutShapes]);
+    if (!shape) return null;
+    const raw = shapeToPolygon(shape, 64);
+    return transformOutlinePolygon(raw, baseSettings.baseOutlineRotation, baseSettings.baseOutlineMirror);
+  }, [baseSettings.cutoutShapes, baseSettings.baseOutlineRotation, baseSettings.baseOutlineMirror]);
 
   const hasOutline = outlinePolygon !== null;
   const hasImage = imageBitmap !== null;
+  const outlineEntry = baseSettings.outlineSlug ? getOutlineBySlug(baseSettings.outlineSlug) : null;
+  const baseMm = baseSettings.thickness;
 
-  // --- Outline picker handlers ---
-  const handlePickPreset = useCallback(async (slug: string) => {
-    const entry = getOutlineBySlug(slug);
-    if (!entry) return;
-    try {
-      const res = await fetch(entry.file);
-      const text = await res.text();
-      const parsed = parseShapeFile(text, 'dxf');
-      if (!parsed.success) throw new Error(parsed.error);
-      setBaseSettings((b) => ({ ...b, cutoutShapes: parsed.shapes as unknown as THREE.Shape[] }));
-      setSettings((s) => ({ ...s, outlineSlug: slug }));
-    } catch (err) {
-      showAlert({ title: 'Failed to load outline', message: String(err), type: 'error' });
-    }
-  }, [setBaseSettings, setSettings, showAlert]);
-
-  // --- Image drop handler ---
   const handleImageFile = useCallback(async (file: File) => {
     if (!file.type.startsWith('image/')) {
       showAlert({ title: 'Not an image', message: 'Drop a PNG, JPG, or WebP file.', type: 'error' });
       return;
     }
     setImageName(file.name);
-    // Capture raw bytes for project bundling before creating the bitmap.
     const bytes = await file.arrayBuffer();
     onImageAssetChanged?.({ name: file.name, bytes });
     const bitmap = await createImageBitmap(file);
@@ -116,15 +102,12 @@ export const ColorFlowControls: React.FC<Props> = ({ baseSettings, setBaseSettin
     setImageDims({ w: width, h: height });
   }, [showAlert, onImageAssetChanged]);
 
-  // --- Quantize whenever inputs change ---
   useEffect(() => {
     if (!hasImage || !hasOutline || !imageBitmap || !outlinePolygon) return;
     let cancelled = false;
     const t = setTimeout(async () => {
       try {
         const canvas = outlineCanvasSize(outlinePolygon);
-        // Render the source image onto an OffscreenCanvas at outline-canvas dims,
-        // applying fit + user scale + user offset, then ship as ImageBitmap to the worker.
         const off = new OffscreenCanvas(canvas.w, canvas.h);
         const ctx = off.getContext('2d')!;
         ctx.clearRect(0, 0, canvas.w, canvas.h);
@@ -160,7 +143,6 @@ export const ColorFlowControls: React.FC<Props> = ({ baseSettings, setBaseSettin
     return () => { cancelled = true; clearTimeout(t); };
   }, [hasImage, hasOutline, imageBitmap, outlinePolygon, settings.colorCount, settings.simplify, settings.imageOffsetMm, settings.imageScale, request, showAlert]);
 
-  // --- Trace whenever assignments / detail / smooth change ---
   useEffect(() => {
     if (!assignments || !palette.length || !outlinePolygon) return;
     let cancelled = false;
@@ -184,14 +166,12 @@ export const ColorFlowControls: React.FC<Props> = ({ baseSettings, setBaseSettin
     return () => { cancelled = true; };
   }, [assignments, palette, outlinePolygon, settings.detail, settings.smooth, request, showAlert]);
 
-  // --- Extrude whenever layers / thickness change ---
   useEffect(() => {
     if (!layers.length || !outlinePolygon || !palette.length) return;
     let cancelled = false;
     (async () => {
       try {
         const canvas = outlineCanvasSize(outlinePolygon);
-        // Map pixel-space traced polygons back into outline-mm space.
         const mapRing = (pts: Array<[number, number]>): Array<[number, number]> => {
           const out = pts.map(([px, py]) => pixelToMmOnOutlineCanvas(px, py, outlinePolygon, canvas));
           out.reverse(); // Y-flip reverses orientation; restore CCW winding
@@ -216,7 +196,7 @@ export const ColorFlowControls: React.FC<Props> = ({ baseSettings, setBaseSettin
           kind: 'extrude',
           layers: layersInMm,
           outline: outlineInMm,
-          baseMm: settings.baseMm,
+          baseMm,
           colorLayerMm: settings.colorLayerMm,
           stackOrder,
         });
@@ -234,30 +214,39 @@ export const ColorFlowControls: React.FC<Props> = ({ baseSettings, setBaseSettin
       }
     })();
     return () => { cancelled = true; };
-  }, [layers, outlinePolygon, palette, coverage, settings.baseMm, settings.colorLayerMm, settings.sort, settings.layerOrder, request, onGeometryReady, showAlert]);
+  }, [layers, outlinePolygon, palette, coverage, baseMm, settings.colorLayerMm, settings.sort, settings.layerOrder, request, onGeometryReady, showAlert]);
 
-  // --- Render ---
   const _dropRef = useRef<HTMLDivElement>(null);
 
   return (
     <div className="space-y-6">
         <section>
-          <h3 className="text-xs uppercase tracking-widest text-gray-400 mb-2">① Outline</h3>
-          <select
-            value={settings.outlineSlug ?? ''}
-            onChange={(e) => handlePickPreset(e.target.value)}
-            className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm"
-          >
-            <option value="">— pick an outline —</option>
-            {(['xr','gt','pint','other'] as const).map((g) => (
-              <optgroup key={g} label={g.toUpperCase()}>
-                {OUTLINE_LIBRARY.filter((o) => o.group === g).map((o) => (
-                  <option key={o.slug} value={o.slug}>{o.name} · {o.widthMm}×{o.heightMm}mm</option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
-          {hasOutline && <p className="text-xs text-green-400 mt-2">✓ outline loaded</p>}
+          <h3 className="text-xs uppercase tracking-widest text-gray-400 mb-2">① Base</h3>
+          {hasOutline ? (
+            <div className="flex items-center justify-between gap-2 text-xs bg-gray-900 border border-gray-700 rounded px-3 py-2">
+              <span className="text-green-400">
+                ✓ {outlineEntry ? `${outlineEntry.name} · ${outlineEntry.widthMm}×${outlineEntry.heightMm}mm` : 'custom outline loaded'}
+              </span>
+              {onSwitchToBase && (
+                <button
+                  type="button"
+                  onClick={onSwitchToBase}
+                  className="text-blue-400 hover:underline text-[10px] whitespace-nowrap"
+                >edit in Base ↗</button>
+              )}
+            </div>
+          ) : (
+            <div className="text-xs bg-yellow-900/20 border border-yellow-700/50 rounded px-3 py-2 text-yellow-200">
+              <p>⚠ No outline configured yet.</p>
+              {onSwitchToBase && (
+                <button
+                  type="button"
+                  onClick={onSwitchToBase}
+                  className="text-blue-400 hover:underline text-[10px] mt-1"
+                >Configure in Base tab ↗</button>
+              )}
+            </div>
+          )}
         </section>
 
         <section className={hasOutline ? '' : 'opacity-40 pointer-events-none'}>
@@ -372,22 +361,8 @@ export const ColorFlowControls: React.FC<Props> = ({ baseSettings, setBaseSettin
 
         <section className={layers.length > 0 ? '' : 'opacity-40 pointer-events-none'}>
           <h3 className="text-xs uppercase tracking-widest text-gray-400 mb-2">④ Print</h3>
-          <div className="grid grid-cols-2 gap-2 text-xs text-gray-400">
-            <label>base mm
-              <input
-                type="number"
-                step={0.1}
-                min={0.2}
-                max={5}
-                value={settings.baseMm}
-                onChange={(e) => {
-                  const v = Math.max(0.2, Math.min(5, +e.target.value || 1));
-                  setSettings((s) => ({ ...s, baseMm: v }));
-                }}
-                className="w-full mt-1 bg-gray-900 border border-gray-700 rounded px-2 py-1"
-              />
-            </label>
-            <label>layer mm
+          <div className="grid grid-cols-1 gap-2 text-xs text-gray-400">
+            <label>layer mm (each color rises this much above the base)
               <input
                 type="number"
                 step={0.05}
@@ -404,8 +379,8 @@ export const ColorFlowControls: React.FC<Props> = ({ baseSettings, setBaseSettin
           </div>
           {palette.length > 0 && (
             <p className="text-[10px] text-gray-500 mt-2">
-              total {(settings.baseMm + palette.length * settings.colorLayerMm).toFixed(2)}mm
-              ({settings.baseMm.toFixed(2)} base + {palette.length} × {settings.colorLayerMm.toFixed(2)}mm)
+              total {(baseMm + palette.length * settings.colorLayerMm).toFixed(2)}mm
+              ({baseMm.toFixed(2)} base + {palette.length} × {settings.colorLayerMm.toFixed(2)}mm) · base thickness set in Base tab
             </p>
           )}
         </section>

@@ -447,12 +447,12 @@ const Controls: React.FC<ControlsProps> = ({
                 <div className={activeTab === 'colorflow' ? 'block' : 'hidden'}>
                     <ColorFlowControls
                         baseSettings={baseSettings}
-                        setBaseSettings={setBaseSettings}
                         settings={colorFlowSettings}
                         setSettings={setColorFlowSettings}
                         onGeometryReady={onColorFlowGeomReady}
                         onImageAssetChanged={onColorFlowImageAssetChanged}
                         initialImageAsset={initialColorFlowImageAsset}
+                        onSwitchToBase={() => setActiveTab('base')}
                     />
                 </div>
             </Freeze>
