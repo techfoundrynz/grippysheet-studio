@@ -5,10 +5,19 @@ import { type ColorFlowSettings } from './schema';
 import { OUTLINE_LIBRARY, getOutlineBySlug } from './outlineLibrary';
 import { parseShapeFile } from '../utils/shapeLoader';
 import { useColorFlowWorker } from './useColorFlowWorker';
-import { shapeToPolygon, fitOutlineInImage, buildOutlineMask, type OutlinePolygon } from './outlineToPolygon';
-import type { Centroid } from './pipeline/quantize';
+import {
+  shapeToPolygon,
+  outlineCanvasSize,
+  buildOutlineCanvasMask,
+  pixelToMmOnOutlineCanvas,
+  CANVAS_PX_PER_MM,
+  type OutlinePolygon,
+} from './outlineToPolygon';
+import { computeImageDrawCoords } from './imageTransform';
+import { paletteCoverage, type Centroid } from './pipeline/quantize';
+import { resolvedStackOrder } from './stackOrder';
 import type { ExtrudedGeometry } from './pipeline/extrude';
-import type { Response as WorkerResponse, TracedLayerEntry } from './workerProtocol';
+import type { Response as WorkerResponse, TracedLayerEntry, ExtrudedLayerEntry } from './workerProtocol';
 import { useAlert } from '../context/AlertContext';
 
 interface Props {
@@ -16,14 +25,8 @@ interface Props {
   setBaseSettings: React.Dispatch<React.SetStateAction<BaseSettings>>;
   settings: ColorFlowSettings;
   setSettings: React.Dispatch<React.SetStateAction<ColorFlowSettings>>;
-  /** Called when extrusion completes so the 3D viewer can render the result. */
-  onGeometryReady?: (data: {
-    base: ExtrudedGeometry;
-    layers: { centroid: Centroid; position: number; geom: ExtrudedGeometry }[];
-  }) => void;
-  /** Called when the user loads or clears an image, so the parent can keep raw bytes for project bundling. */
+  onGeometryReady?: (data: { base: ExtrudedGeometry; layers: { centroid: Centroid; position: number; geom: ExtrudedGeometry }[] }) => void;
   onImageAssetChanged?: (asset: { name: string; bytes: ArrayBuffer } | null) => void;
-  /** Hydrate a saved image asset from an imported project bundle. */
   initialImageAsset?: { name: string; bytes: ArrayBuffer } | null;
 }
 
@@ -61,6 +64,7 @@ export const ColorFlowControls: React.FC<Props> = ({ baseSettings, setBaseSettin
   const [palette, setPalette] = useState<Centroid[]>([]);
   const [assignments, setAssignments] = useState<Uint16Array | null>(null);
   const [layers, setLayers] = useState<TracedLayerEntry[]>([]);
+  const [coverage, setCoverage] = useState<number[]>([]);
 
   const outlinePolygon = useMemo<OutlinePolygon | null>(() => {
     const shape = baseSettings.cutoutShapes?.[0];
@@ -113,47 +117,61 @@ export const ColorFlowControls: React.FC<Props> = ({ baseSettings, setBaseSettin
 
   // --- Quantize whenever inputs change ---
   useEffect(() => {
-    if (!hasImage || !hasOutline || !imageBitmap || !imageDims || !outlinePolygon) return;
+    if (!hasImage || !hasOutline || !imageBitmap || !outlinePolygon) return;
     let cancelled = false;
     const t = setTimeout(async () => {
       try {
-        const placement = fitOutlineInImage(outlinePolygon, imageDims.w, imageDims.h);
-        const mask = buildOutlineMask(outlinePolygon, placement, imageDims.w, imageDims.h);
+        const canvas = outlineCanvasSize(outlinePolygon);
+        // Render the source image onto an OffscreenCanvas at outline-canvas dims,
+        // applying fit + user scale + user offset, then ship as ImageBitmap to the worker.
+        const off = new OffscreenCanvas(canvas.w, canvas.h);
+        const ctx = off.getContext('2d')!;
+        ctx.clearRect(0, 0, canvas.w, canvas.h);
+        const { dx, dy, w, h } = computeImageDrawCoords({
+          imageW: imageBitmap.width,
+          imageH: imageBitmap.height,
+          canvasW: canvas.w,
+          canvasH: canvas.h,
+          offsetMm: settings.imageOffsetMm,
+          scale: settings.imageScale,
+          pxPerMm: CANVAS_PX_PER_MM,
+        });
+        ctx.drawImage(imageBitmap, dx, dy, w, h);
+        const rendered = off.transferToImageBitmap();
+        const mask = buildOutlineCanvasMask(outlinePolygon, canvas);
+
         const resp = await request<Extract<WorkerResponse, { kind: 'quantized' }>>({
           kind: 'quantize',
-          image: imageBitmap,
+          image: rendered,
           mask,
-          width: imageDims.w,
-          height: imageDims.h,
+          width: canvas.w,
+          height: canvas.h,
           opts: { colorCount: settings.colorCount, simplify: settings.simplify, seed: 42 },
         });
         if (cancelled || resp.kind !== 'quantized') return;
         setPalette(resp.palette);
         setAssignments(resp.assignments);
-        setSettings((s) => {
-          if (s.colorLayerHeights.length === resp.palette.length) return s;
-          const each = (s.totalMm - s.baseMm) / resp.palette.length;
-          return { ...s, colorLayerHeights: new Array(resp.palette.length).fill(+each.toFixed(2)) };
-        });
+        setCoverage(paletteCoverage(resp.assignments, resp.palette));
       } catch (err) {
         showAlert({ title: 'Quantization failed', message: String(err), type: 'error' });
       }
     }, 200);
     return () => { cancelled = true; clearTimeout(t); };
-  }, [hasImage, hasOutline, imageBitmap, imageDims, outlinePolygon, settings.colorCount, settings.simplify, request, showAlert]);
+  }, [hasImage, hasOutline, imageBitmap, outlinePolygon, settings.colorCount, settings.simplify, settings.imageOffsetMm, settings.imageScale, request, showAlert]);
 
   // --- Trace whenever assignments / detail / smooth change ---
   useEffect(() => {
-    if (!assignments || !palette.length || !imageDims) return;
+    if (!assignments || !palette.length || !outlinePolygon) return;
     let cancelled = false;
+    const canvas = outlineCanvasSize(outlinePolygon);
     (async () => {
       try {
         const resp = await request<Extract<WorkerResponse, { kind: 'traced' }>>({
           kind: 'trace',
           assignments,
           palette,
-          width: imageDims.w,
-          height: imageDims.h,
+          width: canvas.w,
+          height: canvas.h,
           opts: { detail: settings.detail, smooth: settings.smooth },
         });
         if (cancelled || resp.kind !== 'traced') return;
@@ -163,50 +181,50 @@ export const ColorFlowControls: React.FC<Props> = ({ baseSettings, setBaseSettin
       }
     })();
     return () => { cancelled = true; };
-  }, [assignments, palette, imageDims, settings.detail, settings.smooth, request, showAlert]);
+  }, [assignments, palette, outlinePolygon, settings.detail, settings.smooth, request, showAlert]);
 
   // --- Extrude whenever layers / thickness change ---
   useEffect(() => {
-    if (!layers.length || !outlinePolygon || !imageDims) return;
+    if (!layers.length || !outlinePolygon || !palette.length) return;
     let cancelled = false;
     (async () => {
       try {
-        // Convert pixel-space polygon coords back to mm-space for the 3D model.
-        const placement = fitOutlineInImage(outlinePolygon, imageDims.w, imageDims.h);
-        const flipAndReverse = (pts: Array<[number, number]>): Array<[number, number]> => {
-          const flipped = pts.map(([x, y]) => [
-            (x - placement.offsetX) / placement.scale + outlinePolygon.minX,
-            outlinePolygon.maxY - (y - placement.offsetY) / placement.scale,
-          ] as [number, number]);
-          flipped.reverse();
-          return flipped;
+        const canvas = outlineCanvasSize(outlinePolygon);
+        // Map pixel-space traced polygons back into outline-mm space.
+        const mapRing = (pts: Array<[number, number]>): Array<[number, number]> => {
+          const out = pts.map(([px, py]) => pixelToMmOnOutlineCanvas(px, py, outlinePolygon, canvas));
+          out.reverse(); // Y-flip reverses orientation; restore CCW winding
+          return out;
         };
 
         const layersInMm: TracedLayerEntry[] = layers.map((entry) => ({
           centroidIndex: entry.centroidIndex,
           polygon: {
-            outer: flipAndReverse(entry.polygon.outer),
-            holes: entry.polygon.holes.map(flipAndReverse),
+            outer: mapRing(entry.polygon.outer),
+            holes: entry.polygon.holes.map(mapRing),
           },
         }));
         const outlineInMm = {
           outer: outlinePolygon.outer.map(([x, y]) => [x, y] as [number, number]),
           holes: outlinePolygon.holes.map((h) => h.map(([x, y]) => [x, y] as [number, number])),
         };
+
+        const stackOrder = resolvedStackOrder(palette, coverage, settings);
+
         const resp = await request<Extract<WorkerResponse, { kind: 'extruded' }>>({
           kind: 'extrude',
           layers: layersInMm,
           outline: outlineInMm,
           baseMm: settings.baseMm,
-          totalMm: settings.totalMm,
-          colorLayerHeights: settings.colorLayerHeights,
+          colorLayerMm: settings.colorLayerMm,
+          stackOrder,
         });
         if (cancelled || resp.kind !== 'extruded') return;
         if (onGeometryReady) {
-          const pairs = resp.layerGeoms.map(({ centroidIndex, position, geom }: { centroidIndex: number; position: number; geom: ExtrudedGeometry }) => ({
-            centroid: palette[centroidIndex],
-            position,
-            geom,
+          const pairs = resp.layerGeoms.map((entry: ExtrudedLayerEntry) => ({
+            centroid: palette[entry.centroidIndex],
+            position: entry.position,
+            geom: entry.geom,
           }));
           onGeometryReady({ base: resp.baseGeom, layers: pairs });
         }
@@ -215,7 +233,7 @@ export const ColorFlowControls: React.FC<Props> = ({ baseSettings, setBaseSettin
       }
     })();
     return () => { cancelled = true; };
-  }, [layers, outlinePolygon, imageDims, settings.baseMm, settings.totalMm, settings.colorLayerHeights, request, palette, onGeometryReady, showAlert]);
+  }, [layers, outlinePolygon, palette, coverage, settings.baseMm, settings.colorLayerMm, settings.sort, settings.layerOrder, request, onGeometryReady, showAlert]);
 
   // --- Render ---
   const _dropRef = useRef<HTMLDivElement>(null);
@@ -326,56 +344,6 @@ export const ColorFlowControls: React.FC<Props> = ({ baseSettings, setBaseSettin
           {!status.phase && !status.error && palette.length > 0 && <span>ready · {palette.length} colors traced</span>}
         </div>
 
-        {palette.length > 0 && (
-          <section>
-            <h3 className="text-xs uppercase tracking-widest text-gray-400 mb-2">Color Layers (Z-stacked)</h3>
-            <p className="text-[10px] text-gray-500 mb-2">
-              Layer 1 sits directly on the base; later layers stack on top.
-              Sum of heights {settings.colorLayerHeights.reduce((s, h) => s + h, 0).toFixed(2)}mm
-              / max {(settings.totalMm - settings.baseMm).toFixed(2)}mm.
-            </p>
-            <div className="space-y-2">
-              {palette.map((c, i) => {
-                const hex = `#${c.r.toString(16).padStart(2,'0')}${c.g.toString(16).padStart(2,'0')}${c.b.toString(16).padStart(2,'0')}`;
-                const height = settings.colorLayerHeights[i] ?? 0;
-                return (
-                  <div key={c.index} className="flex items-center gap-2 bg-gray-900 border border-gray-700 rounded p-2 text-xs">
-                    <div className="w-6 h-6 rounded flex-shrink-0" style={{ background: hex }} />
-                    <div className="font-mono text-gray-300 w-20">{hex.toUpperCase()}</div>
-                    <div className="text-gray-500 text-[10px] flex-1">layer {i + 1}</div>
-                    <input
-                      type="number"
-                      step={0.05}
-                      min={0.05}
-                      max={settings.totalMm - settings.baseMm}
-                      value={height}
-                      onChange={(e) => {
-                        const v = Math.max(0.05, +e.target.value);
-                        setSettings((s) => {
-                          const next = [...s.colorLayerHeights];
-                          while (next.length < palette.length) next.push(0);
-                          next[i] = v;
-                          return { ...s, colorLayerHeights: next };
-                        });
-                      }}
-                      className="w-16 bg-gray-800 border border-gray-700 rounded px-1 py-0.5 text-center"
-                    />
-                    <span className="text-gray-500">mm</span>
-                  </div>
-                );
-              })}
-            </div>
-            <button
-              onClick={() => {
-                const each = (settings.totalMm - settings.baseMm) / palette.length;
-                setSettings((s) => ({ ...s, colorLayerHeights: new Array(palette.length).fill(+each.toFixed(2)) }));
-              }}
-              className="mt-2 text-[10px] text-blue-400 hover:underline"
-            >
-              Reset to equal heights
-            </button>
-          </section>
-        )}
 
     </div>
   );
