@@ -121,6 +121,9 @@ const App = () => {
                   meshRef={meshRef}
                   debugMode={geometrySettings.debugMode ?? false}
                   className="bg-transparent border-0 shadow-none p-0 !p-0"
+                  colorFlowGeom={colorFlowGeom}
+                  colorFlowImageName={projectAssets.image?.name}
+                  colorFlowOutlineSlug={colorFlowSettings.outlineSlug}
                 />
               }
               colorFlowSettings={colorFlowSettings}

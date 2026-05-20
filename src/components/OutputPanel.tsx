@@ -4,14 +4,23 @@ import { STLExporter } from 'three-stdlib';
 import { useAlert } from '../context/AlertContext';
 import { exportTo3MF } from 'three-3mf-exporter';
 import * as THREE from 'three';
+import type { Centroid } from '../colorflow/pipeline/quantize';
+import type { ExtrudedGeometry } from '../colorflow/pipeline/extrude';
+import { build3MF, type MeshPart } from '../colorflow/threeMfWriter';
 
 interface OutputPanelProps {
   meshRef: React.RefObject<THREE.Group | null>;
   debugMode?: boolean;
   className?: string;
+  /** When non-null, the 3MF export uses threeMfWriter with multi-part assembly. */
+  colorFlowGeom?: { base: ExtrudedGeometry; layers: { centroid: Centroid; geom: ExtrudedGeometry }[] } | null;
+  /** Optional filename prefix for the 3MF download. */
+  colorFlowImageName?: string;
+  /** Optional outline slug (used for filename suffix). */
+  colorFlowOutlineSlug?: string | null;
 }
 
-const OutputPanel: React.FC<OutputPanelProps> = ({ meshRef, debugMode = false, className = '' }) => {
+const OutputPanel: React.FC<OutputPanelProps> = ({ meshRef, debugMode = false, className = '', colorFlowGeom, colorFlowImageName, colorFlowOutlineSlug }) => {
   const { showAlert } = useAlert();
 
   const expandInstancedMesh = (instancedMesh: THREE.InstancedMesh): THREE.Group => {
@@ -135,48 +144,63 @@ const OutputPanel: React.FC<OutputPanelProps> = ({ meshRef, debugMode = false, c
     URL.revokeObjectURL(url);
   };
 
+  function downloadBlob(blob: Blob, filename: string) {
+    const link = document.createElement('a');
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    const url = URL.createObjectURL(blob);
+    link.href = url;
+    link.download = filename;
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
   const handleExport3MF = async () => {
     try {
-        if (!meshRef.current) return;
-
-        const group = meshRef.current; // ... existing clone logic ...
-        
-        const exportGroup = new THREE.Group();
-        
-        group.children.forEach(child => {
-             const processed = prepareForExport(child);
-             if (processed) exportGroup.add(processed);
+      if (colorFlowGeom) {
+        // ColorFlow path — multi-part assembly via threeMfWriter
+        const parts: MeshPart[] = [{ name: 'base', mesh: colorFlowGeom.base }];
+        colorFlowGeom.layers.forEach((entry, i) => {
+          const c = entry.centroid;
+          const hex = `${c.r.toString(16).padStart(2,'0')}${c.g.toString(16).padStart(2,'0')}${c.b.toString(16).padStart(2,'0')}`;
+          parts.push({ name: `color_${i + 1}_${hex}`, mesh: entry.geom });
         });
-        
-        if (exportGroup.children.length === 0) {
-            showAlert({ title: "Export Error", message: "Nothing to export! The scene appears empty.", type: "warning" });
-            return;
-        }
+        const blob = await build3MF(parts, 'footpad_assembly');
+        const stem = (colorFlowImageName || 'design').replace(/\.[^.]+$/, '');
+        const suffix = colorFlowOutlineSlug || 'outline';
+        downloadBlob(blob, `${stem}_${suffix}.3mf`);
+        return;
+      }
 
-        exportGroup.updateMatrixWorld(true);
+      // Pattern path — existing three-3mf-exporter walk
+      if (!meshRef.current) return;
 
-        // Async export
-        const blob = await exportTo3MF(exportGroup, {});
-        
-        const link = document.createElement('a');
-        link.style.display = 'none';
-        document.body.appendChild(link);
-        
-        const url = URL.createObjectURL(blob);
-        link.href = url;
-        link.download = 'grippysheet-model.3mf';
-        link.click();
-        
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
+      const group = meshRef.current;
+      const exportGroup = new THREE.Group();
+
+      group.children.forEach((child) => {
+        const processed = prepareForExport(child);
+        if (processed) exportGroup.add(processed);
+      });
+
+      if (exportGroup.children.length === 0) {
+        showAlert({ title: "Export Error", message: "Nothing to export! The scene appears empty.", type: "warning" });
+        return;
+      }
+
+      exportGroup.updateMatrixWorld(true);
+
+      const blob = await exportTo3MF(exportGroup, {});
+      downloadBlob(blob, 'grippysheet-model.3mf');
     } catch (e) {
-        console.error("3MF Export Error:", e);
-        showAlert({ 
-            title: "Export Failed", 
-            message: `Failed to export 3MF: ${e instanceof Error ? e.message : String(e)}`, 
-            type: "error" ,
-            confirmText: "OK",
-        });
+      console.error("3MF Export Error:", e);
+      showAlert({
+        title: "Export Failed",
+        message: `Failed to export 3MF: ${e instanceof Error ? e.message : String(e)}`,
+        type: "error",
+        confirmText: "OK",
+      });
     }
   };
 

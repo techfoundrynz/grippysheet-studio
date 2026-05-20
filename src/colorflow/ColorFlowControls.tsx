@@ -9,7 +9,6 @@ import { shapeToPolygon, fitOutlineInImage, buildOutlineMask, type OutlinePolygo
 import type { Centroid } from './pipeline/quantize';
 import type { ExtrudedGeometry } from './pipeline/extrude';
 import type { Response as WorkerResponse, TracedLayerEntry } from './workerProtocol';
-import { build3MF } from './threeMfWriter';
 import { useAlert } from '../context/AlertContext';
 
 interface Props {
@@ -214,56 +213,6 @@ export const ColorFlowControls: React.FC<Props> = ({ baseSettings, setBaseSettin
     return () => { cancelled = true; };
   }, [layers, outlinePolygon, imageDims, settings.baseMm, settings.totalMm, settings.colorLayerHeights, request, palette, onGeometryReady, showAlert]);
 
-  // --- 3MF export ---
-  const handleExport3MF = useCallback(async () => {
-    if (!layers.length || !outlinePolygon || !imageDims) return;
-    try {
-      const placement = fitOutlineInImage(outlinePolygon, imageDims.w, imageDims.h);
-      const flipAndReverse = (pts: Array<[number, number]>): Array<[number, number]> => {
-        const flipped = pts.map(([x, y]) => [
-          (x - placement.offsetX) / placement.scale + outlinePolygon.minX,
-          outlinePolygon.maxY - (y - placement.offsetY) / placement.scale,
-        ] as [number, number]);
-        flipped.reverse();
-        return flipped;
-      };
-
-      const layersInMm: TracedLayerEntry[] = layers.map((entry) => ({
-        centroidIndex: entry.centroidIndex,
-        polygon: {
-          outer: flipAndReverse(entry.polygon.outer),
-          holes: entry.polygon.holes.map(flipAndReverse),
-        },
-      }));
-      const outlineInMm = {
-        outer: outlinePolygon.outer.map(([x, y]) => [x, y] as [number, number]),
-        holes: outlinePolygon.holes.map((h) => h.map(([x, y]) => [x, y] as [number, number])),
-      };
-      const resp = await request<Extract<WorkerResponse, { kind: 'extruded' }>>({
-        kind: 'extrude', layers: layersInMm, outline: outlineInMm,
-        baseMm: settings.baseMm, totalMm: settings.totalMm,
-        colorLayerHeights: settings.colorLayerHeights,
-      });
-      const parts = [{ name: 'base', mesh: resp.baseGeom }];
-      resp.layerGeoms.forEach(({ centroidIndex, geom }: { centroidIndex: number; geom: ExtrudedGeometry }, i: number) => {
-        const c = palette[centroidIndex];
-        const hex = c ? `${c.r.toString(16).padStart(2,'0')}${c.g.toString(16).padStart(2,'0')}${c.b.toString(16).padStart(2,'0')}` : 'unk';
-        parts.push({ name: `color_${i + 1}_${hex}`, mesh: geom });
-      });
-      const blob = await build3MF(parts, 'footpad_assembly');
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${(imageName || 'design').replace(/\.[^.]+$/, '')}_${settings.outlineSlug || 'outline'}.3mf`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-    } catch (err) {
-      showAlert({ title: '3MF export failed', message: String(err), type: 'error' });
-    }
-  }, [layers, outlinePolygon, imageDims, settings, palette, imageName, request, showAlert]);
-
   // --- Render ---
   const _dropRef = useRef<HTMLDivElement>(null);
 
@@ -362,13 +311,9 @@ export const ColorFlowControls: React.FC<Props> = ({ baseSettings, setBaseSettin
 
         <section className={layers.length > 0 ? '' : 'opacity-40 pointer-events-none'}>
           <h3 className="text-xs uppercase tracking-widest text-gray-400 mb-2">⑤ Export</h3>
-          <button
-            onClick={handleExport3MF}
-            className="w-full bg-gradient-to-r from-purple-500 to-cyan-500 text-white py-3 rounded font-bold hover:brightness-110 disabled:opacity-50"
-            disabled={layers.length === 0}
-          >
-            ⬇ Export 3MF (Bambu)
-          </button>
+          <p className="text-xs text-gray-400">
+            Use <span className="text-blue-400 font-bold">Export 3MF</span> in the footer below to download the multi-part Bambu assembly.
+          </p>
         </section>
 
         <div className="text-xs text-gray-500 min-h-[20px]">
