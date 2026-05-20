@@ -278,6 +278,59 @@ export const ColorFlowControls: React.FC<Props> = ({ baseSettings, setBaseSettin
               ? <span className="text-green-400">✓ {imageName} · {imageDims?.w}×{imageDims?.h}</span>
               : <span>drag image / click to browse</span>}
           </div>
+          {hasImage && (
+            <div className="mt-3 grid grid-cols-3 gap-2 text-xs text-gray-400">
+              <label>x mm
+                <input
+                  type="number"
+                  step={1}
+                  min={-200}
+                  max={200}
+                  value={settings.imageOffsetMm.x}
+                  onChange={(e) => {
+                    const v = Math.max(-200, Math.min(200, +e.target.value || 0));
+                    setSettings((s) => ({ ...s, imageOffsetMm: { ...s.imageOffsetMm, x: v } }));
+                  }}
+                  className="w-full mt-1 bg-gray-900 border border-gray-700 rounded px-2 py-1"
+                />
+              </label>
+              <label>y mm
+                <input
+                  type="number"
+                  step={1}
+                  min={-200}
+                  max={200}
+                  value={settings.imageOffsetMm.y}
+                  onChange={(e) => {
+                    const v = Math.max(-200, Math.min(200, +e.target.value || 0));
+                    setSettings((s) => ({ ...s, imageOffsetMm: { ...s.imageOffsetMm, y: v } }));
+                  }}
+                  className="w-full mt-1 bg-gray-900 border border-gray-700 rounded px-2 py-1"
+                />
+              </label>
+              <label>scale
+                <input
+                  type="number"
+                  step={0.05}
+                  min={0.2}
+                  max={3}
+                  value={settings.imageScale}
+                  onChange={(e) => {
+                    const v = Math.max(0.2, Math.min(3, +e.target.value || 1));
+                    setSettings((s) => ({ ...s, imageScale: v }));
+                  }}
+                  className="w-full mt-1 bg-gray-900 border border-gray-700 rounded px-2 py-1"
+                />
+              </label>
+              <button
+                type="button"
+                onClick={() => setSettings((s) => ({ ...s, imageOffsetMm: { x: 0, y: 0 }, imageScale: 1.0 }))}
+                className="col-span-3 mt-1 text-[10px] text-blue-400 hover:underline text-left"
+              >
+                Reset to fit-centered
+              </button>
+            </div>
+          )}
         </section>
 
         <section className={hasImage ? '' : 'opacity-40 pointer-events-none'}>
