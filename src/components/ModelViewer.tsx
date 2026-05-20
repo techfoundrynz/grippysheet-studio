@@ -5,6 +5,7 @@ import { InlayInteractionHandles } from './interaction/InlayInteractionHandles';
 import { Box, Layers, ScanLine, Activity, Ghost, Camera as CameraIcon, Palette, Scissors } from 'lucide-react';
 import * as THREE from 'three';
 import ScreenshotModal from './ScreenshotModal';
+import { ErrorBoundary } from './ErrorBoundary';
 import ImperativeModel from './ImperativeModel';
 import Spinner from './Spinner';
 import { BaseSettings, InlaySettings, GeometrySettings } from '../types/schemas';
@@ -413,6 +414,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
         </div>
       )}
 
+      <ErrorBoundary>
       <Canvas shadows>
         <OrthographicCamera makeDefault={cameraType === 'orthographic'} position={[0, -1, 1000]} near={-2000} far={2000} up={[0, 0, 1]} />
         <PerspectiveCamera makeDefault={cameraType === 'perspective'} position={[500, -500, 500]} near={0.1} far={5000} up={[0, 0, 1]} fov={45} />
@@ -573,6 +575,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
         {/* Rotate GridHelper 90deg X to lie on XY plane */}
         <gridHelper args={[2000, 20]} position={[0, 0, 0]} rotation={[Math.PI / 2, 0, 0]} />
       </Canvas>
+      </ErrorBoundary>
       <ScreenshotModal 
          isOpen={showScreenshotModal} 
          onClose={() => setShowScreenshotModal(false)}
