@@ -2,6 +2,7 @@
 import { z } from 'zod';
 import * as THREE from 'three';
 import { DEFAULT_BASE_COLOR, DEFAULT_PATTERN_COLOR } from '../constants/colors';
+import { ColorFlowSettingsSchema } from '../colorflow/schema';
 
 // Helper for Three.js objects which are not easily serializable by Zod
 const ThreeShapeSchema = z.custom<THREE.Shape[]>((val) => Array.isArray(val), "Must be an array of shapes");
@@ -92,7 +93,31 @@ export const ProjectSchemaV1 = z.object({
     geometry: GeometrySettingsSchema,
 });
 
-export const ProjectSchema = ProjectSchemaV1;
+export const ProjectSchemaV2 = z.object({
+    version: z.literal(2),
+    timestamp: z.number(),
+    mode: z.enum(['pattern', 'colorflow']).default('pattern'),
+    base: BaseSettingsSchema,
+    inlay: InlaySettingsSchema,
+    geometry: GeometrySettingsSchema,
+    imageMode: ColorFlowSettingsSchema.optional(),
+});
+
+export type ProjectDataV2 = z.infer<typeof ProjectSchemaV2>;
+
+export function migrateV1ToV2(v1: unknown): ProjectDataV2 {
+    const parsed = ProjectSchemaV1.parse(v1);
+    return {
+        version: 2,
+        timestamp: parsed.timestamp,
+        mode: 'pattern',
+        base: parsed.base,
+        inlay: parsed.inlay,
+        geometry: parsed.geometry,
+    };
+}
+
+export const ProjectSchema = ProjectSchemaV2;
 export type ProjectData = z.infer<typeof ProjectSchema>;
 
 export type BaseSettings = z.infer<typeof BaseSettingsSchema>;
