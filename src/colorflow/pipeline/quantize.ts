@@ -145,3 +145,19 @@ export function assignAll(
   }
   return out;
 }
+
+/**
+ * Count post-simplify pixel assignments per palette index. Transparent pixels
+ * (0xFFFF) are skipped. Returns an array of length === palette.length.
+ */
+export function paletteCoverage(
+  assignments: Uint16Array,
+  palette: Centroid[],
+): number[] {
+  const counts = new Array<number>(palette.length).fill(0);
+  for (let i = 0; i < assignments.length; i++) {
+    const v = assignments[i];
+    if (v !== 0xFFFF && v < counts.length) counts[v]++;
+  }
+  return counts;
+}

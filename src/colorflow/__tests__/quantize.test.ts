@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { kmeans } from '../pipeline/quantize';
+import { kmeans, paletteCoverage } from '../pipeline/quantize';
 import { mulberry32 } from '../pipeline/random';
 
 function buildImageData(rgbs: Array<[number, number, number]>): ImageData {
@@ -44,5 +44,24 @@ describe('kmeans', () => {
     const a = kmeans(img, 2, mulberry32(7));
     const b = kmeans(img, 2, mulberry32(7));
     expect(a).toEqual(b);
+  });
+});
+
+describe('paletteCoverage', () => {
+  it('counts assignments per palette index, ignoring 0xFFFF', () => {
+    const assignments = new Uint16Array([0, 0, 1, 1, 1, 2, 0xFFFF, 0xFFFF]);
+    const fakePalette = [
+      { r: 0, g: 0, b: 0, index: 0 },
+      { r: 0, g: 0, b: 0, index: 1 },
+      { r: 0, g: 0, b: 0, index: 2 },
+    ];
+    const c = paletteCoverage(assignments, fakePalette);
+    expect(c).toEqual([2, 3, 1]);
+  });
+
+  it('returns all zeros if every pixel is transparent', () => {
+    const assignments = new Uint16Array([0xFFFF, 0xFFFF]);
+    const fakePalette = [{ r: 0, g: 0, b: 0, index: 0 }];
+    expect(paletteCoverage(assignments, fakePalette)).toEqual([0]);
   });
 });
