@@ -1,10 +1,11 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useCallback } from "react";
 import ModelViewer from "./components/ModelViewer";
 import Controls from "./components/Controls";
 import OutputPanel from "./components/OutputPanel";
 import * as THREE from 'three';
 import { AlertProvider } from './context/AlertContext';
 import { BaseSettings, InlaySettings, GeometrySettings } from './types/schemas';
+import type { ProjectDataV2 } from './types/schemas';
 import { defaultBaseSettings, defaultInlaySettings, defaultGeometrySettings } from './utils/schemaDefaults';
 import WelcomeModal from "./components/WelcomeModal";
 import { ModeToggle, type StudioMode } from "./components/ui/ModeToggle";
@@ -12,7 +13,7 @@ import { defaultColorFlowSettings, type ColorFlowSettings } from "./colorflow/sc
 import { ColorFlowControls } from './colorflow/ColorFlowControls';
 import type { Centroid } from './colorflow/pipeline/quantize';
 import type { ExtrudedGeometry } from './colorflow/pipeline/extrude';
-import type { ProjectAssets } from './utils/projectUtils';
+import { exportProjectBundle, type ProjectAssets } from './utils/projectUtils';
 
 const App = () => {
   const [mode, setMode] = useState<StudioMode>('pattern');
@@ -51,6 +52,15 @@ const App = () => {
     setColorFlowSettings(defaultColorFlowSettings);
     setSelectedInlayId(null);
   };
+
+  const handleProjectImported = useCallback((data: ProjectDataV2, assets: ProjectAssets) => {
+    setBaseSettings(data.base as BaseSettings);
+    setInlaySettings(data.inlay as InlaySettings);
+    setGeometrySettings(data.geometry as GeometrySettings);
+    if (data.imageMode) setColorFlowSettings(data.imageMode);
+    setMode(data.mode);
+    setProjectAssets(assets);
+  }, []);
 
   return (
     <AlertProvider>
@@ -115,6 +125,11 @@ const App = () => {
                   ...p,
                   image: a ? { name: a.name, content: a.bytes, type: 'image' } : undefined,
                 }))}
+                initialImageAsset={projectAssets.image
+                  ? { name: projectAssets.image.name, bytes: projectAssets.image.content as ArrayBuffer }
+                  : null}
+                onProjectImported={handleProjectImported}
+                onExportProject={() => exportProjectBundle(mode, baseSettings, inlaySettings, geometrySettings, colorFlowSettings, projectAssets)}
               />
             )}
           </div>

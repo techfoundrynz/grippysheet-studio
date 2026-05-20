@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { type BaseSettings } from '../types/schemas';
+import type { ProjectDataV2 } from '../types/schemas';
 import { type ColorFlowSettings } from './schema';
 import { OUTLINE_LIBRARY, getOutlineBySlug } from './outlineLibrary';
 import { parseShapeFile } from '../utils/shapeLoader';
@@ -11,6 +12,8 @@ import type { LayerPolygon } from './pipeline/polygonize';
 import type { ExtrudedGeometry } from './pipeline/extrude';
 import { build3MF } from './threeMfWriter';
 import { useAlert } from '../context/AlertContext';
+import { importProjectBundle } from '../utils/projectUtils';
+import type { ProjectAssets } from '../utils/projectUtils';
 
 interface Props {
   baseSettings: BaseSettings;
@@ -21,19 +24,44 @@ interface Props {
   onGeometryReady?: (data: { base: ExtrudedGeometry; layers: { centroid: Centroid; geom: ExtrudedGeometry }[] }) => void;
   /** Called when the user loads or clears an image, so the parent can keep raw bytes for project bundling. */
   onImageAssetChanged?: (asset: { name: string; bytes: ArrayBuffer } | null) => void;
+  /** Hydrate a saved image asset from an imported project bundle. */
+  initialImageAsset?: { name: string; bytes: ArrayBuffer } | null;
+  /** Called when the user imports a project bundle from the ColorFlow panel. */
+  onProjectImported?: (data: ProjectDataV2, assets: ProjectAssets) => void;
+  /** Called when the user clicks Export Project in the ColorFlow panel. */
+  onExportProject?: () => void;
 }
 
 const SIMPLIFY_LABELS = ['off', 'light', 'medium', 'strong', 'max'] as const;
 const DETAIL_LABELS = ['sharp', 'balanced', 'smooth'] as const;
 const MAX_IMG_DIM = 1500;
 
-export const ColorFlowControls: React.FC<Props> = ({ baseSettings, setBaseSettings, settings, setSettings, onGeometryReady, onImageAssetChanged }) => {
+export const ColorFlowControls: React.FC<Props> = ({ baseSettings, setBaseSettings, settings, setSettings, onGeometryReady, onImageAssetChanged, initialImageAsset, onProjectImported, onExportProject }) => {
   const { request, status } = useColorFlowWorker();
   const { showAlert } = useAlert();
 
   const [imageBitmap, setImageBitmap] = useState<ImageBitmap | null>(null);
   const [imageName, setImageName] = useState<string>('');
   const [imageDims, setImageDims] = useState<{ w: number; h: number } | null>(null);
+
+  // --- Hydrate saved image from imported project bundle ---
+  useEffect(() => {
+    if (!initialImageAsset) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const blob = new Blob([initialImageAsset.bytes]);
+        const bitmap = await createImageBitmap(blob);
+        if (cancelled) return;
+        setImageBitmap(bitmap);
+        setImageName(initialImageAsset.name);
+        setImageDims({ w: bitmap.width, h: bitmap.height });
+      } catch (err) {
+        showAlert({ title: 'Failed to load saved image', message: String(err), type: 'error' });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [initialImageAsset, showAlert]);
 
   const [palette, setPalette] = useState<Centroid[]>([]);
   const [assignments, setAssignments] = useState<Uint16Array | null>(null);
@@ -351,6 +379,36 @@ export const ColorFlowControls: React.FC<Props> = ({ baseSettings, setBaseSettin
             </div>
           </section>
         )}
+
+        <div className="grid grid-cols-2 gap-2 mt-6 pt-4 border-t border-gray-700">
+          <button
+            onClick={async () => {
+              const input = document.createElement('input');
+              input.type = 'file';
+              input.accept = '.zip';
+              input.onchange = async (e) => {
+                const f = (e.target as HTMLInputElement).files?.[0];
+                if (!f) return;
+                try {
+                  const { data, importedAssets } = await importProjectBundle(f);
+                  onProjectImported?.(data, importedAssets ?? {});
+                } catch (err) {
+                  showAlert({ title: 'Import failed', message: String(err), type: 'error' });
+                }
+              };
+              input.click();
+            }}
+            className="text-xs bg-gray-700 hover:bg-gray-600 rounded py-2"
+          >
+            Import Project
+          </button>
+          <button
+            onClick={() => onExportProject?.()}
+            className="text-xs bg-gray-700 hover:bg-gray-600 rounded py-2"
+          >
+            Export Project
+          </button>
+        </div>
       </div>
     </div>
   );
