@@ -13,6 +13,8 @@ import CameraRig, { ViewState } from './CameraRig';
 import FpsTracker from './FpsTracker';
 import ScreenshotManager from './ScreenshotManager';
 import { ColorFlowModel } from '../colorflow/ColorFlowModel';
+import { TwoDViewer } from '../colorflow/TwoDViewer';
+import { shapeToPolygon, transformOutlinePolygon, type OutlinePolygon } from '../colorflow/outlineToPolygon';
 import type { Centroid } from '../colorflow/pipeline/quantize';
 import type { ExtrudedGeometry } from '../colorflow/pipeline/extrude';
 import { eventBus } from '../utils/eventBus';
@@ -33,6 +35,11 @@ interface ModelViewerProps {
     base: ExtrudedGeometry;
     layers: { centroid: Centroid; position: number; geom: ExtrudedGeometry }[];
     spikes: { centroidIndex: number; geom: ExtrudedGeometry; color: string }[];
+    source?: {
+      layersInMm: import('../colorflow/workerProtocol').TracedLayerEntry[];
+      palette: Centroid[];
+      stackOrder: number[];
+    };
   } | null;
 }
 
@@ -65,6 +72,9 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
       holeMode
   } = geometrySettings;
 
+  // Default to the lightweight 2D top-down preview. Users opt into 3D when
+  // they want a rendered look — saves GPU + main-thread work otherwise.
+  const [renderMode, setRenderMode] = useState<'2d' | '3d'>('2d');
   const [viewState, setViewState] = useState<ViewState>({ type: 'ortho', timestamp: Date.now() });
   const [cameraType, setCameraType] = useState<'perspective' | 'orthographic'>('orthographic');
 
@@ -106,6 +116,14 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
 
   const activeLabels = Array.from(processingMap.values()).filter((l) => l.length > 0);
   const isAnyProcessing = isProcessing || processingMap.size > 0;
+
+  // Outline polygon (with Base rotation/mirror applied) — used by the 2D
+  // preview viewer. Recomputed only when the relevant inputs change.
+  const outlinePolygon2D = React.useMemo<OutlinePolygon | null>(() => {
+    if (!cutoutShapes || cutoutShapes.length === 0) return null;
+    const raw = shapeToPolygon(cutoutShapes[0], 64);
+    return transformOutlinePolygon(raw, baseOutlineRotation ?? 0, !!baseOutlineMirror);
+  }, [cutoutShapes, baseOutlineRotation, baseOutlineMirror]);
 
   // Pad-dimension readout. Use the loaded outline's bbox; fall back to the
   // configured square `size` when no outline is set.
@@ -181,17 +199,34 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
     <div className="w-full h-full bg-gray-900 rounded-lg overflow-hidden border border-gray-800 relative group">
       <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 flex flex-row gap-2 p-2 bg-gray-800/80 backdrop-blur rounded-lg border border-gray-700">
 
+        {/* 2D / 3D mode toggle — 2D is the lightweight default. */}
+        <div className="inline-flex rounded border border-gray-700 overflow-hidden text-xs font-medium">
+          <button
+            onClick={() => setRenderMode('2d')}
+            className={`px-2 py-1 ${renderMode === '2d' ? 'bg-blue-600 text-white' : 'bg-gray-900 text-gray-400 hover:text-white'}`}
+            title="2D top-down preview (lightweight)"
+          >2D</button>
+          <button
+            onClick={() => setRenderMode('3d')}
+            className={`px-2 py-1 ${renderMode === '3d' ? 'bg-blue-600 text-white' : 'bg-gray-900 text-gray-400 hover:text-white'}`}
+            title="Full 3D render"
+          >3D</button>
+        </div>
+
+        <div className="w-px bg-gray-700 mx-1" />
 
         <button
           onClick={() => setViewState({ type: 'ortho', timestamp: Date.now() })}
-          className={`p-2 rounded hover:bg-gray-700 transition-colors ${viewState.type === 'ortho' ? 'bg-blue-500/20 text-blue-400' : 'text-gray-400'}`}
+          disabled={renderMode === '2d'}
+          className={`p-2 rounded hover:bg-gray-700 transition-colors ${viewState.type === 'ortho' && renderMode === '3d' ? 'bg-blue-500/20 text-blue-400' : 'text-gray-400'} disabled:opacity-30 disabled:cursor-not-allowed`}
           title="Orthographic View"
         >
           <Layers size={20} />
         </button>
         <button
           onClick={() => setViewState({ type: 'iso', timestamp: Date.now() })}
-          className={`p-2 rounded hover:bg-gray-700 transition-colors ${viewState.type === 'iso' ? 'bg-blue-500/20 text-blue-400' : 'text-gray-400'}`}
+          disabled={renderMode === '2d'}
+          className={`p-2 rounded hover:bg-gray-700 transition-colors ${viewState.type === 'iso' && renderMode === '3d' ? 'bg-blue-500/20 text-blue-400' : 'text-gray-400'} disabled:opacity-30 disabled:cursor-not-allowed`}
           title="Isometric View"
         >
           <Box size={20} />
@@ -199,7 +234,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
 
 
 
-        {debugMode && (
+        {debugMode && renderMode === '3d' && (
           <>
             <div className="w-px bg-gray-700 mx-1" />
             
@@ -480,8 +515,9 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
       </div>
 
       {/* Initial-Canvas-load veil — disappears once the renderer reports
-          `onCreated`. Avoids a black flash on first paint. */}
-      {!canvasReady && (
+          `onCreated`. Avoids a black flash on first paint. Skipped in 2D mode
+          since the Three.js Canvas doesn't mount until the user opts in. */}
+      {!canvasReady && renderMode === '3d' && (
         <div className="absolute inset-0 z-30 flex items-center justify-center bg-gray-900/40 backdrop-blur-sm pointer-events-none">
           <div className="flex items-center gap-2 text-[11px] uppercase tracking-wider text-gray-300">
             <Spinner size={16} />
@@ -490,7 +526,20 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
         </div>
       )}
 
+      {renderMode === '2d' && (
+        <TwoDViewer
+          outlinePolygon={outlinePolygon2D}
+          layersInMm={colorFlowGeom?.source?.layersInMm ?? []}
+          palette={colorFlowGeom?.source?.palette ?? []}
+          stackOrder={colorFlowGeom?.source?.stackOrder ?? []}
+          geometrySettings={geometrySettings}
+          baseColor={color}
+          spikeColorMatch={true}
+        />
+      )}
+
       <ErrorBoundary>
+      <div className={renderMode === '3d' ? 'absolute inset-0' : 'hidden'}>
       <Canvas shadows onCreated={() => setCanvasReady(true)}>
         <OrthographicCamera makeDefault={cameraType === 'orthographic'} position={[0, -1, 1000]} near={-2000} far={2000} up={[0, 0, 1]} />
         <PerspectiveCamera makeDefault={cameraType === 'perspective'} position={[500, -500, 500]} near={0.1} far={5000} up={[0, 0, 1]} fov={45} />
@@ -662,6 +711,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
         {/* Rotate GridHelper 90deg X to lie on XY plane */}
         <gridHelper args={[2000, 20]} position={[0, 0, 0]} rotation={[Math.PI / 2, 0, 0]} />
       </Canvas>
+      </div>
       </ErrorBoundary>
       <ScreenshotModal 
          isOpen={showScreenshotModal} 

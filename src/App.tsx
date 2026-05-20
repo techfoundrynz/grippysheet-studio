@@ -166,13 +166,15 @@ const App = () => {
     }, 16);
   }, [colorFlowGeom?.source, canGenerateSpikes, geometrySettings, colorFlowSettings.spikeMaxMm, colorFlowSettings.spikeColorMatch, currentSpikeInputsKey]);
 
-  // Compose colorFlowGeom + spikes for downstream consumers.
+  // Compose colorFlowGeom + spikes for downstream consumers. `source` is kept
+  // around for the 2D viewer's live polygon/tile rendering.
   const colorFlowGeomWithSpikes = useMemo(() => {
     if (!colorFlowGeom) return null;
     return {
       base: colorFlowGeom.base,
       layers: colorFlowGeom.layers,
       spikes: spikeGroups,
+      source: colorFlowGeom.source,
     };
   }, [colorFlowGeom, spikeGroups]);
 
