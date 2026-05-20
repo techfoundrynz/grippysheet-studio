@@ -12,6 +12,7 @@ import { defaultColorFlowSettings, type ColorFlowSettings } from "./colorflow/sc
 import { ColorFlowControls } from './colorflow/ColorFlowControls';
 import type { Centroid } from './colorflow/pipeline/quantize';
 import type { ExtrudedGeometry } from './colorflow/pipeline/extrude';
+import type { ProjectAssets } from './utils/projectUtils';
 
 const App = () => {
   const [mode, setMode] = useState<StudioMode>('pattern');
@@ -21,6 +22,7 @@ const App = () => {
   const [inlaySettings, setInlaySettings] = useState<InlaySettings>(defaultInlaySettings);
   const [colorFlowSettings, setColorFlowSettings] = useState<ColorFlowSettings>(defaultColorFlowSettings);
   const [colorFlowGeom, setColorFlowGeom] = useState<{ base: ExtrudedGeometry; layers: { centroid: Centroid; geom: ExtrudedGeometry }[] } | null>(null);
+  const [projectAssets, setProjectAssets] = useState<ProjectAssets>({ inlays: {} });
 
   const [selectedInlayId, setSelectedInlayId] = useState<string | null>(null);
   const [previewInlay, setPreviewInlay] = useState<any>(null);
@@ -109,6 +111,10 @@ const App = () => {
                 settings={colorFlowSettings}
                 setSettings={setColorFlowSettings}
                 onGeometryReady={setColorFlowGeom}
+                onImageAssetChanged={(a) => setProjectAssets((p) => ({
+                  ...p,
+                  image: a ? { name: a.name, content: a.bytes, type: 'image' } : undefined,
+                }))}
               />
             )}
           </div>

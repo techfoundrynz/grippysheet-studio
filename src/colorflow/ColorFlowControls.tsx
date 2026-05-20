@@ -19,13 +19,15 @@ interface Props {
   setSettings: React.Dispatch<React.SetStateAction<ColorFlowSettings>>;
   /** Called when extrusion completes so the 3D viewer can render the result. */
   onGeometryReady?: (data: { base: ExtrudedGeometry; layers: { centroid: Centroid; geom: ExtrudedGeometry }[] }) => void;
+  /** Called when the user loads or clears an image, so the parent can keep raw bytes for project bundling. */
+  onImageAssetChanged?: (asset: { name: string; bytes: ArrayBuffer } | null) => void;
 }
 
 const SIMPLIFY_LABELS = ['off', 'light', 'medium', 'strong', 'max'] as const;
 const DETAIL_LABELS = ['sharp', 'balanced', 'smooth'] as const;
 const MAX_IMG_DIM = 1500;
 
-export const ColorFlowControls: React.FC<Props> = ({ baseSettings, setBaseSettings, settings, setSettings, onGeometryReady }) => {
+export const ColorFlowControls: React.FC<Props> = ({ baseSettings, setBaseSettings, settings, setSettings, onGeometryReady, onImageAssetChanged }) => {
   const { request, status } = useColorFlowWorker();
   const { showAlert } = useAlert();
 
@@ -70,6 +72,9 @@ export const ColorFlowControls: React.FC<Props> = ({ baseSettings, setBaseSettin
       return;
     }
     setImageName(file.name);
+    // Capture raw bytes for project bundling before creating the bitmap.
+    const bytes = await file.arrayBuffer();
+    onImageAssetChanged?.({ name: file.name, bytes });
     const bitmap = await createImageBitmap(file);
     let { width, height } = bitmap;
     if (Math.max(width, height) > MAX_IMG_DIM) {
@@ -83,7 +88,7 @@ export const ColorFlowControls: React.FC<Props> = ({ baseSettings, setBaseSettin
       setImageBitmap(bitmap);
     }
     setImageDims({ w: width, h: height });
-  }, [showAlert]);
+  }, [showAlert, onImageAssetChanged]);
 
   // --- Quantize whenever inputs change ---
   useEffect(() => {

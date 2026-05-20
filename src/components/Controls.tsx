@@ -148,13 +148,13 @@ const Controls: React.FC<ControlsProps> = ({
               confirmText: "Export Anyway",
               cancelText: "Cancel",
               onConfirm: () => {
-                  exportProjectBundle(baseSettings, inlaySettings, geometrySettings, projectAssets);
+                  exportProjectBundle('pattern', baseSettings, inlaySettings, geometrySettings, undefined, projectAssets);
               }
           });
           return;
       }
 
-      exportProjectBundle(baseSettings, inlaySettings, geometrySettings, projectAssets);
+      exportProjectBundle('pattern', baseSettings, inlaySettings, geometrySettings, undefined, projectAssets);
   };
 
   const handleImportClick = () => {

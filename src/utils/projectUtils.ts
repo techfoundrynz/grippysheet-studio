@@ -1,58 +1,45 @@
 
 import {
-    ProjectSchema,
-    ProjectSchemaV1,
-    ProjectData,
-    BaseSettings,
-    InlaySettings,
-    GeometrySettings
+    ProjectSchema, ProjectSchemaV1, ProjectDataV2,
+    BaseSettings, InlaySettings, GeometrySettings,
+    migrateV1ToV2,
 } from '../types/schemas';
+import { ColorFlowSettings } from '../colorflow/schema';
 import JSZip from 'jszip';
 import { detectAssetType } from './fileTypeSniffer';
 
 export interface Asset {
     name: string;
     content: string | ArrayBuffer;
-    type: 'dxf' | 'svg' | 'stl';
+    type: 'dxf' | 'svg' | 'stl' | 'image';
 }
 
 export interface ProjectAssets {
     baseOutline?: Asset;
     pattern?: Asset;
     inlays?: Record<string, Asset>;
+    image?: Asset;  // ColorFlow image bytes
 }
 
 // --- Export Logic ---
 
-// --- Export Logic ---
-
 export const exportProjectBundle = async (
+    mode: 'pattern' | 'colorflow',
     base: BaseSettings,
     inlay: InlaySettings,
     geometry: GeometrySettings,
+    imageMode: ColorFlowSettings | undefined,
     assets: ProjectAssets
 ) => {
-    // Construct the project object
-    // Note: We don't save the runtime shapes (Three.js objects) directly in JSON.
-    // We explicitly strip them or ensure they are null to avoid circular structure errors if not handled.
-    // In settings-only mode, we are fine losing the geometry.
-
-    const projectData: ProjectData = {
-        version: 1,
+    const projectData = {
+        version: 2 as const,
         timestamp: Date.now(),
-
-        base: {
-            ...base,
-            cutoutShapes: null
-        },
-        inlay: {
-            ...inlay
-        },
-        geometry: {
-            ...geometry,
-            patternShapes: null
-        }
-    };
+        mode,
+        base: { ...base, cutoutShapes: null },
+        inlay: { ...inlay },
+        geometry: { ...geometry, patternShapes: null },
+        imageMode,
+    } satisfies ProjectDataV2;
 
     const zip = new JSZip();
     zip.file("project.json", JSON.stringify(projectData, null, 2));
@@ -70,6 +57,10 @@ export const exportProjectBundle = async (
         Object.entries(assets.inlays).forEach(([id, asset]) => {
             zip.file(`assets/inlays/${id}/${asset.name}`, asset.content);
         });
+    }
+
+    if (assets.image) {
+        zip.file(`assets/image/${assets.image.name}`, assets.image.content);
     }
 
     // Generate Zip
@@ -92,11 +83,7 @@ export const exportProjectBundle = async (
 // --- Import Logic ---
 
 export interface ImportResult {
-    data: {
-        base: BaseSettings;
-        inlay: InlaySettings;
-        geometry: GeometrySettings;
-    };
+    data: ProjectDataV2;
     versionMismatch?: boolean;
     importedVersion?: number;
     importedAssets?: ProjectAssets;
@@ -167,17 +154,25 @@ export const importProjectBundle = async (file: File): Promise<ImportResult> => 
             }
         }
 
+        // Image (ColorFlow)
+        const imageFolder = zip.folder('assets/image');
+        if (imageFolder) {
+            const files = imageFolder.file(/.*/);
+            if (files.length > 0) {
+                const imageAsset = await processEntry(files[0], 'image');
+                imageAsset.type = 'image';
+                assets.image = imageAsset;
+            }
+        }
+
     } else {
         throw new Error("Invalid file type. Only .zip bundles are supported.");
     }
 
-
-    // Basic Validation
-    // We try to parse against Current Schema.
-
-    let versionMismatch = false;
-    if (rawData.version !== ProjectSchemaV1.shape.version.value) {
-        versionMismatch = true;
+    // Route v1 bundles through the migrator; validate v2 against ProjectSchema.
+    if (rawData.version === ProjectSchemaV1.shape.version.value) {
+        const migrated = migrateV1ToV2(rawData);
+        return { data: migrated, versionMismatch: false, importedVersion: 1, importedAssets: assets };
     }
 
     const result = ProjectSchema.safeParse(rawData);
@@ -187,12 +182,10 @@ export const importProjectBundle = async (file: File): Promise<ImportResult> => 
         throw new Error("Invalid project file format or version mismatch.");
     }
 
-    const { base, inlay, geometry } = result.data;
-
-    // Return pure settings. Shapes will be null/undefined as per schema.
+    // Return full ProjectDataV2.
     return {
-        data: { base, inlay, geometry },
-        versionMismatch,
+        data: result.data,
+        versionMismatch: false,
         importedVersion: rawData.version,
         importedAssets: assets
     };
