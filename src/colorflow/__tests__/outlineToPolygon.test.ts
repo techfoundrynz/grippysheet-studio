@@ -6,6 +6,8 @@ import {
   pixelToMm,
   CANVAS_PX_PER_MM,
   outlineCanvasSize,
+  pixelToMmOnOutlineCanvas,
+  buildOutlineCanvasMask,
   type Bounds,
 } from '../outlineToPolygon';
 
@@ -97,5 +99,32 @@ describe('outlineCanvasSize', () => {
     // 500mm × 5 px/mm = 2500px — should clamp to 1500
     const size = outlineCanvasSize({ minX: 0, minY: 0, maxX: 500, maxY: 100 });
     expect(Math.max(size.w, size.h)).toBeLessThanOrEqual(1500);
+  });
+});
+
+describe('pixelToMmOnOutlineCanvas', () => {
+  it('maps (0,0) → (minX, maxY) and (w, h) → (maxX, minY) (Y is flipped)', () => {
+    const bounds = { minX: 10, minY: 20, maxX: 30, maxY: 40 };
+    const size = outlineCanvasSize(bounds);
+    const tl = pixelToMmOnOutlineCanvas(0, 0, bounds, size);
+    const br = pixelToMmOnOutlineCanvas(size.w, size.h, bounds, size);
+    expect(tl[0]).toBeCloseTo(10);
+    expect(tl[1]).toBeCloseTo(40);
+    expect(br[0]).toBeCloseTo(30);
+    expect(br[1]).toBeCloseTo(20);
+  });
+});
+
+describe('buildOutlineCanvasMask', () => {
+  it('returns an all-zero mask sized w*h for an empty outer ring', () => {
+    const polygon = {
+      outer: [] as Array<[number, number]>,
+      holes: [],
+      minX: 0, minY: 0, maxX: 10, maxY: 10,
+    };
+    const size = outlineCanvasSize(polygon);
+    const mask = buildOutlineCanvasMask(polygon, size);
+    expect(mask.length).toBe(size.w * size.h);
+    expect(mask.every((b) => b === 0)).toBe(true);
   });
 });
