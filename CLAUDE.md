@@ -13,27 +13,31 @@ The repo root (`/home/ubuntu/grippy`) contains a single project directory `gripp
 Package manager is **pnpm** (declared via `packageManager` in `package.json`).
 
 ```bash
-pnpm install        # install deps
-pnpm dev            # vite dev server
-pnpm build          # production build → dist/
-pnpm lint           # eslint .
-pnpm preview        # serve dist/ locally
-pnpm deploy:gh      # gh-pages -d dist  (publish current dist to gh-pages branch)
+pnpm install         # install deps
+pnpm dev             # vite dev server
+pnpm build           # production build → dist/  (also surfaces TS errors via tsc --noEmit)
+pnpm lint            # eslint .
+pnpm preview         # serve dist/ locally
+pnpm deploy:gh       # gh-pages -d dist  (publish current dist to gh-pages branch)
+
+pnpm test            # vitest watch
+pnpm test:run        # vitest run (one-shot, used in verification)
 ```
 
-There is **no test runner configured**. Don't claim "tests pass" — there's nothing to run. TypeScript checking happens through `tsc --noEmit` (configured but not bound to a script); `pnpm build` will surface type errors.
+**Tests cover the ColorFlow pipeline only** — pure modules under `src/colorflow/` (schema, outline math, polygonize, modeFilter, quantize, extrude, threeMfWriter, vendored libs, spike helpers). There are no React tests; UI changes are verified by running the dev server. Don't claim "all tests pass" as proof that a UI change works.
 
 ## Architecture
 
 ### State flows top-down from `App.tsx`
 
-Three independent settings objects live in `App.tsx` state and propagate via props (no global store):
+Four settings objects live in `App.tsx` state and propagate via props (no global store):
 
-- `BaseSettings` — grip outline shape, size, thickness, color, mirror/rotation
-- `InlaySettings` — array of `InlayItem`s (logos/badges) with per-item transform, mode (`single`/`tile`), modifier (`none`/`cut`/`mask`/`avoid`), and positioning
-- `GeometrySettings` — the tiled pattern (e.g. dots, hex bumps) applied across the grip surface, plus tiling distribution and clipping options
+- `BaseSettings` — grip outline shape, size, thickness, color, mirror/rotation, and `outlineSlug` (library preset id; null for custom uploads). The Base tab is the **single source of truth** for the outline regardless of which creation path the user picks.
+- `InlaySettings` — array of `InlayItem`s (logos/badges) with per-item transform, mode (`single`/`tile`), modifier (`none`/`cut`/`mask`/`avoid`), and positioning. Pattern-mode only.
+- `GeometrySettings` — the tiled pattern (e.g. dots, hex bumps) applied across the grip surface, plus tiling distribution and clipping options. Used by both modes — pattern mode tiles the bumps directly, ColorFlow mode reuses the same tiles as spike overlays.
+- `ColorFlowSettings` — image quantize/trace/extrude controls (colorCount, simplify, detail, smooth, sort), image transform (offsetMm, scale), per-color uniform layer height (`colorLayerMm`), optional `layerOrder` manual override, plus spike controls (`spikeMaxMm`, `spikeColorMatch`).
 
-All three are defined as **Zod schemas** in `src/types/schemas.ts`. Defaults are derived by `getDefaults(schema)` (which calls `schema.parse({})`) in `src/utils/schemaDefaults.ts` — don't hardcode defaults elsewhere; extend the schema instead.
+All four are defined as **Zod schemas** in `src/types/schemas.ts` (ColorFlow schema in `src/colorflow/schema.ts`). Defaults are derived by `getDefaults(schema)` (which calls `schema.parse({})`) in `src/utils/schemaDefaults.ts` — don't hardcode defaults elsewhere; extend the schema instead.
 
 Settings split into two roles:
 1. **Pure settings** (numbers/strings/enums): serialized to JSON on export.
@@ -41,11 +45,19 @@ Settings split into two roles:
 
 ### The right panel (`Controls.tsx`)
 
-Tabbed (Base / Inlay / Geometry) with `react-freeze` pausing inactive tabs. Each tab is a sub-component under `src/components/controls/`. The footer hosts Reset, Import/Export Project (bundle), and the `OutputPanel` (STL/3MF export buttons).
+Tabbed (Base / Inlay / ColorFlow / Geometry) with `react-freeze` pausing inactive tabs. The Inlay tab disables itself while ColorFlow is active (mutual exclusion). Each pattern-mode tab is a sub-component under `src/components/controls/`; the ColorFlow tab is itself split into seven focused sub-components under `src/colorflow/controls/` (`BaseStatusBanner`, `ImageSection`, `ColorSliders`, `PrintControls`, `SpikeControls`, `LayerControls`, `StatusFooter`) — `ColorFlowControls.tsx` is the orchestrator that owns state, effects, and worker calls. The footer hosts Reset, Import/Export Project (bundle), and the `OutputPanel` (STL/3MF export buttons).
 
-### The left panel (`ModelViewer.tsx` → `ImperativeModel.tsx`)
+### Mode detection
 
-`ModelViewer` owns the `@react-three/fiber` `Canvas`, the camera rig (ortho ↔ perspective via `CameraRig.tsx`), `OrbitControls`, FPS overlay, screenshot capture, and the debug UI (outlines, wireframes, opacity, "cutter" debug meshes — gated by `geometrySettings.debugMode`, toggled with `Ctrl+Shift+D`).
+`App.tsx` derives `viewerMode: 'pattern' | 'colorflow'` from `colorFlowGeom !== null`. The ColorFlow extrude effect calls `onGeometryReady`, which sets `colorFlowGeom`; once it's non-null, the 3D viewer routes to `ColorFlowModel` and the export goes through the ColorFlow 3MF writer. Going back to pattern mode requires `Reset All Settings`.
+
+### The left panel (`ModelViewer.tsx` → `ImperativeModel.tsx` / `ColorFlowModel.tsx` / `TwoDViewer.tsx`)
+
+`ModelViewer` owns the `@react-three/fiber` `Canvas`, the camera rig (ortho ↔ perspective via `CameraRig.tsx`), `OrbitControls`, FPS overlay, screenshot capture, the bottom-left pad-dimension readout, the global processing-spinner overlay, and the debug UI (outlines, wireframes, opacity, "cutter" debug meshes — gated by `geometrySettings.debugMode`, toggled with `Ctrl+Shift+D`).
+
+`ModelViewer` also owns a **`renderMode: '2d' | '3d'`** toggle in the top toolbar; **2D is the default** for performance on modest devices. When in 2D, the Three.js Canvas is hidden inside a `display:none` wrapper (kept mounted so 3D state survives mode swaps) and `TwoDViewer` paints a top-down summary (outline silhouette, color regions or inlays, pattern-tile footprints, dimension lines, layer-order legend). Many of the 3D-only toolbar buttons (ortho/iso, opacity, display mode, debug) are disabled while in 2D.
+
+The Canvas wraps in `<ErrorBoundary>` so a crash in geometry construction (CSG, earcut, ImperativeModel) doesn't take the whole studio down.
 
 `ImperativeModel.tsx` (~1500 lines) is the **3D model factory**. It's intentionally imperative — instead of rendering JSX children, each `useEffect` reacts to a slice of props and mutates the shared `THREE.Group` (`meshRef`) directly. Building the model involves:
 
@@ -58,13 +70,9 @@ CSG uses **three-bvh-csg** (`SUBTRACTION`, `INTERSECTION`). 2D polygon offsettin
 
 ### Export pipeline (`OutputPanel.tsx`)
 
-Reads `meshRef.current` and walks it via `prepareForExport`, which:
+**Pattern-mode path**: reads `meshRef.current` and walks it via `prepareForExport`, which expands `InstancedMesh` → `Group` of individual `Mesh`es (STL/3MF can't represent instancing), filters meshes whose name starts with `Debug_`, and shallow-clones `Base` and `Pattern` (drops their CSG children). 3MF goes through `three-3mf-exporter`; STL via `STLExporter` from `three-stdlib`.
 
-- Expands `InstancedMesh` → `Group` of individual `Mesh`es (STL/3MF can't represent instancing).
-- Filters meshes whose name starts with `Debug_`.
-- Shallow-clones `Base` and `Pattern` (drops their CSG children).
-
-3MF export goes through `three-3mf-exporter`; STL via `STLExporter` from `three-stdlib`.
+**ColorFlow path**: when `colorFlowGeom` is non-null, the 3MF export uses the explicit assembly in `src/colorflow/threeMfWriter.ts`. Parts emitted: `base` + one per color **level** + one per spike group. The naming convention is `color_<pos+1>_<hex>` / `spikes_c<centroidIndex>` so the Bambu slicer's "Load filaments from project" picks them up in stack order.
 
 ### Asset I/O
 
@@ -79,7 +87,21 @@ Reads `meshRef.current` and walks it via `prepareForExport`, which:
 
 `src/components/interaction/InlayInteractionHandles.tsx` lets the user drag/scale/rotate inlays directly inside the 3D scene. While dragging it disables `OrbitControls` (via `orbitRef.current.enabled`) and broadcasts a `previewInlay` to `ImperativeModel` so the inlay can be shown without committing to state every frame.
 
-`src/utils/eventBus.ts` is a tiny pub/sub used to decouple a handful of cross-component events (e.g. processing-state nudges) from prop drilling.
+`src/utils/eventBus.ts` is a tiny pub/sub used to decouple cross-component events from prop drilling.
+
+### Processing overlay protocol
+
+Any source of non-trivial async/sync work broadcasts via:
+
+```ts
+emitProcessing({ key: 'colorflow:worker', busy: true, label: 'tracing' });
+// ...later
+emitProcessing({ key: 'colorflow:worker', busy: false });
+```
+
+`ModelViewer` subscribes once and maintains a `Map<key, label>`; the top-right spinner pill shows whenever the map is non-empty, concatenating labels. Current sources: ColorFlow worker phases (`quantize`/`trace`/`extrude`/`simplifying`), Base outline fetch, Geometry pattern fetch, 3MF export, manual spike generation. Use a stable `key` per source so concurrent emits don't clobber each other.
+
+`useDebouncedCommit` in `src/utils/useDebouncedCommit.ts` is the local-draft + 250ms debounced-commit pattern used by ColorFlow sliders so dragging doesn't fire the pipeline on every tick.
 
 ## Conventions and gotchas
 
@@ -90,19 +112,21 @@ Reads `meshRef.current` and walks it via `prepareForExport`, which:
 - **Imported projects may lose live shapes.** If a user exports without the original asset in memory, `projectUtils` warns about "Missing Asset Files"; on import, the settings load but `*Shapes` remain null until they re-upload. Don't add code paths that assume shapes are always present alongside their settings.
 - **Build timestamp** is injected via Vite `define` as `__BUILD_TIMESTAMP__`; it's referenced in `Controls.tsx` (`import.meta.env.DEV ? 'DEV' : __BUILD_TIMESTAMP__`). Declared in `src/vite-env.d.ts`.
 - **Deployment**: `pnpm deploy:gh` publishes whatever is in `dist/`. Custom domain is set via `public/CNAME` (also: `homepage` in `package.json` for the gh-pages base URL). If you change the domain, update both.
-- **Strict TS settings**: `noUnusedLocals` and `noUnusedParameters` are on. Prefix intentionally-unused params with `_` rather than disabling.
+- **Strict TS settings**: `noUnusedLocals` and `noUnusedParameters` are on. Prefix intentionally-unused params with `_` rather than disabling. `tsc --noEmit -p tsconfig.app.json` is the way to surface errors in `src/`; the root `tsconfig.json` has `files: []` and won't check anything.
+- **Context value stability**: contexts (e.g. `AlertContext`) MUST `useCallback` their handlers and `useMemo` the value object — a fresh function/object on every provider render cascades into effect-dep churn in consumers and has caused infinite render loops in the past.
+- **`colorFlowGeom?.source` is keyed by content for change detection**, not by reference. App-level `useEffect`s that respond to "source changed" should depend on a stringified shape (palette length + stackOrder + baseMm + colorLayerMm), not on `colorFlowGeom.source` directly — the extrude pipeline produces a fresh source object every run with the same content.
 
 ### ColorFlow mode (`src/colorflow/`)
 
-A peer mode to the existing pattern/inlay workflow. Selected via the top-right segmented control in `App.tsx` (`mode: 'pattern' | 'colorflow'`).
+A peer creation path to pattern/inlay. The user picks a base outline in the Base tab, drops an image in the ColorFlow tab, the worker quantizes + traces + extrudes the colored regions, and the 3D viewer renders the result. Optionally a Geometry-tab pattern adds spike bumps on top.
 
-- **Pipeline lives in a Web Worker** (`colorflow/worker.ts`). Main thread sends `quantize` / `trace` / `extrude` requests via the `useColorFlowWorker` hook; worker returns transferable typed-array geometries.
-- **The 3D viewer is reused**. `ModelViewer` gets a `mode` prop and routes to `ColorFlowModel.tsx` (a small imperative builder) when in ColorFlow.
-- **Output is a multi-part 3MF assembly** (`base` + N `color_*` sub-parts at stacked Z heights) packed via the existing JSZip dep — see `threeMfWriter.ts`. The pattern-mode 3MF export remains via `three-3mf-exporter`.
+- **Pipeline lives in a Web Worker** (`colorflow/worker.ts`). Main thread sends `quantize` / `trace` / `extrude` requests via the `useColorFlowWorker` hook; worker returns transferable typed-array geometries. The hook also drives the worker-phase pill via `emitProcessing` (see "Processing overlay" below).
+- **Outline-anchored working canvas**: dimensions are `outline.widthMm × CANVAS_PX_PER_MM` (default 5 px/mm, capped at `MAX_CANVAS_DIM`). The source image is rendered into that canvas at fit-then-user-scale-then-user-offset. See `imageTransform.ts` for the pure math and `ImageTransformPreview.tsx` for the drag/wheel UI. The outline polygon is **rotated/mirrored according to the Base tab's `baseOutlineRotation` / `baseOutlineMirror`** before sizing the canvas — pattern-mode and ColorFlow-mode renders stay in sync.
+- **The 3D viewer is reused**. `ModelViewer` routes to `ColorFlowModel.tsx` when `colorFlowGeom` is non-null. The model is built per-section: base mesh, color-level meshes, and spike meshes each track their own refs and only dispose/recreate when their specific inputs change. Materials use `flatShading: true` on `MeshStandardMaterial` to avoid per-triangle smooth-shading noise on flat tops.
+- **Stack model is per-LEVEL, not per-color** (since `6a9fece`). For each level `k` ∈ `[0, palette.length)`, the worker emits ONE merged mesh containing the union of polygons whose centroid sits at `stackPos >= k`, occupying `z = [baseMm + k×layer, baseMm + (k+1)×layer]`. Top-down view is unchanged but the printed assembly is a true stair-step: each slab uses one filament with no mid-layer swaps. The emitted level still tags by its color (`stackOrder[k]`) so naming + the 3D viewer stay color-keyed.
+- **Stack order**: `resolvedStackOrder(palette, coverage, settings)` in `stackOrder.ts`. `settings.layerOrder` is the manual override array; null means sort by `settings.sort` (`luma` ascending or `coverage` descending).
+- **Mesh + 3MF naming uses stack position**: `Color_<pos+1>_<hex>` for in-scene meshes, `color_<pos+1>_<hex>` for 3MF parts. The worker emits `layerGeoms` pre-sorted by position so downstream code doesn't re-sort.
+- **Spike overlay**: when a Geometry-tab pattern is configured, `generateSpikes` (in `spikes.ts`) tiles the pattern across the pad and assigns each tile to the topmost color region beneath it (`assignTilesToColors`). STL patterns are scaled in Z so all spike tops land at the user's `spikeMaxMm` cap; Shape patterns prism-extrude. **Spike regen is gated by a manual "Generate preview" button** in `SpikeControls` — the heavy computation only runs on click, not on every input change. App-level state tracks `generatedSpikeInputsKey` (a stringified hash of every input) to display Up-to-date / Regenerate states. Cleared when the underlying source content (palette size, stack order, baseMm, colorLayerMm) changes — so stale spikes referencing old color polygons never render.
 - **Outlines** come from `colorflow/outlineLibrary.ts` (a 16-entry manifest referencing the existing DXFs in `public/outlines/`). The same dropdown is also surfaced in pattern-mode `BaseControls`.
 - **Vendored libs** in `colorflow/vendor/` (ImageTracer + earcut, public-domain). Don't add them as npm deps — the upstream versions are unmaintained.
-- **Vitest** covers the pure pipeline utils only. No React testing. `pnpm test` / `pnpm test:run`.
-- **An `<ErrorBoundary>` wraps the Canvas in both modes** — a crash in geometry construction no longer kills the studio.
-- **Working canvas is outline-anchored**: dimensions are `outline.widthMm × CANVAS_PX_PER_MM` (default 5 px/mm, capped at `MAX_CANVAS_DIM`). The source image is rendered into that canvas at fit-then-user-scale-then-user-offset. See `imageTransform.ts` for the pure math and `ImageTransformPreview.tsx` for the drag/wheel UI.
-- **Stack model**: every color extrudes from `baseMm` to `baseMm + (stackPos + 1) × colorLayerMm`. Stack position comes from `resolvedStackOrder(palette, coverage, settings)` in `stackOrder.ts`. `settings.layerOrder` is the manual override; null means sort by `settings.sort` (`luma` ascending or `coverage` descending).
-- **Mesh + 3MF naming uses stack position**, not array index — meshes are `Color_<pos+1>_<hex>` and 3MF parts are `color_<pos+1>_<hex>`. The worker emits `layerGeoms` pre-sorted by position so downstream code doesn't re-sort.
+- **3MF assembly export** lives in `threeMfWriter.ts` (JSZip-based, hand-rolled XML) rather than `three-3mf-exporter`, because we need exact part-name control for Bambu's filament auto-assignment.
