@@ -18,7 +18,10 @@ const App = () => {
   const [geometrySettings, setGeometrySettings] = useState<GeometrySettings>(defaultGeometrySettings);
   const [inlaySettings, setInlaySettings] = useState<InlaySettings>(defaultInlaySettings);
   const [colorFlowSettings, setColorFlowSettings] = useState<ColorFlowSettings>(defaultColorFlowSettings);
-  const [colorFlowGeom, setColorFlowGeom] = useState<{ base: ExtrudedGeometry; layers: { centroid: Centroid; geom: ExtrudedGeometry }[] } | null>(null);
+  const [colorFlowGeom, setColorFlowGeom] = useState<{
+    base: ExtrudedGeometry;
+    layers: { centroid: Centroid; position: number; geom: ExtrudedGeometry }[];
+  } | null>(null);
   const [projectAssets, setProjectAssets] = useState<ProjectAssets>({ inlays: {} });
 
   const [selectedInlayId, setSelectedInlayId] = useState<string | null>(null);
@@ -69,7 +72,10 @@ const App = () => {
     }));
   }, []);
 
-  const handleColorFlowGeomReady = useCallback((data: { base: ExtrudedGeometry; layers: { centroid: Centroid; geom: ExtrudedGeometry }[] }) => {
+  const handleColorFlowGeomReady = useCallback((data: {
+    base: ExtrudedGeometry;
+    layers: { centroid: Centroid; position: number; geom: ExtrudedGeometry }[];
+  }) => {
     setColorFlowGeom(data);
   }, []);
 

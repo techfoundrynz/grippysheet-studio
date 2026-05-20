@@ -40,7 +40,10 @@ interface ControlsProps {
   colorFlowSettings: ColorFlowSettings;
   setColorFlowSettings: React.Dispatch<React.SetStateAction<ColorFlowSettings>>;
   colorFlowActive: boolean;
-  onColorFlowGeomReady?: (data: { base: ExtrudedGeometry; layers: { centroid: Centroid; geom: ExtrudedGeometry }[] }) => void;
+  onColorFlowGeomReady?: (data: {
+    base: ExtrudedGeometry;
+    layers: { centroid: Centroid; position: number; geom: ExtrudedGeometry }[];
+  }) => void;
   onColorFlowImageAssetChanged?: (a: { name: string; bytes: ArrayBuffer } | null) => void;
   initialColorFlowImageAsset?: { name: string; bytes: ArrayBuffer } | null;
   onProjectImported?: (data: ProjectDataV2, assets: ProjectAssets) => void;

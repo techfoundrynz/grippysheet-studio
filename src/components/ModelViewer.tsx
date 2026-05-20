@@ -29,7 +29,10 @@ interface ModelViewerProps {
   previewInlay?: any;
   setPreviewInlay?: (item: any) => void;
   activeTab?: string;
-  colorFlowGeom?: { base: ExtrudedGeometry; layers: { centroid: Centroid; geom: ExtrudedGeometry }[] } | null;
+  colorFlowGeom?: {
+    base: ExtrudedGeometry;
+    layers: { centroid: Centroid; position: number; geom: ExtrudedGeometry }[];
+  } | null;
 }
 
 const ModelViewer: React.FC<ModelViewerProps> = ({

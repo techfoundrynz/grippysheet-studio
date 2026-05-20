@@ -13,7 +13,10 @@ interface OutputPanelProps {
   debugMode?: boolean;
   className?: string;
   /** When non-null, the 3MF export uses threeMfWriter with multi-part assembly. */
-  colorFlowGeom?: { base: ExtrudedGeometry; layers: { centroid: Centroid; geom: ExtrudedGeometry }[] } | null;
+  colorFlowGeom?: {
+    base: ExtrudedGeometry;
+    layers: { centroid: Centroid; position: number; geom: ExtrudedGeometry }[];
+  } | null;
   /** Optional filename prefix for the 3MF download. */
   colorFlowImageName?: string;
   /** Optional outline slug (used for filename suffix). */
@@ -161,10 +164,10 @@ const OutputPanel: React.FC<OutputPanelProps> = ({ meshRef, debugMode = false, c
       if (colorFlowGeom) {
         // ColorFlow path — multi-part assembly via threeMfWriter
         const parts: MeshPart[] = [{ name: 'base', mesh: colorFlowGeom.base }];
-        colorFlowGeom.layers.forEach((entry, i) => {
+        colorFlowGeom.layers.forEach((entry) => {
           const c = entry.centroid;
           const hex = `${c.r.toString(16).padStart(2,'0')}${c.g.toString(16).padStart(2,'0')}${c.b.toString(16).padStart(2,'0')}`;
-          parts.push({ name: `color_${i + 1}_${hex}`, mesh: entry.geom });
+          parts.push({ name: `color_${entry.position + 1}_${hex}`, mesh: entry.geom });
         });
         const blob = await build3MF(parts, 'footpad_assembly');
         const stem = (colorFlowImageName || 'design').replace(/\.[^.]+$/, '');

@@ -5,7 +5,7 @@ import type { ExtrudedGeometry } from './pipeline/extrude';
 
 interface Props {
   baseGeom: ExtrudedGeometry | null;
-  layers: Array<{ centroid: Centroid; geom: ExtrudedGeometry }>;
+  layers: Array<{ centroid: Centroid; position: number; geom: ExtrudedGeometry }>;
   displayMode?: 'normal' | 'toon';
 }
 
@@ -46,13 +46,13 @@ export const ColorFlowModel = React.forwardRef<THREE.Group, Props>(({ baseGeom, 
       group.add(mesh);
     }
     for (let i = 0; i < layers.length; i++) {
-      const { centroid: c, geom } = layers[i];
+      const { centroid: c, position, geom } = layers[i];
       const hex = `${c.r.toString(16).padStart(2,'0')}${c.g.toString(16).padStart(2,'0')}${c.b.toString(16).padStart(2,'0')}`;
       const mat = displayMode === 'toon'
         ? new THREE.MeshToonMaterial({ color: new THREE.Color(c.r / 255, c.g / 255, c.b / 255) })
         : new THREE.MeshStandardMaterial({ color: new THREE.Color(c.r / 255, c.g / 255, c.b / 255) });
       const mesh = new THREE.Mesh(makeBufferGeom(geom), mat);
-      mesh.name = `Color_${i + 1}_${hex}`;
+      mesh.name = `Color_${position + 1}_${hex}`;
       group.add(mesh);
     }
 

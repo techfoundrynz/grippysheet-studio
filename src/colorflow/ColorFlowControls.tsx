@@ -17,7 +17,10 @@ interface Props {
   settings: ColorFlowSettings;
   setSettings: React.Dispatch<React.SetStateAction<ColorFlowSettings>>;
   /** Called when extrusion completes so the 3D viewer can render the result. */
-  onGeometryReady?: (data: { base: ExtrudedGeometry; layers: { centroid: Centroid; geom: ExtrudedGeometry }[] }) => void;
+  onGeometryReady?: (data: {
+    base: ExtrudedGeometry;
+    layers: { centroid: Centroid; position: number; geom: ExtrudedGeometry }[];
+  }) => void;
   /** Called when the user loads or clears an image, so the parent can keep raw bytes for project bundling. */
   onImageAssetChanged?: (asset: { name: string; bytes: ArrayBuffer } | null) => void;
   /** Hydrate a saved image asset from an imported project bundle. */
@@ -200,8 +203,9 @@ export const ColorFlowControls: React.FC<Props> = ({ baseSettings, setBaseSettin
         });
         if (cancelled || resp.kind !== 'extruded') return;
         if (onGeometryReady) {
-          const pairs = resp.layerGeoms.map(({ centroidIndex, geom }: { centroidIndex: number; geom: ExtrudedGeometry }) => ({
+          const pairs = resp.layerGeoms.map(({ centroidIndex, position, geom }: { centroidIndex: number; position: number; geom: ExtrudedGeometry }) => ({
             centroid: palette[centroidIndex],
+            position,
             geom,
           }));
           onGeometryReady({ base: resp.baseGeom, layers: pairs });
