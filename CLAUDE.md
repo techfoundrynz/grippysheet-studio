@@ -103,3 +103,6 @@ A peer mode to the existing pattern/inlay workflow. Selected via the top-right s
 - **Vendored libs** in `colorflow/vendor/` (ImageTracer + earcut, public-domain). Don't add them as npm deps — the upstream versions are unmaintained.
 - **Vitest** covers the pure pipeline utils only. No React testing. `pnpm test` / `pnpm test:run`.
 - **An `<ErrorBoundary>` wraps the Canvas in both modes** — a crash in geometry construction no longer kills the studio.
+- **Working canvas is outline-anchored**: dimensions are `outline.widthMm × CANVAS_PX_PER_MM` (default 5 px/mm, capped at `MAX_CANVAS_DIM`). The source image is rendered into that canvas at fit-then-user-scale-then-user-offset. See `imageTransform.ts` for the pure math and `ImageTransformPreview.tsx` for the drag/wheel UI.
+- **Stack model**: every color extrudes from `baseMm` to `baseMm + (stackPos + 1) × colorLayerMm`. Stack position comes from `resolvedStackOrder(palette, coverage, settings)` in `stackOrder.ts`. `settings.layerOrder` is the manual override; null means sort by `settings.sort` (`luma` ascending or `coverage` descending).
+- **Mesh + 3MF naming uses stack position**, not array index — meshes are `Color_<pos+1>_<hex>` and 3MF parts are `color_<pos+1>_<hex>`. The worker emits `layerGeoms` pre-sorted by position so downstream code doesn't re-sort.
