@@ -10,6 +10,7 @@ import PatternLibraryModal, { PatternPreset } from '../PatternLibraryModal';
 import { useAlert } from '../../context/AlertContext';
 import { parseShapeFile } from '../../utils/shapeLoader';
 import { OUTLINE_LIBRARY, getOutlineBySlug } from '../../colorflow/outlineLibrary';
+import { emitProcessing } from '../../utils/eventBus';
 
 interface BaseControlsProps {
   settings: BaseSettings;
@@ -33,13 +34,18 @@ const BaseControls: React.FC<BaseControlsProps> = ({
     if (!slug) return;
     const entry = getOutlineBySlug(slug);
     if (!entry) return;
-    const res = await fetch(entry.file);
-    const text = await res.text();
-    const parsed = parseShapeFile(text, 'dxf');
-    if (parsed.success) {
-      updateSettings({ cutoutShapes: parsed.shapes, outlineSlug: slug });
-      setFileName(entry.name);
-      onOutlineLoaded(parsed.shapes);
+    emitProcessing({ key: 'base:outline-fetch', busy: true, label: 'loading outline' });
+    try {
+      const res = await fetch(entry.file);
+      const text = await res.text();
+      const parsed = parseShapeFile(text, 'dxf');
+      if (parsed.success) {
+        updateSettings({ cutoutShapes: parsed.shapes, outlineSlug: slug });
+        setFileName(entry.name);
+        onOutlineLoaded(parsed.shapes);
+      }
+    } finally {
+      emitProcessing({ key: 'base:outline-fetch', busy: false });
     }
   };
 

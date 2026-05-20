@@ -20,7 +20,8 @@ import { effectiveSpikeMaxMm } from './spikes';
 import type { ExtrudedGeometry } from './pipeline/extrude';
 import type { Response as WorkerResponse, TracedLayerEntry, ExtrudedLayerEntry } from './workerProtocol';
 import { useAlert } from '../context/AlertContext';
-import { eventBus } from '../utils/eventBus';
+import { emitProcessing } from '../utils/eventBus';
+import { useDebouncedCommit } from '../utils/useDebouncedCommit';
 
 export interface SpikeGroup {
   centroidIndex: number; // -1 = no color underneath
@@ -102,9 +103,26 @@ export const ColorFlowControls: React.FC<Props> = ({ baseSettings, geometrySetti
   const [layers, setLayers] = useState<TracedLayerEntry[]>([]);
   const [coverage, setCoverage] = useState<number[]>([]);
 
-  // Broadcast worker activity so the 3D viewer can show a spinner.
+  // Slider drafts: update immediately for label/slider feedback; commit to
+  // settings after 250ms idle so the expensive pipeline only fires once per
+  // drag instead of every tick.
+  const [colorCountDraft, setColorCountDraft] = useDebouncedCommit<number>(
+    settings.colorCount,
+    (v) => setSettings((s) => ({ ...s, colorCount: v })),
+  );
+  const [simplifyDraft, setSimplifyDraft] = useDebouncedCommit<number>(
+    settings.simplify,
+    (v) => setSettings((s) => ({ ...s, simplify: v })),
+  );
+  const [detailDraft, setDetailDraft] = useDebouncedCommit<number>(
+    settings.detail,
+    (v) => setSettings((s) => ({ ...s, detail: v })),
+  );
+
+  // Broadcast worker activity so the 3D viewer can show a spinner overlay
+  // (per-phase label: quantize/trace/extrude).
   useEffect(() => {
-    eventBus.emit('colorflow:processing', !!status.phase);
+    emitProcessing({ key: 'colorflow:worker', busy: !!status.phase, label: status.phase || undefined });
   }, [status.phase]);
 
   // Apply Base tab's rotation + mirror to the polygon used for canvas, mask, and extrusion.
@@ -391,21 +409,21 @@ export const ColorFlowControls: React.FC<Props> = ({ baseSettings, geometrySetti
           <h3 className="text-xs uppercase tracking-widest text-gray-400 mb-2">③ Colors</h3>
           <div className="space-y-3">
             <label className="block text-xs text-gray-400">
-              colors <span className="text-purple-400 font-mono">{settings.colorCount}</span>
-              <input type="range" min={2} max={10} value={settings.colorCount}
-                onChange={(e) => setSettings((s) => ({ ...s, colorCount: +e.target.value }))}
+              colors <span className="text-purple-400 font-mono">{colorCountDraft}</span>
+              <input type="range" min={2} max={10} value={colorCountDraft}
+                onChange={(e) => setColorCountDraft(+e.target.value)}
                 className="w-full mt-1" />
             </label>
             <label className="block text-xs text-gray-400">
-              simplify <span className="text-purple-400 font-mono">{SIMPLIFY_LABELS[settings.simplify]}</span>
-              <input type="range" min={0} max={4} value={settings.simplify}
-                onChange={(e) => setSettings((s) => ({ ...s, simplify: +e.target.value }))}
+              simplify <span className="text-purple-400 font-mono">{SIMPLIFY_LABELS[simplifyDraft]}</span>
+              <input type="range" min={0} max={4} value={simplifyDraft}
+                onChange={(e) => setSimplifyDraft(+e.target.value)}
                 className="w-full mt-1" />
             </label>
             <label className="block text-xs text-gray-400">
-              trace detail <span className="text-purple-400 font-mono">{DETAIL_LABELS[settings.detail]}</span>
-              <input type="range" min={0} max={2} value={settings.detail}
-                onChange={(e) => setSettings((s) => ({ ...s, detail: +e.target.value }))}
+              trace detail <span className="text-purple-400 font-mono">{DETAIL_LABELS[detailDraft]}</span>
+              <input type="range" min={0} max={2} value={detailDraft}
+                onChange={(e) => setDetailDraft(+e.target.value)}
                 className="w-full mt-1" />
             </label>
             <label className="flex items-center gap-2 text-xs text-gray-400">

@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import type { Centroid } from '../colorflow/pipeline/quantize';
 import type { ExtrudedGeometry } from '../colorflow/pipeline/extrude';
 import { build3MF, type MeshPart } from '../colorflow/threeMfWriter';
+import { emitProcessing } from '../utils/eventBus';
 
 interface OutputPanelProps {
   meshRef: React.RefObject<THREE.Group | null>;
@@ -161,6 +162,7 @@ const OutputPanel: React.FC<OutputPanelProps> = ({ meshRef, debugMode = false, c
   }
 
   const handleExport3MF = async () => {
+    emitProcessing({ key: 'export:3mf', busy: true, label: 'exporting 3MF' });
     try {
       if (colorFlowGeom) {
         // ColorFlow path — multi-part assembly via threeMfWriter
@@ -209,6 +211,8 @@ const OutputPanel: React.FC<OutputPanelProps> = ({ meshRef, debugMode = false, c
         type: "error",
         confirmText: "OK",
       });
+    } finally {
+      emitProcessing({ key: 'export:3mf', busy: false });
     }
   };
 

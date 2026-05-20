@@ -90,12 +90,22 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
   const [debugState, setDebugState] = useState({ pattern: false, holes: false, inlay: false });
   const [showDebugMenu, setShowDebugMenu] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [isColorFlowProcessing, setIsColorFlowProcessing] = useState(false);
+  // Global processing keys → label. UI shows spinner if non-empty.
+  const [processingMap, setProcessingMap] = useState<Map<string, string>>(() => new Map());
+  const processingMapRef = React.useRef(processingMap);
+  processingMapRef.current = processingMap;
 
-  // Listen for ColorFlow worker activity so the spinner overlay reflects it too.
   useEffect(() => {
-    return eventBus.on('colorflow:processing', (busy: boolean) => setIsColorFlowProcessing(busy));
+    return eventBus.on('processing', (e: { key: string; busy: boolean; label?: string }) => {
+      const next = new Map(processingMapRef.current);
+      if (e.busy) next.set(e.key, e.label ?? '');
+      else next.delete(e.key);
+      setProcessingMap(next);
+    });
   }, []);
+
+  const activeLabels = Array.from(processingMap.values()).filter((l) => l.length > 0);
+  const isAnyProcessing = isProcessing || processingMap.size > 0;
   const fpsRef = React.useRef<HTMLDivElement>(null);
   const [showScreenshotModal, setShowScreenshotModal] = useState(false);
   const captureRef = React.useRef<((bgColor: string | null) => void) | null>(null);
@@ -417,11 +427,33 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
         </button>
       </div>
 
-      {(isProcessing || isColorFlowProcessing) && (
-          <div className="absolute top-4 right-4 z-20 p-2 bg-gray-800/80 backdrop-blur rounded-lg border border-gray-700 text-blue-400">
-             <Spinner size={24} />
+      {isAnyProcessing && (
+          <div className="absolute top-4 right-4 z-20 flex items-center gap-2 p-2 bg-gray-800/80 backdrop-blur rounded-lg border border-gray-700 text-blue-400">
+             <Spinner size={20} />
+             {activeLabels.length > 0 && (
+               <span className="text-[11px] uppercase tracking-wider text-blue-300">{activeLabels.join(' · ')}</span>
+             )}
           </div>
       )}
+
+      {(() => {
+        // Empty-state guidance overlay. Only when nothing in the scene yet AND
+        // no processing in flight — so we don't shout "pick an outline" while
+        // the very-first outline DXF is loading.
+        const hasBase = !!(cutoutShapes && cutoutShapes.length > 0);
+        const hasColorFlow = mode === 'colorflow' && !!colorFlowGeom;
+        if (hasBase || hasColorFlow || isAnyProcessing) return null;
+        return (
+          <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none">
+            <div className="bg-gray-900/85 backdrop-blur border border-gray-700 rounded-lg px-5 py-4 text-center max-w-sm">
+              <p className="text-sm text-gray-200 font-medium">Pick a base outline to start</p>
+              <p className="text-[11px] text-gray-400 mt-1">
+                Use the <span className="text-blue-400">Base tab</span> → Outline Library — or upload your own DXF.
+              </p>
+            </div>
+          </div>
+        );
+      })()}
 
       {showFps && (
         <div 

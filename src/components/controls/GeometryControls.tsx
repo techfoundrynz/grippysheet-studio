@@ -13,6 +13,7 @@ import ShapeUploader from "../ShapeUploader";
 import ControlField from "../ui/ControlField";
 import DebouncedInput from "../DebouncedInput";
 import SegmentedControl from "../ui/SegmentedControl";
+import { emitProcessing } from "../../utils/eventBus";
 import ToggleButton from "../ui/ToggleButton";
 import PatternLibraryModal from "../PatternLibraryModal";
 import { useAlert } from "../../context/AlertContext";
@@ -179,11 +180,12 @@ const GeometryControls: React.FC<GeometryControlsProps> = ({
         onClose={() => setShowPatternLibrary(false)}
         onSelect={async (preset) => {
           setShowPatternLibrary(false);
+          emitProcessing({ key: 'geometry:pattern-fetch', busy: true, label: 'loading pattern' });
           try {
             if (preset.type === "stl") {
                const response = await fetch(`/${preset.category}/${preset.file}`);
                const buffer = await response.arrayBuffer();
-               
+
               const loader = new STLLoader();
               const geometry = loader.parse(buffer);
               geometry.center(); // Auto-center STLs
@@ -193,7 +195,7 @@ const GeometryControls: React.FC<GeometryControlsProps> = ({
                // For DXF/SVG, we need text content
                const response = await fetch(`/${preset.category}/${preset.file}`);
                const text = await response.text();
-               
+
                const result = parseShapeFile(text, preset.type as 'dxf' | 'svg');
                if (result.success) {
                    handlePatternLoaded(result.shapes, preset.type, preset.name, text);
@@ -210,6 +212,8 @@ const GeometryControls: React.FC<GeometryControlsProps> = ({
               message: "Failed to load the selected pattern preset.",
               type: "error",
             });
+          } finally {
+            emitProcessing({ key: 'geometry:pattern-fetch', busy: false });
           }
         }}
       />
