@@ -5,6 +5,7 @@ import { modeFilter, SIMPLIFY_KERNELS } from './pipeline/modeFilter';
 import { trace } from './pipeline/trace';
 import { layerToPolygons } from './pipeline/polygonize';
 import { extrudePolygon } from './pipeline/extrude';
+import { buildLevelMesh } from './pipeline/levelMesh';
 import { mulberry32 } from './pipeline/random';
 import type { Request, Response, TransferredGeom, TracedLayerEntry } from './workerProtocol';
 
@@ -156,31 +157,23 @@ async function handleExtrude(req: Extract<Request, { kind: 'extrude' }>) {
   for (let level = 0; level < stackOrder.length; level++) {
     const zBottom = baseMm + level * colorLayerMm;
     const zTop = baseMm + (level + 1) * colorLayerMm;
-    if (zTop <= zBottom + 1e-6) continue;
 
-    // Merge all polygons whose color's stack position >= this level.
-    const positions: number[] = [];
-    const indices: number[] = [];
-    let vertexOffset = 0;
-    for (const entry of layers) {
-      const pos = positionByCentroid.get(entry.centroidIndex);
-      if (pos === undefined || pos < level) continue;
-      const m = extrudePolygon(entry.polygon.outer, entry.polygon.holes, zBottom, zTop);
-      if (!m) continue;
-      const nVerts = m.positions.length / 3;
-      for (let i = 0; i < m.positions.length; i++) positions.push(m.positions[i]);
-      for (let i = 0; i < m.indices.length; i++) indices.push(m.indices[i] + vertexOffset);
-      vertexOffset += nVerts;
-    }
-    if (indices.length === 0) continue;
+    // Union polygons whose color's stack position >= this level, then extrude
+    // the merged outline as one closed multi-shell prism. Eliminates coincident
+    // side walls between adjacent same-level polygons (was non-manifold before).
+    const polygonsAtThisLevel = layers
+      .filter((e) => {
+        const pos = positionByCentroid.get(e.centroidIndex);
+        return pos !== undefined && pos >= level;
+      })
+      .map((e) => e.polygon);
+    const geom = buildLevelMesh(polygonsAtThisLevel, zBottom, zTop);
+    if (!geom) continue;
 
     layerGeoms.push({
       centroidIndex: stackOrder[level],
       position: level,
-      geom: {
-        positions: new Float32Array(positions),
-        indices: new Uint32Array(indices),
-      },
+      geom,
     });
   }
 
