@@ -1,9 +1,8 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { type BaseSettings, type GeometrySettings } from '../types/schemas';
 import { type ColorFlowSettings } from './schema';
 import { getOutlineBySlug } from './outlineLibrary';
 import { useColorFlowWorker } from './useColorFlowWorker';
-import { ImageTransformPreview } from './ImageTransformPreview';
 import {
   shapeToPolygon,
   outlineCanvasSize,
@@ -16,12 +15,19 @@ import {
 import { computeImageDrawCoords } from './imageTransform';
 import { paletteCoverage, type Centroid } from './pipeline/quantize';
 import { resolvedStackOrder } from './stackOrder';
-import { effectiveSpikeMaxMm } from './spikes';
 import type { ExtrudedGeometry } from './pipeline/extrude';
 import type { Response as WorkerResponse, TracedLayerEntry, ExtrudedLayerEntry } from './workerProtocol';
 import { useAlert } from '../context/AlertContext';
 import { emitProcessing } from '../utils/eventBus';
 import { useDebouncedCommit } from '../utils/useDebouncedCommit';
+
+import { BaseStatusBanner } from './controls/BaseStatusBanner';
+import { ImageSection } from './controls/ImageSection';
+import { ColorSliders } from './controls/ColorSliders';
+import { PrintControls } from './controls/PrintControls';
+import { LayerControls } from './controls/LayerControls';
+import { SpikeControls } from './controls/SpikeControls';
+import { StatusFooter } from './controls/StatusFooter';
 
 export interface SpikeGroup {
   centroidIndex: number; // -1 = no color underneath
@@ -68,11 +74,12 @@ interface Props {
   spikeDiag?: string;
 }
 
-const SIMPLIFY_LABELS = ['off', 'light', 'medium', 'strong', 'max'] as const;
-const DETAIL_LABELS = ['sharp', 'balanced', 'smooth'] as const;
 const MAX_IMG_DIM = 1500;
 
-export const ColorFlowControls: React.FC<Props> = ({ baseSettings, geometrySettings, settings, setSettings, onGeometryReady, onImageAssetChanged, initialImageAsset, onSwitchToBase, spikeDiag }) => {
+export const ColorFlowControls: React.FC<Props> = ({
+  baseSettings, geometrySettings, settings, setSettings,
+  onGeometryReady, onImageAssetChanged, initialImageAsset, onSwitchToBase, spikeDiag,
+}) => {
   const { request, status } = useColorFlowWorker();
   const { showAlert } = useAlert();
 
@@ -80,6 +87,7 @@ export const ColorFlowControls: React.FC<Props> = ({ baseSettings, geometrySetti
   const [imageName, setImageName] = useState<string>('');
   const [imageDims, setImageDims] = useState<{ w: number; h: number } | null>(null);
 
+  // Hydrate from project bundle.
   useEffect(() => {
     if (!initialImageAsset) return;
     let cancelled = false;
@@ -103,9 +111,7 @@ export const ColorFlowControls: React.FC<Props> = ({ baseSettings, geometrySetti
   const [layers, setLayers] = useState<TracedLayerEntry[]>([]);
   const [coverage, setCoverage] = useState<number[]>([]);
 
-  // Slider drafts: update immediately for label/slider feedback; commit to
-  // settings after 250ms idle so the expensive pipeline only fires once per
-  // drag instead of every tick.
+  // Slider drafts: smooth local feedback while the heavy pipeline waits.
   const [colorCountDraft, setColorCountDraft] = useDebouncedCommit<number>(
     settings.colorCount,
     (v) => setSettings((s) => ({ ...s, colorCount: v })),
@@ -119,8 +125,7 @@ export const ColorFlowControls: React.FC<Props> = ({ baseSettings, geometrySetti
     (v) => setSettings((s) => ({ ...s, detail: v })),
   );
 
-  // Broadcast worker activity so the 3D viewer can show a spinner overlay
-  // (per-phase label: quantize/trace/extrude).
+  // Broadcast worker activity so the 3D viewer overlay can label it.
   useEffect(() => {
     emitProcessing({ key: 'colorflow:worker', busy: !!status.phase, label: status.phase || undefined });
   }, [status.phase]);
@@ -135,7 +140,7 @@ export const ColorFlowControls: React.FC<Props> = ({ baseSettings, geometrySetti
 
   const hasOutline = outlinePolygon !== null;
   const hasImage = imageBitmap !== null;
-  const outlineEntry = baseSettings.outlineSlug ? getOutlineBySlug(baseSettings.outlineSlug) : null;
+  const outlineEntry = baseSettings.outlineSlug ? getOutlineBySlug(baseSettings.outlineSlug) ?? null : null;
   const baseMm = baseSettings.thickness;
 
   const handleImageFile = useCallback(async (file: File) => {
@@ -161,6 +166,8 @@ export const ColorFlowControls: React.FC<Props> = ({ baseSettings, geometrySetti
     setImageDims({ w: width, h: height });
   }, [showAlert, onImageAssetChanged]);
 
+  // Quantize whenever inputs change (debounced 200ms internally; slider drafts
+  // add another ~250ms on top).
   useEffect(() => {
     if (!hasImage || !hasOutline || !imageBitmap || !outlinePolygon) return;
     let cancelled = false;
@@ -236,7 +243,6 @@ export const ColorFlowControls: React.FC<Props> = ({ baseSettings, geometrySetti
           out.reverse(); // Y-flip reverses orientation; restore CCW winding
           return out;
         };
-
         const layersInMm: TracedLayerEntry[] = layers.map((entry) => ({
           centroidIndex: entry.centroidIndex,
           polygon: {
@@ -248,7 +254,6 @@ export const ColorFlowControls: React.FC<Props> = ({ baseSettings, geometrySetti
           outer: outlinePolygon.outer.map(([x, y]) => [x, y] as [number, number]),
           holes: outlinePolygon.holes.map((h) => h.map(([x, y]) => [x, y] as [number, number])),
         };
-
         const stackOrder = resolvedStackOrder(palette, coverage, settings);
 
         const resp = await request<Extract<WorkerResponse, { kind: 'extruded' }>>({
@@ -267,8 +272,6 @@ export const ColorFlowControls: React.FC<Props> = ({ baseSettings, geometrySetti
             position: entry.position,
             geom: entry.geom,
           }));
-          // Spikes are derived at App level from this `source` so Geometry-tab
-          // changes flow live without re-running the extrude effect.
           const source: SpikeSource = {
             outlinePolygon: {
               outer: outlinePolygon.outer.map(([x, y]) => [x, y] as [number, number]),
@@ -291,323 +294,74 @@ export const ColorFlowControls: React.FC<Props> = ({ baseSettings, geometrySetti
     return () => { cancelled = true; };
   }, [layers, outlinePolygon, palette, coverage, baseMm, settings.colorLayerMm, settings.sort, settings.layerOrder, request, onGeometryReady, showAlert]);
 
-  const _dropRef = useRef<HTMLDivElement>(null);
-
   return (
     <div className="space-y-6">
-        <section>
-          <h3 className="text-xs uppercase tracking-widest text-gray-400 mb-2">① Base</h3>
-          {hasOutline ? (
-            <div className="flex items-center justify-between gap-2 text-xs bg-gray-900 border border-gray-700 rounded px-3 py-2">
-              <span className="text-green-400">
-                ✓ {outlineEntry ? `${outlineEntry.name} · ${outlineEntry.widthMm}×${outlineEntry.heightMm}mm` : 'custom outline loaded'}
-              </span>
-              {onSwitchToBase && (
-                <button
-                  type="button"
-                  onClick={onSwitchToBase}
-                  className="text-blue-400 hover:underline text-[10px] whitespace-nowrap"
-                >edit in Base ↗</button>
-              )}
-            </div>
-          ) : (
-            <div className="text-xs bg-yellow-900/20 border border-yellow-700/50 rounded px-3 py-2 text-yellow-200">
-              <p>⚠ No outline configured yet.</p>
-              {onSwitchToBase && (
-                <button
-                  type="button"
-                  onClick={onSwitchToBase}
-                  className="text-blue-400 hover:underline text-[10px] mt-1"
-                >Configure in Base tab ↗</button>
-              )}
-            </div>
-          )}
-        </section>
+      <BaseStatusBanner
+        hasOutline={hasOutline}
+        outlineEntry={outlineEntry}
+        onSwitchToBase={onSwitchToBase}
+      />
 
-        <section className={hasOutline ? '' : 'opacity-40 pointer-events-none'}>
-          <h3 className="text-xs uppercase tracking-widest text-gray-400 mb-2">② Image</h3>
-          <div
-            ref={_dropRef}
-            onClick={() => {
-              const input = document.createElement('input');
-              input.type = 'file';
-              input.accept = 'image/*';
-              input.onchange = (e) => { const f = (e.target as HTMLInputElement).files?.[0]; if (f) handleImageFile(f); };
-              input.click();
-            }}
-            onDragOver={(e) => { e.preventDefault(); }}
-            onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handleImageFile(f); }}
-            className="border-2 border-dashed border-gray-700 rounded p-6 text-center text-gray-400 text-sm cursor-pointer hover:border-blue-500 hover:bg-gray-900/50"
-          >
-            {hasImage
-              ? <span className="text-green-400">✓ {imageName} · {imageDims?.w}×{imageDims?.h}</span>
-              : <span>drag image / click to browse</span>}
-          </div>
-          <ImageTransformPreview
-            imageBitmap={imageBitmap}
-            outline={outlinePolygon}
-            offsetMm={settings.imageOffsetMm}
-            scale={settings.imageScale}
-            onCommit={(offsetMm, scale) => setSettings((s) => ({ ...s, imageOffsetMm: offsetMm, imageScale: scale }))}
-          />
-          {hasImage && (
-            <div className="mt-3 grid grid-cols-3 gap-2 text-xs text-gray-400">
-              <label>x mm
-                <input
-                  type="number"
-                  step={1}
-                  min={-200}
-                  max={200}
-                  value={settings.imageOffsetMm.x}
-                  onChange={(e) => {
-                    const v = Math.max(-200, Math.min(200, +e.target.value || 0));
-                    setSettings((s) => ({ ...s, imageOffsetMm: { ...s.imageOffsetMm, x: v } }));
-                  }}
-                  className="w-full mt-1 bg-gray-900 border border-gray-700 rounded px-2 py-1"
-                />
-              </label>
-              <label>y mm
-                <input
-                  type="number"
-                  step={1}
-                  min={-200}
-                  max={200}
-                  value={settings.imageOffsetMm.y}
-                  onChange={(e) => {
-                    const v = Math.max(-200, Math.min(200, +e.target.value || 0));
-                    setSettings((s) => ({ ...s, imageOffsetMm: { ...s.imageOffsetMm, y: v } }));
-                  }}
-                  className="w-full mt-1 bg-gray-900 border border-gray-700 rounded px-2 py-1"
-                />
-              </label>
-              <label>scale
-                <input
-                  type="number"
-                  step={0.05}
-                  min={0.2}
-                  max={3}
-                  value={settings.imageScale}
-                  onChange={(e) => {
-                    const v = Math.max(0.2, Math.min(3, +e.target.value || 1));
-                    setSettings((s) => ({ ...s, imageScale: v }));
-                  }}
-                  className="w-full mt-1 bg-gray-900 border border-gray-700 rounded px-2 py-1"
-                />
-              </label>
-              <button
-                type="button"
-                onClick={() => setSettings((s) => ({ ...s, imageOffsetMm: { x: 0, y: 0 }, imageScale: 1.0 }))}
-                className="col-span-3 mt-1 text-[10px] text-blue-400 hover:underline text-left"
-              >
-                Reset to fit-centered
-              </button>
-            </div>
-          )}
-        </section>
+      <ImageSection
+        hasOutline={hasOutline}
+        hasImage={hasImage}
+        imageBitmap={imageBitmap}
+        imageName={imageName}
+        imageDims={imageDims}
+        outlinePolygon={outlinePolygon}
+        settings={settings}
+        setSettings={setSettings}
+        onImageFile={handleImageFile}
+      />
 
-        <section className={hasImage ? '' : 'opacity-40 pointer-events-none'}>
-          <h3 className="text-xs uppercase tracking-widest text-gray-400 mb-2">③ Colors</h3>
-          <div className="space-y-3">
-            <label className="block text-xs text-gray-400">
-              colors <span className="text-purple-400 font-mono">{colorCountDraft}</span>
-              <input type="range" min={2} max={10} value={colorCountDraft}
-                onChange={(e) => setColorCountDraft(+e.target.value)}
-                className="w-full mt-1" />
-            </label>
-            <label className="block text-xs text-gray-400">
-              simplify <span className="text-purple-400 font-mono">{SIMPLIFY_LABELS[simplifyDraft]}</span>
-              <input type="range" min={0} max={4} value={simplifyDraft}
-                onChange={(e) => setSimplifyDraft(+e.target.value)}
-                className="w-full mt-1" />
-            </label>
-            <label className="block text-xs text-gray-400">
-              trace detail <span className="text-purple-400 font-mono">{DETAIL_LABELS[detailDraft]}</span>
-              <input type="range" min={0} max={2} value={detailDraft}
-                onChange={(e) => setDetailDraft(+e.target.value)}
-                className="w-full mt-1" />
-            </label>
-            <label className="flex items-center gap-2 text-xs text-gray-400">
-              <input type="checkbox" checked={settings.smooth}
-                onChange={(e) => setSettings((s) => ({ ...s, smooth: e.target.checked }))} />
-              smoothing
-            </label>
-          </div>
-        </section>
+      <ColorSliders
+        hasImage={hasImage}
+        settings={settings}
+        setSettings={setSettings}
+        colorCountDraft={colorCountDraft}
+        setColorCountDraft={setColorCountDraft}
+        simplifyDraft={simplifyDraft}
+        setSimplifyDraft={setSimplifyDraft}
+        detailDraft={detailDraft}
+        setDetailDraft={setDetailDraft}
+      />
 
-        <section className={layers.length > 0 ? '' : 'opacity-40 pointer-events-none'}>
-          <h3 className="text-xs uppercase tracking-widest text-gray-400 mb-2">④ Print</h3>
-          <div className="grid grid-cols-1 gap-2 text-xs text-gray-400">
-            <label>layer mm (each color rises this much above the base)
-              <input
-                type="number"
-                step={0.05}
-                min={0.05}
-                max={2}
-                value={settings.colorLayerMm}
-                onChange={(e) => {
-                  const v = Math.max(0.05, Math.min(2, +e.target.value || 0.4));
-                  setSettings((s) => ({ ...s, colorLayerMm: v }));
-                }}
-                className="w-full mt-1 bg-gray-900 border border-gray-700 rounded px-2 py-1"
-              />
-            </label>
-          </div>
-          {palette.length > 0 && (
-            <p className="text-[10px] text-gray-500 mt-2">
-              total {(baseMm + palette.length * settings.colorLayerMm).toFixed(2)}mm
-              ({baseMm.toFixed(2)} base + {palette.length} × {settings.colorLayerMm.toFixed(2)}mm) · base thickness set in Base tab
-            </p>
-          )}
-        </section>
+      <PrintControls
+        hasLayers={layers.length > 0}
+        paletteSize={palette.length}
+        baseMm={baseMm}
+        settings={settings}
+        setSettings={setSettings}
+      />
 
-        {palette.length > 0 && (
-          <section>
-            <h3 className="text-xs uppercase tracking-widest text-gray-400 mb-2">Spike pattern</h3>
-            {geometrySettings.patternShapes?.[0] ? (
-              <>
-                <p className="text-[10px] text-gray-500 mb-2">
-                  Pattern tile + spacing come from the Geometry tab. Each spike rises from its
-                  color region's top to a unified spike-max height.
-                </p>
-                <div className="grid grid-cols-1 gap-2 text-xs text-gray-400">
-                  <label>spike max mm (0 = auto: max color + 1mm)
-                    <input
-                      type="number"
-                      step={0.1}
-                      min={0}
-                      max={20}
-                      value={settings.spikeMaxMm}
-                      onChange={(e) => {
-                        const v = Math.max(0, Math.min(20, +e.target.value || 0));
-                        setSettings((s) => ({ ...s, spikeMaxMm: v }));
-                      }}
-                      className="w-full mt-1 bg-gray-900 border border-gray-700 rounded px-2 py-1"
-                    />
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={settings.spikeColorMatch}
-                      onChange={(e) => setSettings((s) => ({ ...s, spikeColorMatch: e.target.checked }))}
-                    />
-                    color-match spikes to the region below
-                  </label>
-                </div>
-                <p className="text-[10px] text-gray-500 mt-2">
-                  resolved spike top: {effectiveSpikeMaxMm(settings.spikeMaxMm, baseMm, palette.length, settings.colorLayerMm).toFixed(2)}mm
-                </p>
-                {spikeDiag && (
-                  <p className="text-[10px] text-blue-400 mt-1 font-mono">{spikeDiag}</p>
-                )}
-              </>
-            ) : (
-              <p className="text-[10px] text-gray-500">
-                No pattern tile configured — pick one in the Geometry tab to add a grip spike layer on top.
-              </p>
-            )}
-          </section>
-        )}
+      <SpikeControls
+        palette={palette}
+        geometrySettings={geometrySettings}
+        baseMm={baseMm}
+        settings={settings}
+        setSettings={setSettings}
+        spikeDiag={spikeDiag}
+      />
 
-        {palette.length > 0 && (
-          <section>
-            <h3 className="text-xs uppercase tracking-widest text-gray-400 mb-2">Layers</h3>
-            <div className="flex items-center gap-2 mb-2 text-[10px]">
-              <span className="text-gray-500">sort:</span>
-              <div className="inline-flex rounded border border-gray-700 overflow-hidden">
-                <button
-                  type="button"
-                  onClick={() => setSettings((s) => ({ ...s, sort: 'luma', layerOrder: null }))}
-                  className={`px-2 py-1 ${settings.layerOrder === null && settings.sort === 'luma' ? 'bg-blue-600 text-white' : 'bg-gray-900 text-gray-400 hover:text-white'}`}
-                >luminance</button>
-                <button
-                  type="button"
-                  onClick={() => setSettings((s) => ({ ...s, sort: 'coverage', layerOrder: null }))}
-                  className={`px-2 py-1 ${settings.layerOrder === null && settings.sort === 'coverage' ? 'bg-blue-600 text-white' : 'bg-gray-900 text-gray-400 hover:text-white'}`}
-                >coverage</button>
-                <button
-                  type="button"
-                  disabled={settings.layerOrder === null}
-                  className={`px-2 py-1 ${settings.layerOrder !== null ? 'bg-blue-600 text-white' : 'bg-gray-900 text-gray-500'}`}
-                >manual</button>
-              </div>
-              {settings.layerOrder !== null && (
-                <button
-                  type="button"
-                  onClick={() => setSettings((s) => ({ ...s, layerOrder: null }))}
-                  className="text-blue-400 hover:underline"
-                >reset</button>
-              )}
-            </div>
+      <LayerControls
+        palette={palette}
+        coverage={coverage}
+        settings={settings}
+        setSettings={setSettings}
+      />
 
-            {(() => {
-              const order = resolvedStackOrder(palette, coverage, settings);
-              const total = coverage.reduce((s, c) => s + c, 0) || 1;
-              return (
-                <div className="space-y-1">
-                  {order.map((paletteIdx, displayIdx) => {
-                    const c = palette[paletteIdx];
-                    const hex = `#${c.r.toString(16).padStart(2,'0')}${c.g.toString(16).padStart(2,'0')}${c.b.toString(16).padStart(2,'0')}`;
-                    const pct = ((coverage[paletteIdx] ?? 0) / total) * 100;
-                    return (
-                      <div key={paletteIdx} className="flex items-center gap-2 bg-gray-900 border border-gray-700 rounded p-2 text-xs">
-                        <div className="w-5 h-5 rounded flex-shrink-0 border border-gray-700" style={{ background: hex }} />
-                        <div className="font-mono text-gray-300 w-16">{hex.toUpperCase()}</div>
-                        <div className="text-gray-500 text-[10px] flex-1">layer {displayIdx + 1} · {pct.toFixed(1)}%</div>
-                        <button
-                          type="button"
-                          disabled={displayIdx === 0}
-                          onClick={() => {
-                            const next = [...order];
-                            [next[displayIdx - 1], next[displayIdx]] = [next[displayIdx], next[displayIdx - 1]];
-                            setSettings((s) => ({ ...s, layerOrder: next }));
-                          }}
-                          className="px-1 text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed"
-                          title="Move toward base"
-                        >↑</button>
-                        <button
-                          type="button"
-                          disabled={displayIdx === order.length - 1}
-                          onClick={() => {
-                            const next = [...order];
-                            [next[displayIdx + 1], next[displayIdx]] = [next[displayIdx], next[displayIdx + 1]];
-                            setSettings((s) => ({ ...s, layerOrder: next }));
-                          }}
-                          className="px-1 text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed"
-                          title="Move toward top"
-                        >↓</button>
-                      </div>
-                    );
-                  })}
-                </div>
-              );
-            })()}
-            <p className="text-[10px] text-gray-500 mt-2">
-              Layer 1 sits closest to the base; higher numbers stack taller. Each adds {settings.colorLayerMm.toFixed(2)}mm.
-            </p>
-          </section>
-        )}
+      <section className={layers.length > 0 ? '' : 'opacity-40 pointer-events-none'}>
+        <h3 className="text-xs uppercase tracking-widest text-gray-400 mb-2">⑤ Export</h3>
+        <p className="text-xs text-gray-400">
+          Use <span className="text-blue-400 font-bold">Export 3MF</span> in the footer below to download the multi-part Bambu assembly.
+        </p>
+      </section>
 
-        <section className={layers.length > 0 ? '' : 'opacity-40 pointer-events-none'}>
-          <h3 className="text-xs uppercase tracking-widest text-gray-400 mb-2">⑤ Export</h3>
-          <p className="text-xs text-gray-400">
-            Use <span className="text-blue-400 font-bold">Export 3MF</span> in the footer below to download the multi-part Bambu assembly.
-          </p>
-        </section>
-
-        <div className="text-xs min-h-[24px]">
-          {status.phase && (
-            <span className="inline-flex items-center gap-2 text-blue-400 bg-blue-900/20 border border-blue-700/40 rounded px-2 py-1">
-              <span className="inline-block w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
-              working: {status.phase}…
-            </span>
-          )}
-          {status.error && <span className="text-red-400">error: {status.error}</span>}
-          {!status.phase && !status.error && palette.length > 0 && (
-            <span className="text-green-400">ready · {palette.length} colors traced</span>
-          )}
-        </div>
-
-
+      <StatusFooter
+        phase={status.phase || undefined}
+        error={status.error || undefined}
+        paletteLength={palette.length}
+      />
     </div>
   );
 };
