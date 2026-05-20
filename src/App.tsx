@@ -8,16 +8,12 @@ import { BaseSettings, InlaySettings, GeometrySettings } from './types/schemas';
 import type { ProjectDataV2 } from './types/schemas';
 import { defaultBaseSettings, defaultInlaySettings, defaultGeometrySettings } from './utils/schemaDefaults';
 import WelcomeModal from "./components/WelcomeModal";
-import { ModeToggle, type StudioMode } from "./components/ui/ModeToggle";
 import { defaultColorFlowSettings, type ColorFlowSettings } from "./colorflow/schema";
-import { ColorFlowControls } from './colorflow/ColorFlowControls';
 import type { Centroid } from './colorflow/pipeline/quantize';
 import type { ExtrudedGeometry } from './colorflow/pipeline/extrude';
 import { exportProjectBundle, type ProjectAssets } from './utils/projectUtils';
 
 const App = () => {
-  const [mode, setMode] = useState<StudioMode>('pattern');
-
   const [baseSettings, setBaseSettings] = useState<BaseSettings>(defaultBaseSettings);
   const [geometrySettings, setGeometrySettings] = useState<GeometrySettings>(defaultGeometrySettings);
   const [inlaySettings, setInlaySettings] = useState<InlaySettings>(defaultInlaySettings);
@@ -30,9 +26,13 @@ const App = () => {
 
   const [showWelcome, setShowWelcome] = useState(() => !localStorage.getItem('welcome_modal_dismissed'));
   const [isControlsCollapsed, setIsControlsCollapsed] = useState(false);
-  const [activeTab, setActiveTab] = useState<'base' | 'inlay' | 'geometry'>('base');
+  const [activeTab, setActiveTab] = useState<'base' | 'inlay' | 'colorflow' | 'geometry'>('base');
 
   const meshRef = useRef<THREE.Group>(null);
+
+  // Derive viewer mode from colorFlowGeom presence
+  const colorFlowActive = colorFlowGeom !== null;
+  const viewerMode = colorFlowActive ? 'colorflow' : 'pattern';
 
   React.useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -50,6 +50,7 @@ const App = () => {
     setGeometrySettings(defaultGeometrySettings);
     setInlaySettings(defaultInlaySettings);
     setColorFlowSettings(defaultColorFlowSettings);
+    setColorFlowGeom(null);
     setSelectedInlayId(null);
   };
 
@@ -58,22 +59,32 @@ const App = () => {
     setInlaySettings(data.inlay as InlaySettings);
     setGeometrySettings(data.geometry as GeometrySettings);
     if (data.imageMode) setColorFlowSettings(data.imageMode);
-    setMode(data.mode);
     setProjectAssets(assets);
   }, []);
+
+  const handleImageAssetChanged = useCallback((a: { name: string; bytes: ArrayBuffer } | null) => {
+    setProjectAssets((p) => ({
+      ...p,
+      image: a ? { name: a.name, content: a.bytes, type: 'image' } : undefined,
+    }));
+  }, []);
+
+  const handleColorFlowGeomReady = useCallback((data: { base: ExtrudedGeometry; layers: { centroid: Centroid; geom: ExtrudedGeometry }[] }) => {
+    setColorFlowGeom(data);
+  }, []);
+
+  const initialImageAsset = projectAssets.image
+    ? { name: projectAssets.image.name, bytes: projectAssets.image.content as ArrayBuffer }
+    : null;
 
   return (
     <AlertProvider>
       <div className="h-[100dvh] flex flex-col bg-gray-950 text-gray-100 overflow-hidden">
-        <div className="absolute top-4 right-4 z-30">
-          <ModeToggle mode={mode} onChange={setMode} />
-        </div>
-
         <main className="flex-1 flex flex-col md:flex-row overflow-hidden">
           <div className="h-1/2 md:h-auto flex-1 flex flex-col p-4 min-w-0">
             <div className="flex-1 relative bg-gray-900 rounded-lg border border-gray-800 overflow-hidden shadow-inner">
               <ModelViewer
-                mode={mode}
+                mode={viewerMode}
                 baseSettings={baseSettings}
                 inlaySettings={inlaySettings}
                 onInlayChange={setInlaySettings}
@@ -90,48 +101,37 @@ const App = () => {
           </div>
 
           <div className={`md:h-auto w-full md:w-96 overflow-hidden flex flex-col md:p-4 bg-gray-950 md:bg-transparent transition-all duration-300 ease-in-out ${isControlsCollapsed ? 'h-auto flex-shrink-0 md:flex-none' : 'h-1/2 flex-1 md:flex-none'}`}>
-            {mode === 'pattern' ? (
-              <Controls
-                activeTab={activeTab}
-                setActiveTab={setActiveTab}
-                baseSettings={baseSettings}
-                setBaseSettings={setBaseSettings}
-                inlaySettings={inlaySettings}
-                setInlaySettings={setInlaySettings}
-                geometrySettings={geometrySettings}
-                setGeometrySettings={setGeometrySettings}
-                onReset={handleReset}
-                selectedInlayId={selectedInlayId}
-                setSelectedInlayId={setSelectedInlayId}
-                onOpenWelcome={() => setShowWelcome(true)}
-                isCollapsed={isControlsCollapsed}
-                onToggleCollapse={() => setIsControlsCollapsed(!isControlsCollapsed)}
-                exportControls={
-                  <OutputPanel
-                    meshRef={meshRef}
-                    debugMode={geometrySettings.debugMode ?? false}
-                    className="bg-transparent border-0 shadow-none p-0 !p-0"
-                  />
-                }
-              />
-            ) : (
-              <ColorFlowControls
-                baseSettings={baseSettings}
-                setBaseSettings={setBaseSettings}
-                settings={colorFlowSettings}
-                setSettings={setColorFlowSettings}
-                onGeometryReady={setColorFlowGeom}
-                onImageAssetChanged={(a) => setProjectAssets((p) => ({
-                  ...p,
-                  image: a ? { name: a.name, content: a.bytes, type: 'image' } : undefined,
-                }))}
-                initialImageAsset={projectAssets.image
-                  ? { name: projectAssets.image.name, bytes: projectAssets.image.content as ArrayBuffer }
-                  : null}
-                onProjectImported={handleProjectImported}
-                onExportProject={() => exportProjectBundle(mode, baseSettings, inlaySettings, geometrySettings, colorFlowSettings, projectAssets)}
-              />
-            )}
+            <Controls
+              activeTab={activeTab}
+              setActiveTab={setActiveTab}
+              baseSettings={baseSettings}
+              setBaseSettings={setBaseSettings}
+              inlaySettings={inlaySettings}
+              setInlaySettings={setInlaySettings}
+              geometrySettings={geometrySettings}
+              setGeometrySettings={setGeometrySettings}
+              onReset={handleReset}
+              selectedInlayId={selectedInlayId}
+              setSelectedInlayId={setSelectedInlayId}
+              onOpenWelcome={() => setShowWelcome(true)}
+              isCollapsed={isControlsCollapsed}
+              onToggleCollapse={() => setIsControlsCollapsed(!isControlsCollapsed)}
+              exportControls={
+                <OutputPanel
+                  meshRef={meshRef}
+                  debugMode={geometrySettings.debugMode ?? false}
+                  className="bg-transparent border-0 shadow-none p-0 !p-0"
+                />
+              }
+              colorFlowSettings={colorFlowSettings}
+              setColorFlowSettings={setColorFlowSettings}
+              colorFlowActive={colorFlowActive}
+              onColorFlowGeomReady={handleColorFlowGeomReady}
+              onColorFlowImageAssetChanged={handleImageAssetChanged}
+              initialColorFlowImageAsset={initialImageAsset}
+              onProjectImported={handleProjectImported}
+              onExportProject={() => exportProjectBundle(viewerMode, baseSettings, inlaySettings, geometrySettings, colorFlowSettings, projectAssets)}
+            />
           </div>
         </main>
 
@@ -141,4 +141,4 @@ const App = () => {
   );
 };
 
-export default App; // Force update
+export default App;

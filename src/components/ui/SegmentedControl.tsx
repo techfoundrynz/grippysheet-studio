@@ -4,6 +4,7 @@ export interface SegmentedControlOption<T extends string> {
   value: T;
   label: React.ReactNode;
   icon?: React.ReactNode;
+  disabled?: boolean;
 }
 
 interface SegmentedControlProps<T extends string> {
@@ -23,14 +24,18 @@ export function SegmentedControl<T extends string>({
     <div className={`flex bg-gray-900 p-1 rounded-lg border border-gray-700 ${className}`}>
       {options.map((option) => {
         const isActive = value === option.value;
+        const isDisabled = option.disabled === true;
         return (
           <button
             key={option.value}
-            onClick={() => onChange(option.value)}
+            onClick={() => { if (!isDisabled) onChange(option.value); }}
+            disabled={isDisabled}
             className={`flex-1 flex items-center justify-center gap-2 py-1.5 px-3 rounded-md text-sm font-medium transition-all ${
-              isActive
-                ? 'bg-gray-700 text-white shadow-sm ring-1 ring-white/10'
-                : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/50'
+              isDisabled
+                ? 'text-gray-600 cursor-not-allowed opacity-50'
+                : isActive
+                  ? 'bg-gray-700 text-white shadow-sm ring-1 ring-white/10'
+                  : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/50'
             }`}
           >
             {option.icon}

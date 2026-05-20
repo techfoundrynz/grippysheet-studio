@@ -2,6 +2,7 @@ import React from 'react';
 import { Freeze } from 'react-freeze';
 import { exportProjectBundle, importProjectBundle, ProjectAssets } from '../utils/projectUtils';
 import { BaseSettings, InlaySettings, GeometrySettings, ProjectSchemaV1 } from '../types/schemas';
+import type { ProjectDataV2 } from '../types/schemas';
 import { parseShapeFile } from '../utils/shapeLoader';
 import { RotateCcw, HelpCircle, ChevronDown, Download, Upload } from 'lucide-react';
 import { useAlert } from '../context/AlertContext';
@@ -9,6 +10,10 @@ import SegmentedControl from './ui/SegmentedControl';
 import Button from './ui/Button';
 import { calculateInlayScale } from '../utils/patternUtils';
 import * as THREE from 'three';
+import { ColorFlowControls } from '../colorflow/ColorFlowControls';
+import type { ColorFlowSettings } from '../colorflow/schema';
+import type { Centroid } from '../colorflow/pipeline/quantize';
+import type { ExtrudedGeometry } from '../colorflow/pipeline/extrude';
 
 // Sub-components
 import BaseControls from './controls/BaseControls';
@@ -27,10 +32,19 @@ interface ControlsProps {
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
   exportControls?: React.ReactNode;
-  activeTab: 'base' | 'inlay' | 'geometry';
-  setActiveTab: (tab: 'base' | 'inlay' | 'geometry') => void;
+  activeTab: 'base' | 'inlay' | 'colorflow' | 'geometry';
+  setActiveTab: (tab: 'base' | 'inlay' | 'colorflow' | 'geometry') => void;
   selectedInlayId: string | null;
   setSelectedInlayId: (id: string | null) => void;
+  // ColorFlow props
+  colorFlowSettings: ColorFlowSettings;
+  setColorFlowSettings: React.Dispatch<React.SetStateAction<ColorFlowSettings>>;
+  colorFlowActive: boolean;
+  onColorFlowGeomReady?: (data: { base: ExtrudedGeometry; layers: { centroid: Centroid; geom: ExtrudedGeometry }[] }) => void;
+  onColorFlowImageAssetChanged?: (a: { name: string; bytes: ArrayBuffer } | null) => void;
+  initialColorFlowImageAsset?: { name: string; bytes: ArrayBuffer } | null;
+  onProjectImported?: (data: ProjectDataV2, assets: ProjectAssets) => void;
+  onExportProject?: () => void;
 }
 
 const Controls: React.FC<ControlsProps> = ({
@@ -45,10 +59,18 @@ const Controls: React.FC<ControlsProps> = ({
   isCollapsed = false,
   onToggleCollapse,
   exportControls,
-  activeTab, 
+  activeTab,
   setActiveTab,
   selectedInlayId,
-  setSelectedInlayId
+  setSelectedInlayId,
+  colorFlowSettings,
+  setColorFlowSettings,
+  colorFlowActive,
+  onColorFlowGeomReady,
+  onColorFlowImageAssetChanged,
+  initialColorFlowImageAsset,
+  onProjectImported,
+  onExportProject,
 }) => {
   const { showAlert } = useAlert();
   // Lifted state
@@ -115,9 +137,15 @@ const Controls: React.FC<ControlsProps> = ({
   };
 
   const handleExportClick = () => {
+      // Delegate to colorflow export handler when colorflow is active
+      if (colorFlowActive && onExportProject) {
+          onExportProject();
+          return;
+      }
+
       // Validate Assets
       const missingAssets: string[] = [];
-      
+
       // Check Base
       if (baseSettings.cutoutShapes && baseSettings.cutoutShapes.length > 0 && !projectAssets.baseOutline) {
           missingAssets.push("Base Outline");
@@ -167,7 +195,13 @@ const Controls: React.FC<ControlsProps> = ({
 
           try {
               const { data, versionMismatch, importedVersion, importedAssets } = await importProjectBundle(file);
-              
+
+              // Delegate colorflow project imports to the colorflow handler
+              if (data.mode === 'colorflow' && onProjectImported) {
+                  onProjectImported(data, importedAssets ?? {});
+                  return;
+              }
+
               const applyImport = () => {
                    let newBase = data.base;
                    let newInlay = data.inlay;
@@ -357,8 +391,9 @@ const Controls: React.FC<ControlsProps> = ({
             onChange={(val) => setActiveTab(val as any)}
             options={[
               { value: 'base', label: 'Base' },
-              { value: 'inlay', label: 'Inlay' },
-              { value: 'geometry', label: 'Geometry' }
+              { value: 'inlay', label: 'Inlay', disabled: colorFlowActive },
+              { value: 'colorflow', label: 'ColorFlow' },
+              { value: 'geometry', label: 'Geometry' },
             ]}
           />
         </div>
@@ -396,11 +431,25 @@ const Controls: React.FC<ControlsProps> = ({
 
             <Freeze freeze={activeTab !== 'geometry'}>
                 <div className={activeTab === 'geometry' ? 'block' : 'hidden'}>
-                    <GeometryControls 
+                    <GeometryControls
                         settings={geometrySettings}
                         updateSettings={updateGeom}
                         baseSize={baseSettings.size}
                         onPatternAssetChanged={handlePatternAssetChanged}
+                    />
+                </div>
+            </Freeze>
+
+            <Freeze freeze={activeTab !== 'colorflow'}>
+                <div className={activeTab === 'colorflow' ? 'block' : 'hidden'}>
+                    <ColorFlowControls
+                        baseSettings={baseSettings}
+                        setBaseSettings={setBaseSettings}
+                        settings={colorFlowSettings}
+                        setSettings={setColorFlowSettings}
+                        onGeometryReady={onColorFlowGeomReady}
+                        onImageAssetChanged={onColorFlowImageAssetChanged}
+                        initialImageAsset={initialColorFlowImageAsset}
                     />
                 </div>
             </Freeze>

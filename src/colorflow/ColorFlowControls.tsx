@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { type BaseSettings } from '../types/schemas';
-import type { ProjectDataV2 } from '../types/schemas';
 import { type ColorFlowSettings } from './schema';
 import { OUTLINE_LIBRARY, getOutlineBySlug } from './outlineLibrary';
 import { parseShapeFile } from '../utils/shapeLoader';
@@ -12,8 +11,6 @@ import type { ExtrudedGeometry } from './pipeline/extrude';
 import type { Response as WorkerResponse, TracedLayerEntry } from './workerProtocol';
 import { build3MF } from './threeMfWriter';
 import { useAlert } from '../context/AlertContext';
-import { importProjectBundle } from '../utils/projectUtils';
-import type { ProjectAssets } from '../utils/projectUtils';
 
 interface Props {
   baseSettings: BaseSettings;
@@ -26,17 +23,13 @@ interface Props {
   onImageAssetChanged?: (asset: { name: string; bytes: ArrayBuffer } | null) => void;
   /** Hydrate a saved image asset from an imported project bundle. */
   initialImageAsset?: { name: string; bytes: ArrayBuffer } | null;
-  /** Called when the user imports a project bundle from the ColorFlow panel. */
-  onProjectImported?: (data: ProjectDataV2, assets: ProjectAssets) => void;
-  /** Called when the user clicks Export Project in the ColorFlow panel. */
-  onExportProject?: () => void;
 }
 
 const SIMPLIFY_LABELS = ['off', 'light', 'medium', 'strong', 'max'] as const;
 const DETAIL_LABELS = ['sharp', 'balanced', 'smooth'] as const;
 const MAX_IMG_DIM = 1500;
 
-export const ColorFlowControls: React.FC<Props> = ({ baseSettings, setBaseSettings, settings, setSettings, onGeometryReady, onImageAssetChanged, initialImageAsset, onProjectImported, onExportProject }) => {
+export const ColorFlowControls: React.FC<Props> = ({ baseSettings, setBaseSettings, settings, setSettings, onGeometryReady, onImageAssetChanged, initialImageAsset }) => {
   const { request, status } = useColorFlowWorker();
   const { showAlert } = useAlert();
 
@@ -268,12 +261,7 @@ export const ColorFlowControls: React.FC<Props> = ({ baseSettings, setBaseSettin
   const _dropRef = useRef<HTMLDivElement>(null);
 
   return (
-    <div className="bg-gray-800 md:rounded-lg md:border border-gray-700 shadow-lg flex-1 min-h-0 flex flex-col overflow-y-auto">
-      <div className="p-6 space-y-6">
-        <h2 className="text-xl font-bold bg-gradient-to-r from-purple-400 to-cyan-400 bg-clip-text text-transparent">
-          GrippySheet · ColorFlow
-        </h2>
-
+    <div className="space-y-6">
         <section>
           <h3 className="text-xs uppercase tracking-widest text-gray-400 mb-2">① Outline</h3>
           <select
@@ -398,36 +386,6 @@ export const ColorFlowControls: React.FC<Props> = ({ baseSettings, setBaseSettin
           </section>
         )}
 
-        <div className="grid grid-cols-2 gap-2 mt-6 pt-4 border-t border-gray-700">
-          <button
-            onClick={async () => {
-              const input = document.createElement('input');
-              input.type = 'file';
-              input.accept = '.zip';
-              input.onchange = async (e) => {
-                const f = (e.target as HTMLInputElement).files?.[0];
-                if (!f) return;
-                try {
-                  const { data, importedAssets } = await importProjectBundle(f);
-                  onProjectImported?.(data, importedAssets ?? {});
-                } catch (err) {
-                  showAlert({ title: 'Import failed', message: String(err), type: 'error' });
-                }
-              };
-              input.click();
-            }}
-            className="text-xs bg-gray-700 hover:bg-gray-600 rounded py-2"
-          >
-            Import Project
-          </button>
-          <button
-            onClick={() => onExportProject?.()}
-            className="text-xs bg-gray-700 hover:bg-gray-600 rounded py-2"
-          >
-            Export Project
-          </button>
-        </div>
-      </div>
     </div>
   );
 };
