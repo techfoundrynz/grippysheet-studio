@@ -115,14 +115,20 @@ const App = () => {
     });
   }, [colorFlowGeom?.source, geometrySettings, colorFlowSettings.spikeMaxMm, colorFlowSettings.spikeColorMatch]);
 
-  // When the underlying source (image quantize / outline / etc.) changes, any
-  // existing spikes reference the old color polygons. Drop them so the user
-  // doesn't see misaligned bumps until they regenerate.
+  // When the underlying source changes by VALUE (palette length, base
+  // thickness, layer count), existing spikes reference the old color polygons
+  // — drop them so the user doesn't see misaligned bumps until they
+  // regenerate. We key by content not reference so the post-Generate render
+  // (which produces a new but equivalent source object) doesn't trigger a
+  // false-positive clear and wipe the spikes we just generated.
+  const sourceShape = colorFlowGeom?.source
+    ? `${colorFlowGeom.source.palette.length}|${colorFlowGeom.source.stackOrder.join(',')}|${colorFlowGeom.source.baseMm}|${colorFlowGeom.source.colorLayerMm}`
+    : null;
   React.useEffect(() => {
     setSpikeGroups([]);
     setSpikeDiag('');
     setGeneratedSpikeInputsKey(null);
-  }, [colorFlowGeom?.source]);
+  }, [sourceShape]);
 
   const canGenerateSpikes = !!colorFlowGeom?.source && !!geometrySettings.patternShapes?.[0];
   const spikesStale = canGenerateSpikes && currentSpikeInputsKey !== generatedSpikeInputsKey;
