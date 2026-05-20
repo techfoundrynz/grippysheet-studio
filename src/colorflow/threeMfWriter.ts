@@ -4,6 +4,13 @@ import type { ExtrudedGeometry } from './pipeline/extrude';
 export interface MeshPart {
   name: string;
   mesh: ExtrudedGeometry;
+  /**
+   * Display color for this part as `"#RRGGBB"` (or `"#RRGGBBAA"`).
+   * Emitted into the 3MF Materials and Properties extension so slicers
+   * (BambuStudio / OrcaSlicer / PrusaSlicer) show the part in its
+   * assigned color and can auto-map it to a filament profile by name.
+   */
+  color: string;
 }
 
 function escapeXml(s: string): string {
@@ -14,12 +21,23 @@ function escapeXml(s: string): string {
 
 function buildModelXml(parts: MeshPart[], assemblyName: string): string {
   let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
-  xml += '<model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">\n';
+  xml += '<model unit="millimeter" xml:lang="en-US"';
+  xml += ' xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02"';
+  xml += ' xmlns:m="http://schemas.microsoft.com/3dmanufacturing/material/2015/02">\n';
   xml += '<metadata name="Application">GrippySheet ColorFlow</metadata>\n';
   xml += '<resources>\n';
 
+  // Materials block — one <m:base> per part. The pid+p1 on each triangle
+  // (below) references this group's id ("1") and the part's index here.
+  xml += '<m:basematerials id="1">';
+  parts.forEach((p) => {
+    xml += `<m:base name="${escapeXml(p.name)}" displaycolor="${escapeXml(p.color)}"/>`;
+  });
+  xml += '</m:basematerials>\n';
+
   parts.forEach((p, i) => {
     const id = i + 1;
+    const matIndex = i;
     xml += `<object id="${id}" type="model" name="${escapeXml(p.name)}"><mesh><vertices>`;
     const positions = p.mesh.positions;
     const n = positions.length / 3;
@@ -32,7 +50,7 @@ function buildModelXml(parts: MeshPart[], assemblyName: string): string {
     xml += '</vertices><triangles>';
     const indices = p.mesh.indices;
     for (let t = 0; t < indices.length; t += 3) {
-      xml += `<triangle v1="${indices[t]}" v2="${indices[t + 1]}" v3="${indices[t + 2]}"/>`;
+      xml += `<triangle v1="${indices[t]}" v2="${indices[t + 1]}" v3="${indices[t + 2]}" pid="1" p1="${matIndex}"/>`;
     }
     xml += '</triangles></mesh></object>\n';
   });
@@ -49,7 +67,9 @@ function buildModelXml(parts: MeshPart[], assemblyName: string): string {
 }
 
 /**
- * Pack a list of named meshes + a parent assembly into a Bambu-compatible 3MF blob.
+ * Pack a list of named, colored meshes + a parent assembly into a Bambu-
+ * compatible 3MF blob with the 3MF Materials and Properties extension
+ * for filament-color hints.
  */
 export async function build3MF(parts: MeshPart[], assemblyName: string): Promise<Blob> {
   if (parts.length === 0) throw new Error('build3MF: no parts');
