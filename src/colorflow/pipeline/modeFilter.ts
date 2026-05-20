@@ -6,7 +6,8 @@ export const SIMPLIFY_KERNELS: readonly number[] = [0, 3, 5, 9, 15];
  * most common category in a kernelSize x kernelSize window. Treats 0xFFFF
  * (transparent) as its own category so it can be smoothed too.
  *
- * Returns a new Uint16Array (input is unchanged).
+ * Returns a new Uint16Array for kernelSize >= 1. For kernelSize === 0 the input
+ * is returned by reference (callers should not mutate the result they receive).
  */
 export function modeFilter(
   assignments: Uint16Array,
