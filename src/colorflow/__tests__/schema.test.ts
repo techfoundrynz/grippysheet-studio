@@ -13,6 +13,7 @@ describe('ColorFlowSettingsSchema', () => {
     expect(parsed.totalMm).toBe(2.0);
     expect(parsed.baseMm).toBe(1.0);
     expect(parsed.outlineSlug).toBeNull();
+    expect(parsed.colorLayerHeights).toEqual([]);
   });
 
   it('defaultColorFlowSettings matches the schema defaults', () => {

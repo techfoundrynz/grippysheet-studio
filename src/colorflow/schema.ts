@@ -18,6 +18,8 @@ export const ColorFlowSettingsSchema = z.object({
   sort: z.enum(['luma', 'coverage']).default('luma'),
   totalMm: z.number().min(0.4).max(10).default(2.0),
   baseMm: z.number().min(0.2).max(5).default(1.0),
+  /** Per-palette-index extrusion height in mm. Empty array = equal split. */
+  colorLayerHeights: z.array(z.number().min(0.05)).default([]),
 });
 
 export type ColorFlowSettings = z.infer<typeof ColorFlowSettingsSchema>;

@@ -128,6 +128,11 @@ export const ColorFlowControls: React.FC<Props> = ({ baseSettings, setBaseSettin
         if (cancelled || resp.kind !== 'quantized') return;
         setPalette(resp.palette);
         setAssignments(resp.assignments);
+        setSettings((s) => {
+          if (s.colorLayerHeights.length === resp.palette.length) return s;
+          const each = (s.totalMm - s.baseMm) / resp.palette.length;
+          return { ...s, colorLayerHeights: new Array(resp.palette.length).fill(+each.toFixed(2)) };
+        });
       } catch (err) {
         showAlert({ title: 'Quantization failed', message: String(err), type: 'error' });
       }
@@ -192,6 +197,7 @@ export const ColorFlowControls: React.FC<Props> = ({ baseSettings, setBaseSettin
           outline: outlineInMm,
           baseMm: settings.baseMm,
           totalMm: settings.totalMm,
+          colorLayerHeights: settings.colorLayerHeights,
         });
         if (cancelled || resp.kind !== 'extruded') return;
         if (onGeometryReady) {
@@ -206,7 +212,7 @@ export const ColorFlowControls: React.FC<Props> = ({ baseSettings, setBaseSettin
       }
     })();
     return () => { cancelled = true; };
-  }, [layers, outlinePolygon, imageDims, settings.baseMm, settings.totalMm, request, palette, onGeometryReady, showAlert]);
+  }, [layers, outlinePolygon, imageDims, settings.baseMm, settings.totalMm, settings.colorLayerHeights, request, palette, onGeometryReady, showAlert]);
 
   // --- 3MF export ---
   const handleExport3MF = useCallback(async () => {
@@ -236,6 +242,7 @@ export const ColorFlowControls: React.FC<Props> = ({ baseSettings, setBaseSettin
       const resp = await request<Extract<WorkerResponse, { kind: 'extruded' }>>({
         kind: 'extrude', layers: layersInMm, outline: outlineInMm,
         baseMm: settings.baseMm, totalMm: settings.totalMm,
+        colorLayerHeights: settings.colorLayerHeights,
       });
       const parts = [{ name: 'base', mesh: resp.baseGeom }];
       resp.layerGeoms.forEach(({ centroidIndex, geom }: { centroidIndex: number; geom: ExtrudedGeometry }, i: number) => {
@@ -372,17 +379,52 @@ export const ColorFlowControls: React.FC<Props> = ({ baseSettings, setBaseSettin
 
         {palette.length > 0 && (
           <section>
-            <h3 className="text-xs uppercase tracking-widest text-gray-400 mb-2">Layers</h3>
-            <div className="grid grid-cols-2 gap-2">
-              {palette.map((c) => (
-                <div key={c.index} className="bg-gray-900 border border-gray-700 rounded p-2 text-xs">
-                  <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded" style={{ background: `rgb(${c.r},${c.g},${c.b})` }} />
-                    <div className="font-mono">#{c.r.toString(16).padStart(2,'0')}{c.g.toString(16).padStart(2,'0')}{c.b.toString(16).padStart(2,'0')}</div>
+            <h3 className="text-xs uppercase tracking-widest text-gray-400 mb-2">Color Layers (Z-stacked)</h3>
+            <p className="text-[10px] text-gray-500 mb-2">
+              Layer 1 sits directly on the base; later layers stack on top.
+              Sum of heights {settings.colorLayerHeights.reduce((s, h) => s + h, 0).toFixed(2)}mm
+              / max {(settings.totalMm - settings.baseMm).toFixed(2)}mm.
+            </p>
+            <div className="space-y-2">
+              {palette.map((c, i) => {
+                const hex = `#${c.r.toString(16).padStart(2,'0')}${c.g.toString(16).padStart(2,'0')}${c.b.toString(16).padStart(2,'0')}`;
+                const height = settings.colorLayerHeights[i] ?? 0;
+                return (
+                  <div key={c.index} className="flex items-center gap-2 bg-gray-900 border border-gray-700 rounded p-2 text-xs">
+                    <div className="w-6 h-6 rounded flex-shrink-0" style={{ background: hex }} />
+                    <div className="font-mono text-gray-300 w-20">{hex.toUpperCase()}</div>
+                    <div className="text-gray-500 text-[10px] flex-1">layer {i + 1}</div>
+                    <input
+                      type="number"
+                      step={0.05}
+                      min={0.05}
+                      max={settings.totalMm - settings.baseMm}
+                      value={height}
+                      onChange={(e) => {
+                        const v = Math.max(0.05, +e.target.value);
+                        setSettings((s) => {
+                          const next = [...s.colorLayerHeights];
+                          while (next.length < palette.length) next.push(0);
+                          next[i] = v;
+                          return { ...s, colorLayerHeights: next };
+                        });
+                      }}
+                      className="w-16 bg-gray-800 border border-gray-700 rounded px-1 py-0.5 text-center"
+                    />
+                    <span className="text-gray-500">mm</span>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
+            <button
+              onClick={() => {
+                const each = (settings.totalMm - settings.baseMm) / palette.length;
+                setSettings((s) => ({ ...s, colorLayerHeights: new Array(palette.length).fill(+each.toFixed(2)) }));
+              }}
+              className="mt-2 text-[10px] text-blue-400 hover:underline"
+            >
+              Reset to equal heights
+            </button>
           </section>
         )}
 

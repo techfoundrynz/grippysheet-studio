@@ -31,7 +31,10 @@ export type Request =
   | { id: number; kind: 'trace'; assignments: Uint16Array; palette: Centroid[];
       width: number; height: number; opts: TraceOptsWire }
   | { id: number; kind: 'extrude'; layers: TracedLayerEntry[]; outline: LayerPolygon;
-      baseMm: number; totalMm: number };
+      baseMm: number; totalMm: number;
+      /** Per-palette-index heights in mm, in centroidIndex order. If length < palette,
+       *  missing entries fall back to equal distribution of remaining space. */
+      colorLayerHeights: number[] };
 
 export type Response =
   | { id: number; kind: 'progress'; phase: string }
