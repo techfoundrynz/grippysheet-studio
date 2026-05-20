@@ -9,7 +9,9 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "deploy:gh": "gh-pages -d dist"
+    "deploy:gh": "gh-pages -d dist",
+    "test": "vitest",
+    "test:run": "vitest run"
   },
   "dependencies": {
     "@icons-pack/react-simple-icons": "^13.1.0",
@@ -55,7 +57,8 @@
     "tailwindcss": "^3.4.1",
     "typescript": "^5.5.3",
     "typescript-eslint": "^8.3.0",
-    "vite": "^5.4.2"
+    "vite": "^5.4.2",
+    "vitest": "^2.0.0"
   },
   "packageManager": "pnpm@10.20.0+sha256.47a3352808501b8d1ef20112273b6a5dcfa53d28a55bcce36d268e878bd6bfe9"
 }
