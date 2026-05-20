@@ -6,6 +6,8 @@ import {
   outlineCanvasSize,
   pixelToMmOnOutlineCanvas,
   buildOutlineCanvasMask,
+  transformOutlinePolygon,
+  type OutlinePolygon,
 } from '../outlineToPolygon';
 
 function unitSquare(): THREE.Shape {
@@ -71,6 +73,53 @@ describe('pixelToMmOnOutlineCanvas', () => {
     expect(tl[1]).toBeCloseTo(40);
     expect(br[0]).toBeCloseTo(30);
     expect(br[1]).toBeCloseTo(20);
+  });
+});
+
+describe('transformOutlinePolygon', () => {
+  const square: OutlinePolygon = {
+    outer: [[0, 0], [10, 0], [10, 5], [0, 5]],
+    holes: [],
+    minX: 0, minY: 0, maxX: 10, maxY: 5,
+  };
+
+  it('returns the input by reference when rotation=0 and mirror=false', () => {
+    expect(transformOutlinePolygon(square, 0, false)).toBe(square);
+  });
+
+  it('rotates 90 degrees CCW, swapping bbox dims', () => {
+    const out = transformOutlinePolygon(square, 90, false);
+    // (10, 0) → (0, 10);  (0, 5) → (-5, 0); etc.
+    expect(out.maxX - out.minX).toBeCloseTo(5);
+    expect(out.maxY - out.minY).toBeCloseTo(10);
+  });
+
+  it('mirrors across the Y axis when mirror=true', () => {
+    const out = transformOutlinePolygon(square, 0, true);
+    expect(out.minX).toBeCloseTo(-10);
+    expect(out.maxX).toBeCloseTo(0);
+    expect(out.minY).toBeCloseTo(0);
+    expect(out.maxY).toBeCloseTo(5);
+  });
+
+  it('applies mirror first, then rotation', () => {
+    // Mirror + 90° rotation: (10, 0) → (-10, 0) → (0, -10)
+    const out = transformOutlinePolygon(square, 90, true);
+    // After: x ∈ [-5, 0], y ∈ [-10, 0]
+    expect(out.minX).toBeCloseTo(-5);
+    expect(out.maxX).toBeCloseTo(0);
+    expect(out.minY).toBeCloseTo(-10);
+    expect(out.maxY).toBeCloseTo(0);
+  });
+
+  it('transforms hole points alongside outer ring', () => {
+    const withHole: OutlinePolygon = {
+      outer: [[0, 0], [10, 0], [10, 10], [0, 10]],
+      holes: [[[3, 3], [7, 3], [7, 7], [3, 7]]],
+      minX: 0, minY: 0, maxX: 10, maxY: 10,
+    };
+    const out = transformOutlinePolygon(withHole, 0, true);
+    expect(out.holes[0][0][0]).toBeCloseTo(-3);
   });
 });
 

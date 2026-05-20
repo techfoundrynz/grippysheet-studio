@@ -57,6 +57,37 @@ export function shapeToPolygon(shape: THREE.Shape, divisions = 64): OutlinePolyg
 }
 
 /**
+ * Apply rotation (degrees, CCW) and X-mirror to every point of an OutlinePolygon,
+ * recomputing the bounding box. Mirror is applied first, then rotation — same
+ * order as the Base mesh transforms in ImperativeModel.
+ */
+export function transformOutlinePolygon(
+  polygon: OutlinePolygon,
+  rotationDeg: number,
+  mirror: boolean,
+): OutlinePolygon {
+  if (rotationDeg === 0 && !mirror) return polygon;
+  const rad = (rotationDeg * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  const transform = ([x, y]: [number, number]): [number, number] => {
+    const mx = mirror ? -x : x;
+    return [mx * cos - y * sin, mx * sin + y * cos];
+  };
+  const outer = polygon.outer.map(transform);
+  const holes = polygon.holes.map((h) => h.map(transform));
+
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const [x, y] of outer) {
+    if (x < minX) minX = x;
+    if (x > maxX) maxX = x;
+    if (y < minY) minY = y;
+    if (y > maxY) maxY = y;
+  }
+  return { outer, holes, minX, minY, maxX, maxY };
+}
+
+/**
  * Pixel → mm on the outline-anchored canvas. Canvas Y is down; world Y is up,
  * so Y is flipped relative to maxY. Outline (minX, maxY) sits at canvas (0, 0).
  */
