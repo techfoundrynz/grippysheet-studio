@@ -451,6 +451,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
                 baseGeom={colorFlowGeom?.base ?? null}
                 layers={colorFlowGeom?.layers ?? []}
                 displayMode={displayMode}
+                baseColor={color}
               />
             ) : (
               <ImperativeModel

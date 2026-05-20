@@ -7,6 +7,8 @@ interface Props {
   baseGeom: ExtrudedGeometry | null;
   layers: Array<{ centroid: Centroid; position: number; geom: ExtrudedGeometry }>;
   displayMode?: 'normal' | 'toon';
+  /** Hex color string (or any THREE.Color-compatible) for the base mesh material. */
+  baseColor?: string;
 }
 
 function makeBufferGeom(g: ExtrudedGeometry): THREE.BufferGeometry {
@@ -17,7 +19,7 @@ function makeBufferGeom(g: ExtrudedGeometry): THREE.BufferGeometry {
   return geom;
 }
 
-export const ColorFlowModel = React.forwardRef<THREE.Group, Props>(({ baseGeom, layers, displayMode = 'normal' }, ref) => {
+export const ColorFlowModel = React.forwardRef<THREE.Group, Props>(({ baseGeom, layers, displayMode = 'normal', baseColor }, ref) => {
   const localGroupRef = useRef<THREE.Group>(null);
 
   React.useImperativeHandle(ref, () => localGroupRef.current!, []);
@@ -36,11 +38,12 @@ export const ColorFlowModel = React.forwardRef<THREE.Group, Props>(({ baseGeom, 
     group.name = 'ColorFlowAssembly';
 
     if (baseGeom) {
+      const color = baseColor ?? '#dddddd';
       const mesh = new THREE.Mesh(
         makeBufferGeom(baseGeom),
         displayMode === 'toon'
-          ? new THREE.MeshToonMaterial({ color: 0xdddddd })
-          : new THREE.MeshStandardMaterial({ color: 0xdddddd }),
+          ? new THREE.MeshToonMaterial({ color })
+          : new THREE.MeshStandardMaterial({ color }),
       );
       mesh.name = 'Base';
       group.add(mesh);
@@ -65,7 +68,7 @@ export const ColorFlowModel = React.forwardRef<THREE.Group, Props>(({ baseGeom, 
         }
       });
     };
-  }, [baseGeom, layers, displayMode]);
+  }, [baseGeom, layers, displayMode, baseColor]);
 
   return <group ref={localGroupRef} />;
 });
