@@ -25,6 +25,7 @@ function drawPreview(
   const ctx = canvas.getContext('2d')!;
   ctx.fillStyle = '#111827';
   ctx.fillRect(0, 0, size.w, size.h);
+
   const { dx, dy, w, h } = computeImageDrawCoords({
     imageW: imageBitmap.width,
     imageH: imageBitmap.height,
@@ -34,34 +35,53 @@ function drawPreview(
     scale,
     pxPerMm: CANVAS_PX_PER_MM,
   });
-  ctx.drawImage(imageBitmap, dx, dy, w, h);
 
-  // Outline overlay (dashed amber, like the original colorflow.html)
+  // mm → canvas-px transform shared by the clip path and the dashed overlay.
   const wMm = outline.maxX - outline.minX;
   const hMm = outline.maxY - outline.minY;
   const sx = size.w / wMm;
   const sy = size.h / hMm;
+  const buildOutlinePath = () => {
+    const path = new Path2D();
+    if (outline.outer.length > 0) {
+      const [ox, oy] = outline.outer[0];
+      path.moveTo(ox, oy);
+      for (let i = 1; i < outline.outer.length; i++) path.lineTo(outline.outer[i][0], outline.outer[i][1]);
+      path.closePath();
+    }
+    for (const hole of outline.holes) {
+      if (hole.length < 3) continue;
+      const [hx, hy] = hole[0];
+      path.moveTo(hx, hy);
+      for (let i = 1; i < hole.length; i++) path.lineTo(hole[i][0], hole[i][1]);
+      path.closePath();
+    }
+    return path;
+  };
+
+  // Faint full-bbox image so user can see what lies OUTSIDE the outline (gets clipped on print).
+  ctx.save();
+  ctx.globalAlpha = 0.15;
+  ctx.drawImage(imageBitmap, dx, dy, w, h);
+  ctx.restore();
+
+  // Full-opacity image clipped to the actual outline shape — this is what will print.
+  ctx.save();
+  ctx.translate(-outline.minX * sx, -outline.minY * sy);
+  ctx.scale(sx, sy);
+  ctx.clip(buildOutlinePath(), 'evenodd');
+  ctx.setTransform(1, 0, 0, 1, 0, 0); // back to canvas-px space so dx/dy/w/h apply correctly
+  ctx.drawImage(imageBitmap, dx, dy, w, h);
+  ctx.restore();
+
+  // Dashed amber outline overlay on top.
   ctx.save();
   ctx.translate(-outline.minX * sx, -outline.minY * sy);
   ctx.scale(sx, sy);
   ctx.strokeStyle = '#f59e0b';
   ctx.lineWidth = 1.5 / Math.min(sx, sy);
   ctx.setLineDash([4 / Math.min(sx, sy), 3 / Math.min(sx, sy)]);
-  ctx.beginPath();
-  const [ox, oy] = outline.outer[0];
-  ctx.moveTo(ox, oy);
-  for (let i = 1; i < outline.outer.length; i++) ctx.lineTo(outline.outer[i][0], outline.outer[i][1]);
-  ctx.closePath();
-  ctx.stroke();
-  for (const hole of outline.holes) {
-    if (hole.length < 3) continue;
-    ctx.beginPath();
-    const [hx, hy] = hole[0];
-    ctx.moveTo(hx, hy);
-    for (let i = 1; i < hole.length; i++) ctx.lineTo(hole[i][0], hole[i][1]);
-    ctx.closePath();
-    ctx.stroke();
-  }
+  ctx.stroke(buildOutlinePath());
   ctx.restore();
 }
 
