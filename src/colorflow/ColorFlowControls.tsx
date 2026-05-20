@@ -27,6 +27,7 @@ import { generateTilePositions } from '../utils/patternUtils';
 import type { ExtrudedGeometry } from './pipeline/extrude';
 import type { Response as WorkerResponse, TracedLayerEntry, ExtrudedLayerEntry } from './workerProtocol';
 import { useAlert } from '../context/AlertContext';
+import { eventBus } from '../utils/eventBus';
 
 export interface SpikeGroup {
   centroidIndex: number; // -1 = no color underneath
@@ -87,6 +88,12 @@ export const ColorFlowControls: React.FC<Props> = ({ baseSettings, geometrySetti
   const [assignments, setAssignments] = useState<Uint16Array | null>(null);
   const [layers, setLayers] = useState<TracedLayerEntry[]>([]);
   const [coverage, setCoverage] = useState<number[]>([]);
+  const [spikeDiag, setSpikeDiag] = useState<string>('');
+
+  // Broadcast worker activity so the 3D viewer can show a spinner.
+  useEffect(() => {
+    eventBus.emit('colorflow:processing', !!status.phase);
+  }, [status.phase]);
 
   // Apply Base tab's rotation + mirror to the polygon used for canvas, mask, and extrusion.
   const outlinePolygon = useMemo<OutlinePolygon | null>(() => {
@@ -227,12 +234,19 @@ export const ColorFlowControls: React.FC<Props> = ({ baseSettings, geometrySetti
         // Build spike overlay if a pattern shape is configured.
         const spikes: SpikeGroup[] = [];
         const patternShape = geometrySettings.patternShapes?.[0];
-        if (patternShape instanceof THREE.Shape) {
+        let diag = '';
+        if (!patternShape) {
+          diag = 'no pattern tile configured in Geometry tab';
+        } else if (!(patternShape instanceof THREE.Shape)) {
+          diag = `pattern shape type unsupported for spikes (${(patternShape as object).constructor?.name ?? 'unknown'})`;
+        } else {
           const tilePoly = shapeToPolygon(patternShape, 32);
           const patternScale = geometrySettings.patternScale ?? 1;
           const tileWidth = (tilePoly.maxX - tilePoly.minX) * patternScale;
           const tileHeight = (tilePoly.maxY - tilePoly.minY) * patternScale;
-          if (tileWidth > 0.05 && tileHeight > 0.05) {
+          if (tileWidth < 0.05 || tileHeight < 0.05) {
+            diag = `pattern tile too small (${tileWidth.toFixed(2)}×${tileHeight.toFixed(2)}mm)`;
+          } else {
             const tileBounds = new THREE.Box2(
               new THREE.Vector2(outlinePolygon.minX, outlinePolygon.minY),
               new THREE.Vector2(outlinePolygon.maxX, outlinePolygon.maxY),
@@ -274,8 +288,10 @@ export const ColorFlowControls: React.FC<Props> = ({ baseSettings, geometrySetti
                 : fallback;
               spikes.push({ ...group, color });
             }
+            diag = `${rawTiles.length} tiles raw, ${tilesInOutline.length} inside outline, ${groups.length} color groups, top ${spikeTopMm.toFixed(2)}mm`;
           }
         }
+        if (!cancelled) setSpikeDiag(diag);
 
         if (onGeometryReady) {
           const pairs = resp.layerGeoms.map((entry: ExtrudedLayerEntry) => ({
@@ -497,6 +513,9 @@ export const ColorFlowControls: React.FC<Props> = ({ baseSettings, geometrySetti
                 <p className="text-[10px] text-gray-500 mt-2">
                   resolved spike top: {effectiveSpikeMaxMm(settings.spikeMaxMm, baseMm, palette.length, settings.colorLayerMm).toFixed(2)}mm
                 </p>
+                {spikeDiag && (
+                  <p className="text-[10px] text-blue-400 mt-1 font-mono">{spikeDiag}</p>
+                )}
               </>
             ) : (
               <p className="text-[10px] text-gray-500">
@@ -592,10 +611,17 @@ export const ColorFlowControls: React.FC<Props> = ({ baseSettings, geometrySetti
           </p>
         </section>
 
-        <div className="text-xs text-gray-500 min-h-[20px]">
-          {status.phase && <span>working: {status.phase}</span>}
+        <div className="text-xs min-h-[24px]">
+          {status.phase && (
+            <span className="inline-flex items-center gap-2 text-blue-400 bg-blue-900/20 border border-blue-700/40 rounded px-2 py-1">
+              <span className="inline-block w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
+              working: {status.phase}…
+            </span>
+          )}
           {status.error && <span className="text-red-400">error: {status.error}</span>}
-          {!status.phase && !status.error && palette.length > 0 && <span>ready · {palette.length} colors traced</span>}
+          {!status.phase && !status.error && palette.length > 0 && (
+            <span className="text-green-400">ready · {palette.length} colors traced</span>
+          )}
         </div>
 
 

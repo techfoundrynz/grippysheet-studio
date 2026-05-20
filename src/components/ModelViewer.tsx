@@ -16,6 +16,7 @@ import { generateTilePositions, getShapesBounds } from '../utils/patternUtils';
 import { ColorFlowModel } from '../colorflow/ColorFlowModel';
 import type { Centroid } from '../colorflow/pipeline/quantize';
 import type { ExtrudedGeometry } from '../colorflow/pipeline/extrude';
+import { eventBus } from '../utils/eventBus';
 
 interface ModelViewerProps {
   mode?: 'pattern' | 'colorflow';
@@ -89,6 +90,12 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
   const [debugState, setDebugState] = useState({ pattern: false, holes: false, inlay: false });
   const [showDebugMenu, setShowDebugMenu] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isColorFlowProcessing, setIsColorFlowProcessing] = useState(false);
+
+  // Listen for ColorFlow worker activity so the spinner overlay reflects it too.
+  useEffect(() => {
+    return eventBus.on('colorflow:processing', (busy: boolean) => setIsColorFlowProcessing(busy));
+  }, []);
   const fpsRef = React.useRef<HTMLDivElement>(null);
   const [showScreenshotModal, setShowScreenshotModal] = useState(false);
   const captureRef = React.useRef<((bgColor: string | null) => void) | null>(null);
@@ -410,7 +417,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
         </button>
       </div>
 
-      {isProcessing && (
+      {(isProcessing || isColorFlowProcessing) && (
           <div className="absolute top-4 right-4 z-20 p-2 bg-gray-800/80 backdrop-blur rounded-lg border border-gray-700 text-blue-400">
              <Spinner size={24} />
           </div>
