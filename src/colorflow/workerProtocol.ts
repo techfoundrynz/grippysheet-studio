@@ -25,16 +25,23 @@ export interface TracedLayerEntry {
   polygon: LayerPolygon;
 }
 
+export interface ExtrudedLayerEntry {
+  centroidIndex: number;
+  /** Position in the stack (0 = nearest to base). */
+  position: number;
+  geom: TransferredGeom;
+}
+
 export type Request =
   | { id: number; kind: 'quantize'; image: ImageBitmap; mask: Uint8Array | null;
       width: number; height: number; opts: QuantizeOpts }
   | { id: number; kind: 'trace'; assignments: Uint16Array; palette: Centroid[];
       width: number; height: number; opts: TraceOptsWire }
   | { id: number; kind: 'extrude'; layers: TracedLayerEntry[]; outline: LayerPolygon;
-      baseMm: number; totalMm: number;
-      /** Per-palette-index heights in mm, in centroidIndex order. If length < palette,
-       *  missing entries fall back to equal distribution of remaining space. */
-      colorLayerHeights: number[] };
+      baseMm: number; colorLayerMm: number;
+      /** Palette indices in stack order. layerGeoms in the response are emitted
+       *  in this order; downstream consumers don't need to re-sort. */
+      stackOrder: number[] };
 
 export type Response =
   | { id: number; kind: 'progress'; phase: string }
@@ -42,5 +49,5 @@ export type Response =
       previewSvg: string }
   | { id: number; kind: 'traced'; layers: TracedLayerEntry[]; layerSvgs: Record<number, string>;
       combinedSvg: string }
-  | { id: number; kind: 'extruded'; baseGeom: TransferredGeom; layerGeoms: { centroidIndex: number; geom: TransferredGeom }[] }
+  | { id: number; kind: 'extruded'; baseGeom: TransferredGeom; layerGeoms: ExtrudedLayerEntry[] }
   | { id: number; kind: 'error'; phase: string; message: string };
