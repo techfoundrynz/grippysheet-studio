@@ -20,66 +20,97 @@ function makeBufferGeom(g: ExtrudedGeometry): THREE.BufferGeometry {
   return geom;
 }
 
+function makeMaterial(color: THREE.ColorRepresentation, displayMode: 'normal' | 'toon') {
+  return displayMode === 'toon'
+    ? new THREE.MeshToonMaterial({ color })
+    : new THREE.MeshStandardMaterial({ color, flatShading: true });
+}
+
+function disposeMeshArray(meshes: THREE.Mesh[]) {
+  for (const m of meshes) {
+    m.geometry.dispose();
+    if (m.material instanceof THREE.Material) m.material.dispose();
+    m.parent?.remove(m);
+  }
+}
+
+/**
+ * Per-section mesh management: the base, colors, and spikes each maintain
+ * their own refs and re-render independently. So bumping just the spike-related
+ * settings doesn't churn the base + color GPU buffers, and changing baseColor
+ * doesn't re-upload the color/spike geometries either.
+ */
 export const ColorFlowModel = React.forwardRef<THREE.Group, Props>(({ baseGeom, layers, spikes = [], displayMode = 'normal', baseColor }, ref) => {
   const localGroupRef = useRef<THREE.Group>(null);
+  const baseRef = useRef<THREE.Mesh | null>(null);
+  const layerMeshesRef = useRef<THREE.Mesh[]>([]);
+  const spikeMeshesRef = useRef<THREE.Mesh[]>([]);
 
   React.useImperativeHandle(ref, () => localGroupRef.current!, []);
 
+  // Set the group name once on mount.
+  useEffect(() => {
+    if (localGroupRef.current) localGroupRef.current.name = 'ColorFlowAssembly';
+  }, []);
+
+  // Base mesh: depends on baseGeom + baseColor + displayMode only.
   useEffect(() => {
     const group = localGroupRef.current;
     if (!group) return;
-    // Dispose & clear
-    group.traverse((obj) => {
-      if (obj instanceof THREE.Mesh) {
-        obj.geometry.dispose();
-        if (obj.material instanceof THREE.Material) obj.material.dispose();
-      }
-    });
-    while (group.children.length) group.remove(group.children[0]);
-    group.name = 'ColorFlowAssembly';
-
+    if (baseRef.current) {
+      disposeMeshArray([baseRef.current]);
+      baseRef.current = null;
+    }
     if (baseGeom) {
-      const color = baseColor ?? '#dddddd';
-      const mesh = new THREE.Mesh(
-        makeBufferGeom(baseGeom),
-        displayMode === 'toon'
-          ? new THREE.MeshToonMaterial({ color })
-          : new THREE.MeshStandardMaterial({ color, flatShading: true }),
-      );
+      const mesh = new THREE.Mesh(makeBufferGeom(baseGeom), makeMaterial(baseColor ?? '#dddddd', displayMode));
       mesh.name = 'Base';
       group.add(mesh);
+      baseRef.current = mesh;
     }
-    for (let i = 0; i < layers.length; i++) {
-      const { centroid: c, position, geom } = layers[i];
+    return () => {
+      if (baseRef.current) {
+        disposeMeshArray([baseRef.current]);
+        baseRef.current = null;
+      }
+    };
+  }, [baseGeom, baseColor, displayMode]);
+
+  // Color layer meshes: depend on layers + displayMode only.
+  useEffect(() => {
+    const group = localGroupRef.current;
+    if (!group) return;
+    disposeMeshArray(layerMeshesRef.current);
+    layerMeshesRef.current = [];
+    for (const { centroid: c, position, geom } of layers) {
       const hex = `${c.r.toString(16).padStart(2,'0')}${c.g.toString(16).padStart(2,'0')}${c.b.toString(16).padStart(2,'0')}`;
-      const threeColor = new THREE.Color(c.r / 255, c.g / 255, c.b / 255);
-      const mat = displayMode === 'toon'
-        ? new THREE.MeshToonMaterial({ color: threeColor })
-        : new THREE.MeshStandardMaterial({ color: threeColor, flatShading: true });
-      const mesh = new THREE.Mesh(makeBufferGeom(geom), mat);
+      const mesh = new THREE.Mesh(makeBufferGeom(geom), makeMaterial(new THREE.Color(c.r / 255, c.g / 255, c.b / 255), displayMode));
       mesh.name = `Color_${position + 1}_${hex}`;
       group.add(mesh);
+      layerMeshesRef.current.push(mesh);
     }
-    for (const spike of spikes) {
-      const mat = displayMode === 'toon'
-        ? new THREE.MeshToonMaterial({ color: spike.color })
-        : new THREE.MeshStandardMaterial({ color: spike.color, flatShading: true });
-      const mesh = new THREE.Mesh(makeBufferGeom(spike.geom), mat);
-      const suffix = spike.centroidIndex >= 0 ? `c${spike.centroidIndex}` : 'unbound';
-      mesh.name = `Spikes_${suffix}`;
-      group.add(mesh);
-    }
-
     return () => {
-      // Dispose on unmount to release GPU memory.
-      group.traverse((obj) => {
-        if (obj instanceof THREE.Mesh) {
-          obj.geometry.dispose();
-          if (obj.material instanceof THREE.Material) obj.material.dispose();
-        }
-      });
+      disposeMeshArray(layerMeshesRef.current);
+      layerMeshesRef.current = [];
     };
-  }, [baseGeom, layers, spikes, displayMode, baseColor]);
+  }, [layers, displayMode]);
+
+  // Spike meshes: depend on spikes + displayMode only.
+  useEffect(() => {
+    const group = localGroupRef.current;
+    if (!group) return;
+    disposeMeshArray(spikeMeshesRef.current);
+    spikeMeshesRef.current = [];
+    for (const spike of spikes) {
+      const mesh = new THREE.Mesh(makeBufferGeom(spike.geom), makeMaterial(spike.color, displayMode));
+      mesh.name = `Spikes_${spike.centroidIndex >= 0 ? `c${spike.centroidIndex}` : 'unbound'}`;
+      group.add(mesh);
+      spikeMeshesRef.current.push(mesh);
+    }
+    return () => {
+      disposeMeshArray(spikeMeshesRef.current);
+      spikeMeshesRef.current = [];
+    };
+  }, [spikes, displayMode]);
 
   return <group ref={localGroupRef} />;
 });

@@ -12,7 +12,6 @@ import { BaseSettings, InlaySettings, GeometrySettings } from '../types/schemas'
 import CameraRig, { ViewState } from './CameraRig';
 import FpsTracker from './FpsTracker';
 import ScreenshotManager from './ScreenshotManager';
-import { generateTilePositions, getShapesBounds } from '../utils/patternUtils';
 import { ColorFlowModel } from '../colorflow/ColorFlowModel';
 import type { Centroid } from '../colorflow/pipeline/quantize';
 import type { ExtrudedGeometry } from '../colorflow/pipeline/extrude';
@@ -90,6 +89,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
   const [debugState, setDebugState] = useState({ pattern: false, holes: false, inlay: false });
   const [showDebugMenu, setShowDebugMenu] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [canvasReady, setCanvasReady] = useState(false);
   // Global processing keys → label. UI shows spinner if non-empty.
   const [processingMap, setProcessingMap] = useState<Map<string, string>>(() => new Map());
   const processingMapRef = React.useRef(processingMap);
@@ -106,6 +106,25 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
 
   const activeLabels = Array.from(processingMap.values()).filter((l) => l.length > 0);
   const isAnyProcessing = isProcessing || processingMap.size > 0;
+
+  // Pad-dimension readout. Use the loaded outline's bbox; fall back to the
+  // configured square `size` when no outline is set.
+  const padDims = React.useMemo(() => {
+    if (cutoutShapes && cutoutShapes.length > 0) {
+      const pts = cutoutShapes[0].getPoints(32);
+      if (pts.length > 0) {
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        for (const p of pts) {
+          if (p.x < minX) minX = p.x;
+          if (p.x > maxX) maxX = p.x;
+          if (p.y < minY) minY = p.y;
+          if (p.y > maxY) maxY = p.y;
+        }
+        return { w: maxX - minX, h: maxY - minY, fromOutline: true };
+      }
+    }
+    return { w: size, h: size, fromOutline: false };
+  }, [cutoutShapes, size]);
   const fpsRef = React.useRef<HTMLDivElement>(null);
   const [showScreenshotModal, setShowScreenshotModal] = useState(false);
   const captureRef = React.useRef<((bgColor: string | null) => void) | null>(null);
@@ -115,7 +134,6 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
   const wireframeMenuRef = React.useRef<HTMLDivElement>(null);
   const debugMenuRef = React.useRef<HTMLDivElement>(null);
   const orbitRef = React.useRef<any>(null);
-  const [inlayGroup, setInlayGroup] = useState<THREE.Object3D | null>(null);
   const [isDragging, setIsDragging] = useState(false);
 
   // Toggle OrbitControls based on dragging state
@@ -124,15 +142,6 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
         orbitRef.current.enabled = !isDragging;
     }
   }, [isDragging]);
-
-  // Find InlayGroup when meshRef or inlaySettings changes
-  useEffect(() => {
-    if (meshRef.current) {
-        // We look for 'InlayGroup'. ImperativeModel ensures it exists if Inlays are present.
-        const group = meshRef.current.getObjectByName('InlayGroup');
-        setInlayGroup(group || null);
-    }
-  }, [meshRef.current, inlaySettings.items, isProcessing]);
 
 
   const handleCapture = (bgColor: string | null) => {
@@ -456,7 +465,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
       })()}
 
       {showFps && (
-        <div 
+        <div
           ref={fpsRef}
           className="absolute bottom-4 right-4 z-10 p-2 bg-gray-800/80 backdrop-blur rounded-lg border border-gray-700 text-purple-400 tabular-nums text-sm font-bold pointer-events-none select-none w-20 text-center"
         >
@@ -464,8 +473,25 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
         </div>
       )}
 
+      {/* Size readout, bottom-left. Subtle when from default size, brighter
+          when it reflects the actual loaded outline. */}
+      <div className={`absolute bottom-4 left-4 z-10 px-2 py-1 bg-gray-800/80 backdrop-blur rounded border border-gray-700 text-[11px] tabular-nums pointer-events-none select-none ${padDims.fromOutline ? 'text-gray-200' : 'text-gray-500'}`}>
+        {padDims.w.toFixed(1)} × {padDims.h.toFixed(1)} mm
+      </div>
+
+      {/* Initial-Canvas-load veil — disappears once the renderer reports
+          `onCreated`. Avoids a black flash on first paint. */}
+      {!canvasReady && (
+        <div className="absolute inset-0 z-30 flex items-center justify-center bg-gray-900/40 backdrop-blur-sm pointer-events-none">
+          <div className="flex items-center gap-2 text-[11px] uppercase tracking-wider text-gray-300">
+            <Spinner size={16} />
+            <span>Initializing 3D viewer…</span>
+          </div>
+        </div>
+      )}
+
       <ErrorBoundary>
-      <Canvas shadows>
+      <Canvas shadows onCreated={() => setCanvasReady(true)}>
         <OrthographicCamera makeDefault={cameraType === 'orthographic'} position={[0, -1, 1000]} near={-2000} far={2000} up={[0, 0, 1]} />
         <PerspectiveCamera makeDefault={cameraType === 'perspective'} position={[500, -500, 500]} near={0.1} far={5000} up={[0, 0, 1]} fov={45} />
         
