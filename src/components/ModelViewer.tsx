@@ -532,6 +532,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
           layersInMm={colorFlowGeom?.source?.layersInMm ?? []}
           palette={colorFlowGeom?.source?.palette ?? []}
           stackOrder={colorFlowGeom?.source?.stackOrder ?? []}
+          inlayItems={colorFlowGeom ? undefined : inlaySettings.items}
           geometrySettings={geometrySettings}
           baseColor={color}
           spikeColorMatch={true}

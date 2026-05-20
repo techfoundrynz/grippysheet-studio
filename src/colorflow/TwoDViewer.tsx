@@ -5,13 +5,16 @@ import { generateTilePositions } from '../utils/patternUtils';
 import { pointInPolygon, assignTilesToColors, type TileAssignment } from './spikes';
 import type { Centroid } from './pipeline/quantize';
 import type { TracedLayerEntry } from './workerProtocol';
-import type { GeometrySettings } from '../types/schemas';
+import type { GeometrySettings, InlayItem } from '../types/schemas';
 
 interface Props {
   outlinePolygon: OutlinePolygon | null;
+  /** ColorFlow color regions in mm-space. Empty in pattern mode. */
   layersInMm: TracedLayerEntry[];
   palette: Centroid[];
   stackOrder: number[];
+  /** Pattern-mode inlay shapes. Empty/undefined in ColorFlow mode. */
+  inlayItems?: InlayItem[];
   geometrySettings: GeometrySettings;
   /** Base outline fill color (from baseSettings). */
   baseColor: string;
@@ -80,7 +83,7 @@ function patternFootprint2D(patternShape: unknown): Array<[number, number]> | nu
  *   5. Layer-order legend strip down the right edge
  */
 export const TwoDViewer: React.FC<Props> = ({
-  outlinePolygon, layersInMm, palette, stackOrder,
+  outlinePolygon, layersInMm, palette, stackOrder, inlayItems,
   geometrySettings, baseColor, spikeColorMatch,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -196,14 +199,66 @@ export const TwoDViewer: React.FC<Props> = ({
       }
     }
 
+    // 2b. Pattern-mode inlays. Rendered after color regions but before
+    //     spike tiles so spikes can sit on top.
+    if (inlayItems && inlayItems.length > 0) {
+      for (const item of inlayItems) {
+        if (!item.shapes || item.shapes.length === 0) continue;
+        for (const rawShape of item.shapes) {
+          // Inlays may carry a {shape, color} wrapper from SVG parse.
+          const shape: unknown = (rawShape && typeof rawShape === 'object' && 'shape' in rawShape)
+            ? (rawShape as { shape: unknown }).shape
+            : rawShape;
+          const color: string | undefined = (rawShape && typeof rawShape === 'object' && 'color' in rawShape)
+            ? (rawShape as { color?: string }).color
+            : undefined;
+          if (!(shape instanceof THREE.Shape)) continue;
+
+          // Inlay transform: mirror (flip X) → rotate → translate by item.x/y.
+          const cos = Math.cos((item.rotation ?? 0) * Math.PI / 180);
+          const sin = Math.sin((item.rotation ?? 0) * Math.PI / 180);
+          const itemScale = item.scale ?? 1;
+          const mirror = item.mirror ? -1 : 1;
+          const tx = item.x ?? 0;
+          const ty = item.y ?? 0;
+          const project = (p: [number, number]): [number, number] => {
+            const lx = p[0] * itemScale * mirror;
+            const ly = p[1] * itemScale;
+            return [lx * cos - ly * sin + tx, lx * sin + ly * cos + ty];
+          };
+          const points = shape.getPoints(48).map((p) => project([p.x, p.y]));
+          const holes = (shape.holes ?? []).map((h) => h.getPoints(48).map((p) => project([p.x, p.y])));
+
+          const path = new Path2D();
+          if (points.length > 0) {
+            path.moveTo(wx(points[0][0]), wy(points[0][1]));
+            for (let i = 1; i < points.length; i++) path.lineTo(wx(points[i][0]), wy(points[i][1]));
+            path.closePath();
+          }
+          for (const hole of holes) {
+            if (hole.length === 0) continue;
+            path.moveTo(wx(hole[0][0]), wy(hole[0][1]));
+            for (let i = 1; i < hole.length; i++) path.lineTo(wx(hole[i][0]), wy(hole[i][1]));
+            path.closePath();
+          }
+          ctx.fillStyle = color ?? '#1f2937';
+          ctx.fill(path, 'evenodd');
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
+          ctx.lineWidth = 1;
+          ctx.stroke(path);
+        }
+      }
+    }
+
     // 3. Spike tile footprints — render the pattern's actual 2D silhouette
     //    (convex hull of the STL projected to XY, or the THREE.Shape polygon
     //    for shape patterns) at each tile transform. Far more informative than
     //    flat dots — the user sees the actual bump shape: hex / square / dome
-    //    outline. Tinted darker than the region underneath for contrast.
+    //    outline. Tinted by the color region below when in ColorFlow mode +
+    //    color-matched, otherwise patternColor.
     const patternShape = geometrySettings.patternShapes?.[0];
     const footprint = patternFootprint2D(patternShape);
-    if (footprint && footprint.length >= 3 && palette.length > 0) {
+    if (footprint && footprint.length >= 3) {
       const patternScale = geometrySettings.patternScale ?? 1;
       let tileW = 0, tileH = 0;
       let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
