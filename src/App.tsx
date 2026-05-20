@@ -9,6 +9,7 @@ import { defaultBaseSettings, defaultInlaySettings, defaultGeometrySettings } fr
 import WelcomeModal from "./components/WelcomeModal";
 import { ModeToggle, type StudioMode } from "./components/ui/ModeToggle";
 import { defaultColorFlowSettings, type ColorFlowSettings } from "./colorflow/schema";
+import { ColorFlowControls } from './colorflow/ColorFlowControls';
 
 const App = () => {
   const [mode, setMode] = useState<StudioMode>('pattern');
@@ -98,9 +99,12 @@ const App = () => {
                 }
               />
             ) : (
-              <div className="bg-gray-800 rounded-lg border border-gray-700 p-6 text-gray-300 text-sm">
-                ColorFlow controls coming next task…
-              </div>
+              <ColorFlowControls
+                baseSettings={baseSettings}
+                setBaseSettings={setBaseSettings}
+                settings={colorFlowSettings}
+                setSettings={setColorFlowSettings}
+              />
             )}
           </div>
         </main>
