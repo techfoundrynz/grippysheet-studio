@@ -46,7 +46,9 @@ const WelcomeModal: React.FC<WelcomeModalProps> = ({ onClose }) => {
                 {/* Content / Links */}
                 <div className="space-y-3">
                     <p className="text-gray-300 text-sm leading-relaxed mb-4">
-                        Get started by uploading your grip outline and configuring your shapes.
+                        Get started by uploading your grip outline and configuring your shapes — or
+                        switch to <span className="text-purple-400 font-bold">ColorFlow</span> mode
+                        (top right) to design a multi-color flat print from a raster image.
                     </p>
 
                     <div className="grid gap-3">
