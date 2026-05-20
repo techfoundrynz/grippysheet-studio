@@ -47,15 +47,25 @@ export function extrudePolygon(
     indices.push(triIndices[i + 2], triIndices[i + 1], triIndices[i]);
   }
 
-  // Side walls — one quad per edge of each ring
+  // Side walls — one quad per edge of each ring.
+  // Outer ring (r === 0) is CCW from above; its walls face outward.
+  // Hole rings (r > 0) are also CCW in our pipeline (per polygonize.ts),
+  // but their walls must face into the cavity rather than away from it, so
+  // we flip the triangle winding for them.
   const ringStarts = [0, ...holeStarts];
   const ringEnds = [...holeStarts, n];
   for (let r = 0; r < ringStarts.length; r++) {
     const s = ringStarts[r], e = ringEnds[r];
+    const isHole = r > 0;
     for (let i = s; i < e; i++) {
       const next = (i + 1 >= e) ? s : (i + 1);
-      indices.push(i, next, n + next);
-      indices.push(i, n + next, n + i);
+      if (isHole) {
+        indices.push(i, n + next, next);
+        indices.push(i, n + i, n + next);
+      } else {
+        indices.push(i, next, n + next);
+        indices.push(i, n + next, n + i);
+      }
     }
   }
 
