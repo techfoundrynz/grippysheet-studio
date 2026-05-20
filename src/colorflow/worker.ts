@@ -130,7 +130,7 @@ async function handleTrace(req: Extract<Request, { kind: 'trace' }>) {
 }
 
 async function handleExtrude(req: Extract<Request, { kind: 'extrude' }>) {
-  const { layers, outline, baseMm, totalMm, colorLayerHeights, id } = req;
+  const { layers, outline, baseMm, colorLayerMm, stackOrder, id } = req;
   post({ id, kind: 'progress', phase: 'extruding' });
 
   const baseMesh = extrudePolygon(outline.outer, outline.holes, 0, baseMm);
@@ -139,44 +139,25 @@ async function handleExtrude(req: Extract<Request, { kind: 'extrude' }>) {
     return;
   }
 
-  // Compute the highest centroid index among the layers; that determines the
-  // effective palette size for the Z-stack.
-  let maxIdx = -1;
-  for (const e of layers) if (e.centroidIndex > maxIdx) maxIdx = e.centroidIndex;
-  const numColors = maxIdx + 1;
+  // Map centroidIndex -> stack position (0 = nearest to base).
+  const positionByCentroid = new Map<number, number>();
+  for (let i = 0; i < stackOrder.length; i++) positionByCentroid.set(stackOrder[i], i);
 
-  // Normalize the heights array to length=numColors. Missing entries get an
-  // equal split of the remaining space.
-  const heights = new Array<number>(numColors);
-  let userTotal = 0;
-  for (let i = 0; i < numColors; i++) {
-    if (i < colorLayerHeights.length && colorLayerHeights[i] > 0) {
-      heights[i] = colorLayerHeights[i];
-      userTotal += colorLayerHeights[i];
-    } else {
-      heights[i] = -1; // marker for "fill remaining"
-    }
-  }
-  const remaining = Math.max(0, (totalMm - baseMm) - userTotal);
-  const fillCount = heights.filter((h) => h < 0).length;
-  const fillEach = fillCount > 0 ? remaining / fillCount : 0;
-  for (let i = 0; i < numColors; i++) if (heights[i] < 0) heights[i] = fillEach;
-
-  // Cumulative starts: layer N's zBottom = baseMm + sum(heights[0..N-1])
-  const zStarts = new Array<number>(numColors);
-  zStarts[0] = baseMm;
-  for (let i = 1; i < numColors; i++) zStarts[i] = zStarts[i - 1] + heights[i - 1];
-
-  const layerGeoms: { centroidIndex: number; geom: TransferredGeom }[] = [];
+  const layerGeoms: { centroidIndex: number; position: number; geom: TransferredGeom }[] = [];
   for (const entry of layers) {
     const ci = entry.centroidIndex;
-    const zBottom = zStarts[ci];
-    const zTop = zStarts[ci] + heights[ci];
-    if (zTop <= zBottom + 1e-6) continue; // zero-height layer, skip
+    const pos = positionByCentroid.get(ci);
+    if (pos === undefined) continue; // centroid not in stackOrder — skip
+    const zBottom = baseMm;
+    const zTop = baseMm + (pos + 1) * colorLayerMm;
+    if (zTop <= zBottom + 1e-6) continue;
     const m = extrudePolygon(entry.polygon.outer, entry.polygon.holes, zBottom, zTop);
     if (!m) continue;
-    layerGeoms.push({ centroidIndex: ci, geom: m });
+    layerGeoms.push({ centroidIndex: ci, position: pos, geom: m });
   }
+
+  // Sort by stack position so consumers can iterate in stack order.
+  layerGeoms.sort((a, b) => a.position - b.position);
 
   const transfer: Transferable[] = [baseMesh.positions.buffer, baseMesh.indices.buffer];
   for (const entry of layerGeoms) {
