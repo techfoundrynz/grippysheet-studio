@@ -31,8 +31,6 @@ describe('OUTLINE_LIBRARY', () => {
 
   it('groups partition into xr / gt / pint / other', () => {
     const groups = new Set(OUTLINE_LIBRARY.map((o) => o.group));
-    for (const g of groups) {
-      expect(['xr', 'gt', 'pint', 'other']).toContain(g);
-    }
+    expect(groups).toEqual(new Set(['xr', 'gt', 'pint', 'other']));
   });
 });
