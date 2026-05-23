@@ -69,6 +69,17 @@ function patternFootprint2D(patternShape: unknown): Array<[number, number]> | nu
   return null;
 }
 
+/** Signed area (shoelace) magnitude of a polygon ring, in the units of the
+ *  input points. Used to suppress labels on tiny anti-aliasing slivers. */
+function polygonRingArea(ring: Array<[number, number]>): number {
+  if (ring.length < 3) return 0;
+  let a = 0;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    a += ring[j][0] * ring[i][1] - ring[i][0] * ring[j][1];
+  }
+  return Math.abs(a) / 2;
+}
+
 /**
  * 2D top-down preview of the ColorFlow design. Cheaper than the 3D Canvas:
  * just a single 2D canvas with paths + circles, no GPU shader work, no mesh
@@ -174,7 +185,8 @@ export const TwoDViewer: React.FC<Props> = ({
       return pa - pb;
     });
     // Track polygon centroids per color so we can annotate with layer numbers.
-    const layerLabels: Array<{ x: number; y: number; layerNum: number; color: Centroid }> = [];
+    // Record area too so we can suppress labels on anti-aliasing slivers.
+    const labelCandidates: Array<{ x: number; y: number; layerNum: number; color: Centroid; centroidIndex: number; areaMm2: number }> = [];
     for (const entry of sortedLayers) {
       const c = palette[entry.centroidIndex];
       if (!c) continue;
@@ -195,9 +207,24 @@ export const TwoDViewer: React.FC<Props> = ({
         for (const [px, py] of entry.polygon.outer) { cx += px; cy += py; }
         cx /= entry.polygon.outer.length;
         cy /= entry.polygon.outer.length;
-        layerLabels.push({ x: cx, y: cy, layerNum: stackPos + 1, color: c });
+        const areaMm2 = polygonRingArea(entry.polygon.outer);
+        labelCandidates.push({ x: cx, y: cy, layerNum: stackPos + 1, color: c, centroidIndex: entry.centroidIndex, areaMm2 });
       }
     }
+
+    // Suppress labels on sliver polygons: per colour, drop anything below
+    // 15% of that colour's largest polygon AND below an absolute 25 mm² floor.
+    const maxAreaPerCentroid = new Map<number, number>();
+    for (const cand of labelCandidates) {
+      const cur = maxAreaPerCentroid.get(cand.centroidIndex) ?? 0;
+      if (cand.areaMm2 > cur) maxAreaPerCentroid.set(cand.centroidIndex, cand.areaMm2);
+    }
+    const SLIVER_REL = 0.15;
+    const SLIVER_ABS_MM2 = 25;
+    const layerLabels = labelCandidates.filter((cand) => {
+      const maxA = maxAreaPerCentroid.get(cand.centroidIndex) ?? cand.areaMm2;
+      return cand.areaMm2 >= SLIVER_ABS_MM2 || cand.areaMm2 >= maxA * SLIVER_REL;
+    });
 
     // 2b. Pattern-mode inlays. Rendered after color regions but before
     //     spike tiles so spikes can sit on top.
