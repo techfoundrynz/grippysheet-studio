@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { type BaseSettings, type GeometrySettings } from '../types/schemas';
 import { type ColorFlowSettings } from './schema';
 import { getOutlineBySlug } from './outlineLibrary';
@@ -92,9 +92,19 @@ export const ColorFlowControls: React.FC<Props> = ({
   const [imageName, setImageName] = useState<string>('');
   const [imageDims, setImageDims] = useState<{ w: number; h: number } | null>(null);
 
-  // Hydrate from project bundle.
+  // Hydration tracks the bytes ArrayBuffer (stable across the App.tsx
+  // useMemo'd initialImageAsset → projectAssets.image.content → bytes chain).
+  // A new asset reference (project import, or a different in-session upload
+  // before we've pre-claimed) triggers one hydration; pre-claimed refs skip.
+  const lastHydratedBytesRef = useRef<ArrayBuffer | null>(null);
+
+  // Hydrate from project bundle. Idempotent per ArrayBuffer reference —
+  // handleImageFile pre-claims the ref before triggering the App re-render,
+  // so an in-session upload doesn't fight its own hydration round-trip.
   useEffect(() => {
     if (!initialImageAsset) return;
+    if (lastHydratedBytesRef.current === initialImageAsset.bytes) return;
+    lastHydratedBytesRef.current = initialImageAsset.bytes;
     let cancelled = false;
     (async () => {
       try {
@@ -155,6 +165,10 @@ export const ColorFlowControls: React.FC<Props> = ({
     }
     setImageName(file.name);
     const bytes = await file.arrayBuffer();
+    // Pre-claim the hydration tracker so the upcoming App re-render's
+    // initialImageAsset doesn't trigger a redundant ImageBitmap decode of
+    // bytes we're already turning into a bitmap below.
+    lastHydratedBytesRef.current = bytes;
     onImageAssetChanged?.({ name: file.name, bytes });
     const bitmap = await createImageBitmap(file);
     let { width, height } = bitmap;

@@ -178,9 +178,12 @@ const App = () => {
     };
   }, [colorFlowGeom, spikeGroups]);
 
-  const initialImageAsset = projectAssets.image
-    ? { name: projectAssets.image.name, bytes: projectAssets.image.content as ArrayBuffer }
-    : null;
+  const initialImageAsset = useMemo(
+    () => projectAssets.image
+      ? { name: projectAssets.image.name, bytes: projectAssets.image.content as ArrayBuffer }
+      : null,
+    [projectAssets.image],
+  );
 
   return (
     <AlertProvider>
