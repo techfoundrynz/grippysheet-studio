@@ -20,6 +20,14 @@ function makeBufferGeom(g: ExtrudedGeometry): THREE.BufferGeometry {
   return geom;
 }
 
+// TODO(U6 deferred): light ColorFlow colours (e.g. #F1FAEE) wash out in 3D
+// because MeshStandardMaterial darkens near-white surfaces under the scene's
+// ambient + directional lighting (no environment map, no specular kicker).
+// Bounded investigation (2026-05-22) tried bumping ambient intensity and got
+// no visible improvement. The right fix is probably either an Environment map
+// (drei `<Environment preset="city" />`) or switching colour layers to
+// MeshBasicMaterial so they render as flat unlit filament-true colour — both
+// are architectural changes beyond this PR's scope.
 function makeMaterial(color: THREE.ColorRepresentation, displayMode: 'normal' | 'toon') {
   return displayMode === 'toon'
     ? new THREE.MeshToonMaterial({ color })
