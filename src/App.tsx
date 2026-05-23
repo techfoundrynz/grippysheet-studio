@@ -204,6 +204,7 @@ const App = () => {
                 previewInlay={previewInlay}
                 setPreviewInlay={setPreviewInlay}
                 colorFlowGeom={colorFlowGeomWithSpikes}
+                colorFlowSettings={colorFlowSettings}
               />
             </div>
           </div>

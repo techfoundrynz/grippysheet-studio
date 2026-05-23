@@ -9,6 +9,7 @@ import { ErrorBoundary } from './ErrorBoundary';
 import ImperativeModel from './ImperativeModel';
 import Spinner from './Spinner';
 import { BaseSettings, InlaySettings, GeometrySettings } from '../types/schemas';
+import type { ColorFlowSettings } from '../colorflow/schema';
 import CameraRig, { ViewState } from './CameraRig';
 import FpsTracker from './FpsTracker';
 import ScreenshotManager from './ScreenshotManager';
@@ -41,6 +42,7 @@ interface ModelViewerProps {
       stackOrder: number[];
     };
   } | null;
+  colorFlowSettings: ColorFlowSettings;
 }
 
 const ModelViewer: React.FC<ModelViewerProps> = ({
@@ -55,7 +57,8 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
   setSelectedInlayId,
   previewInlay,
   setPreviewInlay,
-  colorFlowGeom
+  colorFlowGeom,
+  colorFlowSettings
 }) => {
   const { size, thickness, color, cutoutShapes, baseOutlineRotation, baseOutlineMirror } = baseSettings;
   
@@ -535,7 +538,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
           inlayItems={colorFlowGeom ? undefined : inlaySettings.items}
           geometrySettings={geometrySettings}
           baseColor={color}
-          spikeColorMatch={true}
+          spikeColorMatch={colorFlowSettings.spikeColorMatch}
         />
       )}
 
