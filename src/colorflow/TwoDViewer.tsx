@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { type OutlinePolygon } from './outlineToPolygon';
 import { generateTilePositions } from '../utils/patternUtils';
@@ -100,7 +100,7 @@ export const TwoDViewer: React.FC<Props> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  useEffect(() => {
+  const draw = useCallback(() => {
     const canvas = canvasRef.current;
     const container = containerRef.current;
     if (!canvas || !container) return;
@@ -378,7 +378,21 @@ export const TwoDViewer: React.FC<Props> = ({
     if (palette.length > 0 && legendW > 0) {
       drawLegend(ctx, palette, stackOrder, W - legendW + 4, PAD_PX, legendW - 8, H - PAD_PX * 2);
     }
-  });
+  }, [outlinePolygon, layersInMm, palette, stackOrder, inlayItems, geometrySettings, baseColor, spikeColorMatch]);
+
+  // Repaint when any draw input changes.
+  useEffect(() => {
+    draw();
+  }, [draw]);
+
+  // Repaint when the container resizes (the draw call reads getBoundingClientRect).
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const ro = new ResizeObserver(() => draw());
+    ro.observe(container);
+    return () => ro.disconnect();
+  }, [draw]);
 
   return (
     <div ref={containerRef} className="absolute inset-0 bg-slate-900">
