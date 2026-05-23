@@ -1,5 +1,4 @@
 /// <reference lib="webworker" />
-import imagetracer from './vendor/imagetracer';
 import { kmeans, assignAll } from './pipeline/quantize';
 import { modeFilter, SIMPLIFY_KERNELS } from './pipeline/modeFilter';
 import { trace } from './pipeline/trace';
@@ -55,21 +54,10 @@ async function handleQuantize(req: Extract<Request, { kind: 'quantize' }>) {
     assignments = modeFilter(assignments, width, height, k, palette.length);
   }
 
-  // Build a quick combined preview from assignments
-  const preview = new ImageData(width, height);
-  for (let i = 0; i < assignments.length; i++) {
-    const a = assignments[i];
-    if (a === 0xFFFF) { preview.data[i * 4 + 3] = 0; continue; }
-    const c = palette[a];
-    preview.data[i * 4]     = c.r;
-    preview.data[i * 4 + 1] = c.g;
-    preview.data[i * 4 + 2] = c.b;
-    preview.data[i * 4 + 3] = 255;
-  }
-  // Cheap SVG: skip — leave combined SVG to the 'trace' step.
-
-  post({ id, kind: 'quantized', palette, assignments, previewSvg: '' },
-       [assignments.buffer]);
+  post(
+    { id, kind: 'quantized', palette, assignments },
+    [assignments.buffer],
+  );
 }
 
 async function handleTrace(req: Extract<Request, { kind: 'trace' }>) {
@@ -91,43 +79,15 @@ async function handleTrace(req: Extract<Request, { kind: 'trace' }>) {
   const pal = [{ r: 0, g: 0, b: 0, a: 0 }, ...palette.map((c) => ({ r: c.r, g: c.g, b: c.b, a: 255 }))];
   const td = trace(img, pal, opts);
 
-  // Build the combined SVG (palette without the leading transparent slot
-  // since ImageTracer's getsvgstring still emits all layers).
-  const combinedSvg = imagetracer.imagedataToSVG(img, {
-    pal: palette.map((c) => ({ r: c.r, g: c.g, b: c.b, a: 255 })),
-    viewbox: true,
-    strokewidth: 0,
-    roundcoords: 1,
-    linefilter: opts.smooth,
-  });
-
-  // Polygons per layer (skip layer 0 = transparent slot)
+  // Polygons per layer (skip layer 0 = transparent slot).
   const layerEntries: TracedLayerEntry[] = [];
-  const layerSvgs: Record<number, string> = {};
   for (let li = 1; li < td.layers.length; li++) {
     const polys = layerToPolygons(td.layers[li]);
     const centroidIndex = li - 1;
     for (const p of polys) layerEntries.push({ centroidIndex, polygon: p });
-    // For per-layer SVG, regenerate using a 2-color palette (background white, region centroid)
-    const binary = new ImageData(width, height);
-    const centroid = palette[li - 1];
-    if (!centroid) continue;
-    for (let i = 0; i < assignments.length; i++) {
-      const isMatch = assignments[i] === centroid.index;
-      const v = isMatch ? 0 : 255;
-      binary.data[i * 4]     = v;
-      binary.data[i * 4 + 1] = v;
-      binary.data[i * 4 + 2] = v;
-      binary.data[i * 4 + 3] = 255;
-    }
-    const layerSvg = imagetracer.imagedataToSVG(binary, {
-      pal: [{ r: 0, g: 0, b: 0, a: 255 }, { r: 255, g: 255, b: 255, a: 255 }],
-      viewbox: true, strokewidth: 0, roundcoords: 1, linefilter: opts.smooth,
-    });
-    layerSvgs[centroid.index] = layerSvg;
   }
 
-  post({ id, kind: 'traced', layers: layerEntries, layerSvgs, combinedSvg });
+  post({ id, kind: 'traced', layers: layerEntries });
 }
 
 async function handleExtrude(req: Extract<Request, { kind: 'extrude' }>) {

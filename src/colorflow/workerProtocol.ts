@@ -45,9 +45,7 @@ export type Request =
 
 export type Response =
   | { id: number; kind: 'progress'; phase: string }
-  | { id: number; kind: 'quantized'; palette: Centroid[]; assignments: Uint16Array;
-      previewSvg: string }
-  | { id: number; kind: 'traced'; layers: TracedLayerEntry[]; layerSvgs: Record<number, string>;
-      combinedSvg: string }
+  | { id: number; kind: 'quantized'; palette: Centroid[]; assignments: Uint16Array }
+  | { id: number; kind: 'traced'; layers: TracedLayerEntry[] }
   | { id: number; kind: 'extruded'; baseGeom: TransferredGeom; layerGeoms: ExtrudedLayerEntry[] }
   | { id: number; kind: 'error'; phase: string; message: string };
