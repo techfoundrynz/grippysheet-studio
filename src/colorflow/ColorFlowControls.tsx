@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { type BaseSettings, type GeometrySettings } from '../types/schemas';
 import { type ColorFlowSettings } from './schema';
 import { getOutlineBySlug } from './outlineLibrary';
-import { useColorFlowWorker } from './useColorFlowWorker';
+import { RequestCancelledError, useColorFlowWorker } from './useColorFlowWorker';
 import {
   shapeToPolygon,
   outlineCanvasSize,
@@ -222,6 +222,7 @@ export const ColorFlowControls: React.FC<Props> = ({
         setAssignments(resp.assignments);
         setCoverage(paletteCoverage(resp.assignments, resp.palette));
       } catch (err) {
+        if (err instanceof RequestCancelledError) return;
         showAlert({ title: 'Quantization failed', message: String(err), type: 'error' });
       }
     }, 200);
@@ -245,6 +246,7 @@ export const ColorFlowControls: React.FC<Props> = ({
         if (cancelled || resp.kind !== 'traced') return;
         setLayers(resp.layers);
       } catch (err) {
+        if (err instanceof RequestCancelledError) return;
         showAlert({ title: 'Tracing failed', message: String(err), type: 'error' });
       }
     })();
@@ -307,6 +309,7 @@ export const ColorFlowControls: React.FC<Props> = ({
           onGeometryReady({ base: resp.baseGeom, layers: pairs, source });
         }
       } catch (err) {
+        if (err instanceof RequestCancelledError) return;
         showAlert({ title: 'Extrusion failed', message: String(err), type: 'error' });
       }
     })();
