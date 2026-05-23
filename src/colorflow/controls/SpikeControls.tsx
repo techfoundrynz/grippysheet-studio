@@ -38,7 +38,7 @@ export const SpikeControls: React.FC<Props> = ({
 
   return (
     <section>
-      <h3 className="text-xs uppercase tracking-widest text-gray-400 mb-2">Spike pattern</h3>
+      <h3 className="text-xs uppercase tracking-widest text-gray-400 mb-2">⑤ Spike pattern</h3>
       {hasPattern ? (
         <>
           <p className="text-[10px] text-gray-500 mb-2">

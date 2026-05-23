@@ -376,13 +376,6 @@ export const ColorFlowControls: React.FC<Props> = ({
         setSettings={setSettings}
       />
 
-      <section className={layers.length > 0 ? '' : 'opacity-40 pointer-events-none'}>
-        <h3 className="text-xs uppercase tracking-widest text-gray-400 mb-2">⑤ Export</h3>
-        <p className="text-xs text-gray-400">
-          Use <span className="text-blue-400 font-bold">Export 3MF</span> in the footer below to download the multi-part Bambu assembly.
-        </p>
-      </section>
-
       <StatusFooter
         phase={status.phase || undefined}
         error={status.error || undefined}
