@@ -6,6 +6,46 @@ import { shapeToPolygon, type OutlinePolygon } from './outlineToPolygon';
 import type { Centroid } from './pipeline/quantize';
 import type { TracedLayerEntry } from './workerProtocol';
 
+/** 2D convex hull (Andrew's monotone chain). Used to derive a tight 2D
+ *  footprint for STL pattern shapes — the bbox alone over-rejects round
+ *  patterns like Dome/Cone whose corners are air, falsely dropping tiles
+ *  near colour boundaries. */
+function convexHull2D(points: Array<[number, number]>): Array<[number, number]> {
+  if (points.length < 3) return points.slice();
+  const pts = points.slice().sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const cross = (o: [number, number], a: [number, number], b: [number, number]) =>
+    (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const lower: Array<[number, number]> = [];
+  for (const p of pts) {
+    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) lower.pop();
+    lower.push(p);
+  }
+  const upper: Array<[number, number]> = [];
+  for (let i = pts.length - 1; i >= 0; i--) {
+    const p = pts[i];
+    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) upper.pop();
+    upper.push(p);
+  }
+  upper.pop(); lower.pop();
+  return lower.concat(upper);
+}
+
+/** Cache: pattern BufferGeometry → 2D convex hull in shape-local mm. */
+const footprintCache = new WeakMap<THREE.BufferGeometry, Array<[number, number]>>();
+
+function stlXyFootprint(patternGeom: THREE.BufferGeometry): Array<[number, number]> | null {
+  const cached = footprintCache.get(patternGeom);
+  if (cached) return cached;
+  const posAttr = patternGeom.attributes.position;
+  if (!posAttr) return null;
+  const arr = posAttr.array as Float32Array;
+  const pts: Array<[number, number]> = [];
+  for (let i = 0; i < arr.length; i += 3) pts.push([arr[i], arr[i + 1]]);
+  const hull = convexHull2D(pts);
+  footprintCache.set(patternGeom, hull);
+  return hull;
+}
+
 /** Build a THREE.Shape from an OutlinePolygon so `generateTilePositions` can
  *  use it as a boundary check (matching pattern-mode's edge behavior). */
 function outlinePolygonToShape(polygon: OutlinePolygon): THREE.Shape {
@@ -380,7 +420,12 @@ export function generateSpikes(input: {
     if (tileWidth < 0.05 || tileHeight < 0.05) {
       return { groups: [], diag: `pattern tile too small (${tileWidth.toFixed(2)}×${tileHeight.toFixed(2)}mm)` };
     }
-    localFootprint = [
+    // Use the actual XY-projected convex hull of the STL — the bbox alone
+    // is wrong for round / curved patterns (Dome, Stud, Cone, etc.) whose
+    // bbox corners sit in empty air and would falsely reject most tiles
+    // near colour boundaries.
+    const hull = stlXyFootprint(patternShape);
+    localFootprint = hull && hull.length >= 3 ? hull : [
       [bbox.min.x, bbox.min.y],
       [bbox.max.x, bbox.min.y],
       [bbox.max.x, bbox.max.y],
@@ -445,7 +490,19 @@ export function generateSpikes(input: {
     return false;
   });
 
-  const rawGroups = buildForColor(fittedAssignments);
+  // Fallback: if the strict footprint-fit filter dropped every tile (can
+  // happen on images with very thin colour regions, or a pattern whose
+  // footprint is larger than any region), keep every tile that has at least
+  // a valid colour assignment. Spikes near boundaries may overhang the
+  // shorter adjacent column, but at least the user sees a preview.
+  let assignmentsToUse = fittedAssignments;
+  let usedFallback = false;
+  if (fittedAssignments.length === 0) {
+    assignmentsToUse = tileAssignments.filter((t) => t.colorIndex >= 0);
+    usedFallback = true;
+  }
+
+  const rawGroups = buildForColor(assignmentsToUse);
 
   const groups: Array<{ centroidIndex: number; geom: ExtrudedGeometry; color: string }> = [];
   for (const g of rawGroups) {
@@ -456,6 +513,8 @@ export function generateSpikes(input: {
     groups.push({ ...g, color });
   }
 
-  const diag = `${rawTiles.length} raw / ${tilesInOutline.length} in outline / ${fittedAssignments.length} fit color / ${rawGroups.length} groups`;
+  const diag = usedFallback
+    ? `${rawTiles.length} raw / ${tilesInOutline.length} in outline / 0 strict fit (overhang fallback) / ${rawGroups.length} groups`
+    : `${rawTiles.length} raw / ${tilesInOutline.length} in outline / ${fittedAssignments.length} fit color / ${rawGroups.length} groups`;
   return { groups, diag };
 }
