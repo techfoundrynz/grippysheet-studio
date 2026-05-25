@@ -244,6 +244,7 @@ const App = () => {
               colorFlowSettings={colorFlowSettings}
               setColorFlowSettings={setColorFlowSettings}
               colorFlowActive={colorFlowActive}
+              colorFlowPaletteSize={colorFlowGeom?.source.palette.length ?? 0}
               onColorFlowGeomReady={handleColorFlowGeomReady}
               onColorFlowImageAssetChanged={handleImageAssetChanged}
               initialColorFlowImageAsset={initialImageAsset}

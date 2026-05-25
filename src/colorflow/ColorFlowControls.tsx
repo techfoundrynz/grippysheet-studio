@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { type BaseSettings, type GeometrySettings } from '../types/schemas';
+import { type BaseSettings } from '../types/schemas';
 import { type ColorFlowSettings } from './schema';
 import { getOutlineBySlug } from './outlineLibrary';
 import { RequestCancelledError, useColorFlowWorker } from './useColorFlowWorker';
@@ -26,7 +26,6 @@ import { ImageSection } from './controls/ImageSection';
 import { ColorSliders } from './controls/ColorSliders';
 import { PrintControls } from './controls/PrintControls';
 import { LayerControls } from './controls/LayerControls';
-import { SpikeControls } from './controls/SpikeControls';
 import { StatusFooter } from './controls/StatusFooter';
 
 export interface SpikeGroup {
@@ -62,7 +61,6 @@ export interface ColorFlowGeomData {
 
 interface Props {
   baseSettings: BaseSettings;
-  geometrySettings: GeometrySettings;
   settings: ColorFlowSettings;
   setSettings: React.Dispatch<React.SetStateAction<ColorFlowSettings>>;
   onGeometryReady?: (data: ColorFlowGeomData) => void;
@@ -70,20 +68,13 @@ interface Props {
   initialImageAsset?: { name: string; bytes: ArrayBuffer } | null;
   /** Callback to switch the right-panel tabs to "Base". */
   onSwitchToBase?: () => void;
-  /** Diagnostic line produced by App-level spike generation. */
-  spikeDiag?: string;
-  canGenerateSpikes?: boolean;
-  spikesStale?: boolean;
-  hasSpikes?: boolean;
-  onGenerateSpikes?: () => void;
 }
 
 const MAX_IMG_DIM = 1500;
 
 export const ColorFlowControls: React.FC<Props> = ({
-  baseSettings, geometrySettings, settings, setSettings,
-  onGeometryReady, onImageAssetChanged, initialImageAsset, onSwitchToBase, spikeDiag,
-  canGenerateSpikes, spikesStale, hasSpikes, onGenerateSpikes,
+  baseSettings, settings, setSettings,
+  onGeometryReady, onImageAssetChanged, initialImageAsset, onSwitchToBase,
 }) => {
   const { request, status } = useColorFlowWorker();
   const { showAlert } = useAlert();
@@ -354,19 +345,6 @@ export const ColorFlowControls: React.FC<Props> = ({
         baseMm={baseMm}
         settings={settings}
         setSettings={setSettings}
-      />
-
-      <SpikeControls
-        palette={palette}
-        geometrySettings={geometrySettings}
-        baseMm={baseMm}
-        settings={settings}
-        setSettings={setSettings}
-        spikeDiag={spikeDiag}
-        canGenerate={!!canGenerateSpikes}
-        isStale={!!spikesStale}
-        hasSpikes={!!hasSpikes}
-        onGenerate={onGenerateSpikes}
       />
 
       <LayerControls

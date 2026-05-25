@@ -11,6 +11,7 @@ import Button from './ui/Button';
 import { calculateInlayScale } from '../utils/patternUtils';
 import * as THREE from 'three';
 import { ColorFlowControls, type ColorFlowGeomData } from '../colorflow/ColorFlowControls';
+import { SpikeControls } from '../colorflow/controls/SpikeControls';
 import type { ColorFlowSettings } from '../colorflow/schema';
 import type { Centroid } from '../colorflow/pipeline/quantize';
 import type { ExtrudedGeometry } from '../colorflow/pipeline/extrude';
@@ -40,6 +41,9 @@ interface ControlsProps {
   colorFlowSettings: ColorFlowSettings;
   setColorFlowSettings: React.Dispatch<React.SetStateAction<ColorFlowSettings>>;
   colorFlowActive: boolean;
+  /** Live palette size from the most recent ColorFlow extrude (0 if none yet).
+   *  Drives whether the Geometry tab shows the Spike-overlay controls. */
+  colorFlowPaletteSize: number;
   onColorFlowGeomReady?: (data: ColorFlowGeomData) => void;
   /** Latest spike-generation diagnostic line (for display in ColorFlow panel). */
   colorFlowSpikeDiag?: string;
@@ -76,6 +80,7 @@ const Controls: React.FC<ControlsProps> = ({
   colorFlowSettings,
   setColorFlowSettings,
   colorFlowActive,
+  colorFlowPaletteSize,
   colorFlowSpikeDiag,
   colorFlowCanGenerateSpikes,
   colorFlowSpikesStale,
@@ -445,13 +450,27 @@ const Controls: React.FC<ControlsProps> = ({
             </Freeze>
 
             <Freeze freeze={activeTab !== 'geometry'}>
-                <div className={activeTab === 'geometry' ? 'block' : 'hidden'}>
+                <div className={activeTab === 'geometry' ? 'block space-y-6' : 'hidden'}>
                     <GeometryControls
                         settings={geometrySettings}
                         updateSettings={updateGeom}
                         baseSize={baseSettings.size}
                         onPatternAssetChanged={handlePatternAssetChanged}
                     />
+                    {colorFlowActive && colorFlowPaletteSize > 0 && (
+                        <SpikeControls
+                            paletteSize={colorFlowPaletteSize}
+                            geometrySettings={geometrySettings}
+                            baseMm={baseSettings.thickness}
+                            settings={colorFlowSettings}
+                            setSettings={setColorFlowSettings}
+                            spikeDiag={colorFlowSpikeDiag}
+                            canGenerate={!!colorFlowCanGenerateSpikes}
+                            isStale={!!colorFlowSpikesStale}
+                            hasSpikes={!!colorFlowHasSpikes}
+                            onGenerate={onGenerateSpikes}
+                        />
+                    )}
                 </div>
             </Freeze>
 
@@ -459,18 +478,12 @@ const Controls: React.FC<ControlsProps> = ({
                 <div className={activeTab === 'colorflow' ? 'block' : 'hidden'}>
                     <ColorFlowControls
                         baseSettings={baseSettings}
-                        geometrySettings={geometrySettings}
                         settings={colorFlowSettings}
                         setSettings={setColorFlowSettings}
                         onGeometryReady={onColorFlowGeomReady}
                         onImageAssetChanged={onColorFlowImageAssetChanged}
                         initialImageAsset={initialColorFlowImageAsset}
                         onSwitchToBase={() => setActiveTab('base')}
-                        spikeDiag={colorFlowSpikeDiag}
-                        canGenerateSpikes={!!colorFlowCanGenerateSpikes}
-                        spikesStale={!!colorFlowSpikesStale}
-                        hasSpikes={!!colorFlowHasSpikes}
-                        onGenerateSpikes={onGenerateSpikes}
                     />
                 </div>
             </Freeze>

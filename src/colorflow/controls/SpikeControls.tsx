@@ -4,7 +4,7 @@ import type { GeometrySettings } from '../../types/schemas';
 import type { ColorFlowSettings } from '../schema';
 
 interface Props {
-  palette: { length: number };
+  paletteSize: number;
   geometrySettings: GeometrySettings;
   baseMm: number;
   settings: ColorFlowSettings;
@@ -17,10 +17,10 @@ interface Props {
 }
 
 export const SpikeControls: React.FC<Props> = ({
-  palette, geometrySettings, baseMm, settings, setSettings, spikeDiag,
+  paletteSize, geometrySettings, baseMm, settings, setSettings, spikeDiag,
   canGenerate, isStale, hasSpikes, onGenerate,
 }) => {
-  if (palette.length === 0) return null;
+  if (paletteSize === 0) return null;
 
   const hasPattern = !!geometrySettings.patternShapes?.[0];
 
@@ -38,7 +38,7 @@ export const SpikeControls: React.FC<Props> = ({
 
   return (
     <section>
-      <h3 className="text-xs uppercase tracking-widest text-gray-400 mb-2">⑤ Spike pattern</h3>
+      <h3 className="text-xs uppercase tracking-widest text-gray-400 mb-2">Spike overlay</h3>
       {hasPattern ? (
         <>
           <p className="text-[10px] text-gray-500 mb-2">
@@ -68,7 +68,7 @@ export const SpikeControls: React.FC<Props> = ({
             </label>
           </div>
           <p className="text-[10px] text-gray-500 mt-2">
-            resolved spike top: {effectiveSpikeMaxMm(settings.spikeMaxMm, baseMm, palette.length, settings.colorLayerMm).toFixed(2)}mm
+            resolved spike top: {effectiveSpikeMaxMm(settings.spikeMaxMm, baseMm, paletteSize, settings.colorLayerMm).toFixed(2)}mm
           </p>
 
           <button
