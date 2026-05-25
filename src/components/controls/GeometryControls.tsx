@@ -143,6 +143,11 @@ const GeometryControls: React.FC<GeometryControlsProps> = ({
 
   return (
     <section className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+      <h3 className="flex items-baseline gap-2 text-sm font-semibold text-gray-100">
+        <span className="text-xs font-mono text-gray-500">01</span>
+        <span>Tile shape</span>
+        <span className="text-[10px] font-mono text-gray-500 ml-auto">STL · SVG · DXF</span>
+      </h3>
       <ShapeUploader
         label="Grip Geometry"
         shapes={
@@ -220,9 +225,13 @@ const GeometryControls: React.FC<GeometryControlsProps> = ({
 
       {patternShapes && patternShapes.length > 0 && (
         <>
+          <h3 className="flex items-baseline gap-2 text-sm font-semibold text-gray-100 mt-2">
+            <span className="text-xs font-mono text-gray-500">02</span>
+            <span>Layout</span>
+          </h3>
           <div className="space-y-2">
-            <label className="text-sm font-medium text-gray-300">
-              Layout Mode
+            <label className="text-xs font-medium text-gray-300">
+              Mode
             </label>
             <SegmentedControl
               value={isTiled ? "tile" : "place"}

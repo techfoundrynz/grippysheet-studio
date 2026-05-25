@@ -5,7 +5,6 @@ import {
   BookOpen,
   Maximize,
   FlipHorizontal,
-  Layers,
   Plus,
   Trash2,
   GripVertical,
@@ -193,13 +192,15 @@ const InlayControls: React.FC<InlayControlsProps> = ({
 
   return (
     <div className="space-y-4">
-      <div className="bg-gray-800/50 rounded-lg p-3 border border-gray-700">
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="text-sm font-medium text-gray-300 flex items-center gap-2">
-            <Layers size={14} />
-            Inlay Layers
+      <div className="bg-gray-900/40 rounded-lg p-3 border border-gray-800">
+        <div className="flex items-baseline justify-between mb-2">
+          <h3 className="flex items-baseline gap-2 text-sm font-semibold text-gray-100">
+            <span className="text-xs font-mono text-gray-500">01</span>
+            <span>Layers</span>
           </h3>
-          <span className="text-xs text-gray-500">{items.length} items</span>
+          <span className="text-[10px] font-mono text-gray-500">
+            <span className="text-signal-ready">{items.length}</span> {items.length === 1 ? 'item' : 'items'}
+          </span>
         </div>
 
         <div className="space-y-1 max-h-40 overflow-y-auto mb-2">
@@ -328,9 +329,10 @@ const InlayControls: React.FC<InlayControlsProps> = ({
 
       {selectedItem && (
         <>
-          <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
-            Selected Layer Properties
-          </div>
+          <h3 className="flex items-baseline gap-2 text-sm font-semibold text-gray-100 mb-3 mt-1">
+            <span className="text-xs font-mono text-gray-500">02</span>
+            <span>Pattern</span>
+          </h3>
 
           <ShapeUploader
             label={"Inlay Pattern"}

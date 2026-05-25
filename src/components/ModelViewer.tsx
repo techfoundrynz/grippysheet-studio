@@ -199,7 +199,19 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
 
 
   return (
-    <div className="w-full h-full bg-gray-900 rounded-lg overflow-hidden border border-gray-800 relative group">
+    <div
+      className="w-full h-full rounded-lg overflow-hidden border border-gray-800 relative group"
+      style={{
+        // Mirror the 2D canvas atmosphere — near-black base with warm/cool
+        // radial blooms — so the viewer reads as a "lit surface" regardless
+        // of which mode (2D/3D) is active.
+        background: '#07090c',
+        backgroundImage: [
+          'radial-gradient(circle at 18% 22%, rgba(255, 107, 26, 0.10), transparent 55%)',
+          'radial-gradient(circle at 85% 85%, rgba(0, 212, 255, 0.06), transparent 55%)',
+        ].join(', '),
+      }}
+    >
       <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 flex flex-row items-center gap-2 p-1.5 bg-gray-900/85 backdrop-blur-md rounded-xl border border-gray-700/60 shadow-xl ring-1 ring-black/30">
 
         {/* 2D / 3D mode toggle — bigger pill with animated active indicator
@@ -722,8 +734,10 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
             />
         )}
 
-        {/* Rotate GridHelper 90deg X to lie on XY plane */}
-        <gridHelper args={[2000, 20]} position={[0, 0, 0]} rotation={[Math.PI / 2, 0, 0]} />
+        {/* Rotate GridHelper 90deg X to lie on XY plane. Args 2/3 set the
+            center axis colour + grid line colour — picked to disappear into
+            the new dark backdrop instead of fighting it. */}
+        <gridHelper args={[2000, 20, 0x1a2030, 0x14181f]} position={[0, 0, 0]} rotation={[Math.PI / 2, 0, 0]} />
       </Canvas>
       </div>
       </ErrorBoundary>
