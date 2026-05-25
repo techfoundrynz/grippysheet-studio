@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { parseDxfToShapes, generateSVGPath } from '../utils/dxfUtils';
 import * as THREE from 'three';
 
@@ -9,7 +9,7 @@ interface DXFThumbnailProps {
     strokeColor?: string;
 }
 
-const DXFThumbnail: React.FC<DXFThumbnailProps> = ({ url, alt, className, strokeColor = '#22c55e' }) => {
+const DXFThumbnail: React.FC<DXFThumbnailProps> = ({ url, className, strokeColor = '#22c55e' }) => {
     const [pathData, setPathData] = useState<string | null>(null);
     const [viewBox, setViewBox] = useState<string>("0 0 100 100");
     const [error, setError] = useState<boolean>(false);

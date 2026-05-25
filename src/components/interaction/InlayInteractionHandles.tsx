@@ -101,7 +101,6 @@ export const InlayInteractionHandles: React.FC<InlayInteractionHandlesProps> = (
     setIsDragging,
     thickness,
     selectedInlayId,
-    setSelectedInlayId,
     setPreviewInlay,
     cutoutShapes
 }) => {
@@ -276,7 +275,7 @@ export const InlayInteractionHandles: React.FC<InlayInteractionHandlesProps> = (
 
     }).current;
 
-    const handleWindowUp = useRef((e: PointerEvent) => {
+    const handleWindowUp = useRef((_e: PointerEvent) => {
         setIsDragging(false);
         dragStartRef.current = null;
         window.removeEventListener('pointermove', handleWindowMove);

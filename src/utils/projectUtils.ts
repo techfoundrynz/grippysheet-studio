@@ -104,11 +104,17 @@ export const importProjectBundle = async (file: File): Promise<ImportResult> => 
         const text = await projectFile.async("text");
         rawData = JSON.parse(text);
 
-        // Helper to process a zip entry
-        const processEntry = async (entry: JSZip.JSZipObject, fallbackName: string) => {
+        // Helper to process a zip entry. `forcedType` overrides the sniffer
+        // when we know the kind from the asset slot (e.g. ColorFlow image
+        // bytes aren't sniffable as shapes — the slot dictates the type).
+        const processEntry = async (
+            entry: JSZip.JSZipObject,
+            fallbackName: string,
+            forcedType?: Asset['type'],
+        ): Promise<Asset> => {
             const buffer = await entry.async("arraybuffer");
             const name = entry.name.split('/').pop() || fallbackName;
-            const type = detectAssetType(buffer, name);
+            const type: Asset['type'] = forcedType ?? detectAssetType(buffer, name);
 
             let content: string | ArrayBuffer = buffer;
             if (type === 'svg' || type === 'dxf') {
@@ -154,14 +160,13 @@ export const importProjectBundle = async (file: File): Promise<ImportResult> => 
             }
         }
 
-        // Image (ColorFlow)
+        // Image (ColorFlow) — sniffer can't classify raster bytes, so we
+        // force the type from the slot.
         const imageFolder = zip.folder('assets/image');
         if (imageFolder) {
             const files = imageFolder.file(/.*/);
             if (files.length > 0) {
-                const imageAsset = await processEntry(files[0], 'image');
-                imageAsset.type = 'image';
-                assets.image = imageAsset;
+                assets.image = await processEntry(files[0], 'image', 'image');
             }
         }
 

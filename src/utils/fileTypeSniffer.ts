@@ -8,7 +8,6 @@ export const detectAssetType = (buffer: ArrayBuffer, fileName: string): 'stl' | 
     if (lowerName.endsWith('.svg')) return 'svg';
 
     // 2. Sniff content
-    const view = new DataView(buffer);
     const decoder = new TextDecoder('utf-8');
 
     // Check for Binary STL (80 bytes header + 4 byte count)

@@ -138,7 +138,11 @@ const OutputPanel: React.FC<OutputPanelProps> = ({ meshRef, debugMode = false, c
     const exporter = new STLExporter();
     const result = exporter.parse(objectToExport, { binary: true });
     
-    const blob = new Blob([result], { type: 'application/octet-stream' } as BlobPropertyBag);
+    // STLExporter (binary mode) returns a DataView<ArrayBufferLike> whose
+    // buffer's TS type widens to include SharedArrayBuffer — Blob() only
+    // accepts plain ArrayBuffer-backed views. The cast is safe: we never
+    // construct SharedArrayBuffer-backed exports.
+    const blob = new Blob([result as BlobPart], { type: 'application/octet-stream' });
     const link = document.createElement('a');
     link.style.display = 'none';
     document.body.appendChild(link);

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Camera, X, Check, ImageDown } from 'lucide-react';
+import { Camera, X, ImageDown } from 'lucide-react';
 import { COLORS } from '../constants/colors';
 
 interface ScreenshotModalProps {

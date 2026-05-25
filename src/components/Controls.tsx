@@ -8,13 +8,9 @@ import { RotateCcw, HelpCircle, ChevronDown, Download, Upload } from 'lucide-rea
 import { useAlert } from '../context/AlertContext';
 import SegmentedControl from './ui/SegmentedControl';
 import Button from './ui/Button';
-import { calculateInlayScale } from '../utils/patternUtils';
-import * as THREE from 'three';
 import { ColorFlowControls, type ColorFlowGeomData } from '../colorflow/ColorFlowControls';
 import { SpikeControls } from '../colorflow/controls/SpikeControls';
 import type { ColorFlowSettings } from '../colorflow/schema';
-import type { Centroid } from '../colorflow/pipeline/quantize';
-import type { ExtrudedGeometry } from '../colorflow/pipeline/extrude';
 
 // Sub-components
 import BaseControls from './controls/BaseControls';
@@ -227,20 +223,23 @@ const Controls: React.FC<ControlsProps> = ({
                    let newInlay = data.inlay;
                    let newGeometry = data.geometry;
 
-                   // Re-hydrate Shapes from Assets if available
+                   // Re-hydrate Shapes from Assets if available. Image-type
+                   // assets (ColorFlow raster) can't be reparsed as shapes,
+                   // so they're skipped here — they're handled separately
+                   // via the ColorFlow image-import path.
+                   const isShapeAsset = (t: 'dxf' | 'svg' | 'stl' | 'image'): t is 'dxf' | 'svg' | 'stl' => t !== 'image';
                    if (importedAssets) {
                        // 1. Base Outline
-                       if (importedAssets.baseOutline) {
+                       if (importedAssets.baseOutline && isShapeAsset(importedAssets.baseOutline.type)) {
                            const res = parseShapeFile(importedAssets.baseOutline.content, importedAssets.baseOutline.type);
                            if (res.success) {
                                newBase = { ...newBase, cutoutShapes: res.shapes };
                            }
                        }
-                       
+
                        // 2. Pattern
-                       if (importedAssets.pattern) {
+                       if (importedAssets.pattern && isShapeAsset(importedAssets.pattern.type)) {
                            console.log("[Import] Rehydrating Pattern:", importedAssets.pattern.name);
-                           // GeometryControls logic usually expects 'stl' or 'dxf'/'svg' but logic handles it.
                            const res = parseShapeFile(importedAssets.pattern.content, importedAssets.pattern.type);
                            if (res.success) {
                                // Ensure we update all relevant fields
@@ -260,7 +259,7 @@ const Controls: React.FC<ControlsProps> = ({
                        if (importedAssets.inlays && newInlay.items) {
                            newInlay.items = newInlay.items.map(item => {
                                const asset = importedAssets.inlays?.[item.id];
-                               if (asset) {
+                               if (asset && isShapeAsset(asset.type)) {
                                    const res = parseShapeFile(asset.content, asset.type, true); // Extract colors often true for inlays?
                                    // Note: extractColors=true logic in ShapeUploader usually depends on props.
                                    // In InlayControls, ShapeUploader has extractColors={true} passed?
