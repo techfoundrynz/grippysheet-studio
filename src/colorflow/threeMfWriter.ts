@@ -38,7 +38,9 @@ function buildModelXml(parts: MeshPart[], assemblyName: string): string {
   parts.forEach((p, i) => {
     const id = i + 1;
     const matIndex = i;
-    xml += `<object id="${id}" type="model" name="${escapeXml(p.name)}"><mesh><vertices>`;
+    // Object-level pid/pindex gives slicers that only honour per-object material
+    // (rather than walking per-triangle pid/p1) a fallback display colour.
+    xml += `<object id="${id}" type="model" name="${escapeXml(p.name)}" pid="1" pindex="${matIndex}"><mesh><vertices>`;
     const positions = p.mesh.positions;
     const n = positions.length / 3;
     for (let v = 0; v < n; v++) {
@@ -67,9 +69,31 @@ function buildModelXml(parts: MeshPart[], assemblyName: string): string {
 }
 
 /**
+ * Build a Bambu/Orca-style `Metadata/model_settings.config` declaring each
+ * object as a separate "extruder" so slicers that read this BambuStudio-
+ * proprietary metadata (which is most of them in the Onewheel grip
+ * community) auto-assign one filament per part, instead of dumping every
+ * part onto extruder 1 grey.
+ */
+function buildModelSettingsConfig(parts: MeshPart[]): string {
+  let xml = '<?xml version="1.0" encoding="UTF-8"?>\n<config>\n';
+  parts.forEach((p, i) => {
+    const objId = i + 1;
+    const extruder = i + 1;
+    xml += `  <object id="${objId}">\n`;
+    xml += `    <metadata key="name" value="${escapeXml(p.name)}"/>\n`;
+    xml += `    <metadata key="extruder" value="${extruder}"/>\n`;
+    xml += `  </object>\n`;
+  });
+  xml += '</config>\n';
+  return xml;
+}
+
+/**
  * Pack a list of named, colored meshes + a parent assembly into a Bambu-
  * compatible 3MF blob with the 3MF Materials and Properties extension
- * for filament-color hints.
+ * for filament-color hints, plus Bambu's proprietary metadata so
+ * "Load filaments from project" can auto-assign extruders.
  */
 export async function build3MF(parts: MeshPart[], assemblyName: string): Promise<Blob> {
   if (parts.length === 0) throw new Error('build3MF: no parts');
@@ -85,10 +109,12 @@ export async function build3MF(parts: MeshPart[], assemblyName: string): Promise
     '<Relationship Id="rel-1" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel" Target="/3D/3dmodel.model"/>\n' +
     '</Relationships>';
   const model = buildModelXml(parts, assemblyName);
+  const modelSettings = buildModelSettingsConfig(parts);
 
   const zip = new JSZip();
   zip.file('[Content_Types].xml', contentTypes);
   zip.file('_rels/.rels', rels);
   zip.file('3D/3dmodel.model', model);
+  zip.file('Metadata/model_settings.config', modelSettings);
   return zip.generateAsync({ type: 'blob', mimeType: 'model/3mf' });
 }

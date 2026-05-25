@@ -16,6 +16,24 @@ function pathToRing(path: Array<{ X: number; Y: number }>): Array<[number, numbe
 }
 
 /**
+ * Force a polygon ring to CCW orientation. The downstream extruder
+ * (`extrudePolygon`) assumes CCW for both outer rings AND hole rings —
+ * Clipper's PolyTree output is CCW for outers but CW for holes by default,
+ * which produces inside-out side walls on the holes (visible in slicers as
+ * non-manifold edges along every hole boundary). Computing the signed area
+ * once per ring and reversing when negative is cheap insurance against the
+ * convention drift.
+ */
+function ensureCCW(ring: Array<[number, number]>): Array<[number, number]> {
+  let a = 0;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    a += ring[j][0] * ring[i][1] - ring[i][0] * ring[j][1];
+  }
+  if (a < 0) return ring.slice().reverse();
+  return ring;
+}
+
+/**
  * Compute the boolean union of multiple polygons (each with optional holes).
  * Returns a set of disjoint, non-touching polygons. Coincident edges between
  * inputs are eliminated; truly overlapping inputs are merged.
@@ -55,12 +73,13 @@ export function unionPolygons(polygons: LayerPolygon[]): LayerPolygon[] {
 
   const result: LayerPolygon[] = [];
   // Top-level children of the PolyTree are outer rings; their children are holes.
+  // Force CCW orientation on both — see ensureCCW for why.
   for (const outerNode of tree.Childs()) {
-    const outer = pathToRing(outerNode.Contour());
+    const outer = ensureCCW(pathToRing(outerNode.Contour()));
     if (outer.length < 3) continue;
     const holes: Array<Array<[number, number]>> = [];
     for (const holeNode of outerNode.Childs()) {
-      const hole = pathToRing(holeNode.Contour());
+      const hole = ensureCCW(pathToRing(holeNode.Contour()));
       if (hole.length >= 3) holes.push(hole);
     }
     result.push({ outer, holes });

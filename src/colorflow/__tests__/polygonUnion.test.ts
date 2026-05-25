@@ -85,3 +85,31 @@ function polygonArea(ring: Array<[number, number]>): number {
   }
   return Math.abs(a) / 2;
 }
+
+function signedArea(ring: Array<[number, number]>): number {
+  let a = 0;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    a += ring[j][0] * ring[i][1] - ring[i][0] * ring[j][1];
+  }
+  return a / 2;
+}
+
+describe('unionPolygons orientation', () => {
+  it('outer rings come back CCW and hole rings come back CCW too', () => {
+    // The downstream extruder assumes CCW for both outer AND hole rings;
+    // Clipper's PolyTree default emits CW holes, so a square-with-a-hole
+    // returned with CW holes would produce inside-out side walls and the
+    // slicer would flag every hole-boundary edge as non-manifold. ensureCCW
+    // in polygonUnion is the load-bearing guard against that drift.
+    const result = unionPolygons([
+      {
+        outer: [[0, 0], [10, 0], [10, 10], [0, 10]],
+        holes: [[[3, 3], [7, 3], [7, 7], [3, 7]]],
+      },
+    ]);
+    expect(result).toHaveLength(1);
+    expect(signedArea(result[0].outer)).toBeGreaterThan(0);
+    expect(result[0].holes).toHaveLength(1);
+    expect(signedArea(result[0].holes[0])).toBeGreaterThan(0);
+  });
+});

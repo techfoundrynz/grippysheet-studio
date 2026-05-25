@@ -85,6 +85,36 @@ describe('build3MF', () => {
     expect(colorTriangles.length).toBe(4);
   });
 
+  it('emits Bambu-style Metadata/model_settings.config with per-object extruder assignments', async () => {
+    const blob = await build3MF([
+      { name: 'base', mesh: cubeMesh(), color: '#888888' },
+      { name: 'color_1_ff0000', mesh: cubeMesh(), color: '#FF0000' },
+      { name: 'color_2_00ff00', mesh: cubeMesh(), color: '#00FF00' },
+    ], 'footpad_assembly');
+    const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+    const cfg = zip.file('Metadata/model_settings.config');
+    expect(cfg).toBeTruthy();
+    const cfgXml = await cfg!.async('string');
+    // One <object> entry per part, with a sequential extruder index. Bambu
+    // Studio's "Load filaments from project" path reads this to auto-assign
+    // each part to its own filament instead of dumping them all on extruder 1.
+    expect(cfgXml).toMatch(/<object id="1">[\s\S]*?<metadata key="extruder" value="1"\/>/);
+    expect(cfgXml).toMatch(/<object id="2">[\s\S]*?<metadata key="extruder" value="2"\/>/);
+    expect(cfgXml).toMatch(/<object id="3">[\s\S]*?<metadata key="extruder" value="3"\/>/);
+    expect(cfgXml).toMatch(/<metadata key="name" value="color_1_ff0000"\/>/);
+  });
+
+  it('sets object-level pid/pindex so slicers that ignore per-triangle p1 still get the colour', async () => {
+    const blob = await build3MF([
+      { name: 'base', mesh: cubeMesh(), color: '#888888' },
+      { name: 'color_1_ff0000', mesh: cubeMesh(), color: '#FF0000' },
+    ], 'footpad_assembly');
+    const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+    const xml = await zip.file('3D/3dmodel.model')!.async('string');
+    expect(xml).toMatch(/<object id="1"[^>]*pid="1" pindex="0"/);
+    expect(xml).toMatch(/<object id="2"[^>]*pid="1" pindex="1"/);
+  });
+
   it('escapes XML special chars in colors (defensive)', async () => {
     // Colors are user-supplied strings — if someone passes garbage, it must still
     // produce well-formed XML (escaped) rather than corrupt the model.
