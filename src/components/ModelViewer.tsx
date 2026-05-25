@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { OrbitControls, OrthographicCamera, PerspectiveCamera, Line } from '@react-three/drei';
+import { OrbitControls, OrthographicCamera, PerspectiveCamera, Line, ContactShadows } from '@react-three/drei';
 import { InlayInteractionHandles } from './interaction/InlayInteractionHandles';
 import { Box, Layers, ScanLine, Activity, Ghost, Camera as CameraIcon, Palette, Scissors } from 'lucide-react';
 import * as THREE from 'three';
@@ -19,6 +19,7 @@ import { shapeToPolygon, transformOutlinePolygon, type OutlinePolygon } from '..
 import type { Centroid } from '../colorflow/pipeline/quantize';
 import type { ExtrudedGeometry } from '../colorflow/pipeline/extrude';
 import { eventBus } from '../utils/eventBus';
+import IconTooltip from './ui/IconTooltip';
 
 interface ModelViewerProps {
   mode?: 'pattern' | 'colorflow';
@@ -236,22 +237,26 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
 
         <div className="w-px bg-gray-700 mx-1" />
 
-        <button
-          onClick={() => setViewState({ type: 'ortho', timestamp: Date.now() })}
-          disabled={renderMode === '2d'}
-          className={`p-2 rounded hover:bg-gray-700 transition-colors ${viewState.type === 'ortho' && renderMode === '3d' ? 'bg-brand-500/15 text-brand-400' : 'text-gray-400'} disabled:opacity-30 disabled:cursor-not-allowed`}
-          title="Orthographic View"
-        >
-          <Layers size={20} />
-        </button>
-        <button
-          onClick={() => setViewState({ type: 'iso', timestamp: Date.now() })}
-          disabled={renderMode === '2d'}
-          className={`p-2 rounded hover:bg-gray-700 transition-colors ${viewState.type === 'iso' && renderMode === '3d' ? 'bg-brand-500/15 text-brand-400' : 'text-gray-400'} disabled:opacity-30 disabled:cursor-not-allowed`}
-          title="Isometric View"
-        >
-          <Box size={20} />
-        </button>
+        <IconTooltip label="Orthographic view" shortcut="O">
+          <button
+            onClick={() => setViewState({ type: 'ortho', timestamp: Date.now() })}
+            disabled={renderMode === '2d'}
+            className={`p-2 rounded hover:bg-gray-700 transition-colors ${viewState.type === 'ortho' && renderMode === '3d' ? 'bg-brand-500/15 text-brand-400' : 'text-gray-400'} disabled:opacity-30 disabled:cursor-not-allowed`}
+            aria-label="Orthographic View"
+          >
+            <Layers size={20} />
+          </button>
+        </IconTooltip>
+        <IconTooltip label="Isometric view" shortcut="I">
+          <button
+            onClick={() => setViewState({ type: 'iso', timestamp: Date.now() })}
+            disabled={renderMode === '2d'}
+            className={`p-2 rounded hover:bg-gray-700 transition-colors ${viewState.type === 'iso' && renderMode === '3d' ? 'bg-brand-500/15 text-brand-400' : 'text-gray-400'} disabled:opacity-30 disabled:cursor-not-allowed`}
+            aria-label="Isometric View"
+          >
+            <Box size={20} />
+          </button>
+        </IconTooltip>
 
 
 
@@ -394,21 +399,25 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
         
         <div className="w-px bg-gray-700 mx-1" />
 
-        <button
-            onClick={() => setShowFps(!showFps)}
-            className={`p-2 rounded hover:bg-gray-700 transition-colors ${showFps ? 'bg-signal-info/15 text-signal-info' : 'text-gray-400'}`}
-            title="Toggle FPS Counter"
-        >
-            <Activity size={20} />
-        </button> 
+        <IconTooltip label="FPS counter">
+          <button
+              onClick={() => setShowFps(!showFps)}
+              className={`p-2 rounded hover:bg-gray-700 transition-colors ${showFps ? 'bg-signal-info/15 text-signal-info' : 'text-gray-400'}`}
+              aria-label="Toggle FPS counter"
+          >
+              <Activity size={20} />
+          </button>
+        </IconTooltip>
         <div className="relative" ref={opacityMenuRef}>
-            <button
-            onClick={() => setShowOpacityMenu(!showOpacityMenu)}
-            className={`flex items-center gap-2 p-2 rounded hover:bg-gray-700 transition-colors ${patternOpacity < 1 ? 'bg-indigo-500/20 text-indigo-400' : 'text-gray-400'}`}
-            title="Grip Geometry Opacity"
-            >
-            <Ghost size={20} />
-            </button>
+            <IconTooltip label="Opacity">
+              <button
+                onClick={() => setShowOpacityMenu(!showOpacityMenu)}
+                className={`flex items-center gap-2 p-2 rounded hover:bg-gray-700 transition-colors ${patternOpacity < 1 ? 'bg-indigo-500/20 text-indigo-400' : 'text-gray-400'}`}
+                aria-label="Grip Geometry Opacity"
+              >
+                <Ghost size={20} />
+              </button>
+            </IconTooltip>
             
             {showOpacityMenu && (
                 <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 bg-gray-800 border border-gray-700 rounded shadow-lg p-4 z-50 min-w-[200px] flex flex-col gap-4">
@@ -458,13 +467,15 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
             )}
         </div>  
         <div className="relative" ref={displayMenuRef}>
-            <button
-            onClick={() => setShowDisplayMenu(!showDisplayMenu)}
-            className={`flex items-center gap-2 p-2 rounded hover:bg-gray-700 transition-colors ${displayMode === 'toon' ? 'bg-pink-500/20 text-pink-400' : 'text-gray-400'}`}
-            title="Display Mode"
-            >
-            <Palette size={20} />
-            </button>
+            <IconTooltip label="Render style">
+              <button
+                onClick={() => setShowDisplayMenu(!showDisplayMenu)}
+                className={`flex items-center gap-2 p-2 rounded hover:bg-gray-700 transition-colors ${displayMode === 'toon' ? 'bg-pink-500/20 text-pink-400' : 'text-gray-400'}`}
+                aria-label="Display Mode"
+              >
+                <Palette size={20} />
+              </button>
+            </IconTooltip>
             
             {showDisplayMenu && (
                 <div className="absolute top-full right-0 mt-2 bg-gray-800 border border-gray-700 rounded shadow-lg overflow-hidden whitespace-nowrap z-50 flex flex-col min-w-[100px]">
@@ -483,22 +494,35 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
                 </div>
             )}
         </div>     
-        <button
-            onClick={() => setShowScreenshotModal(true)}
-            className="p-2 rounded hover:bg-gray-700 transition-colors text-gray-400 hover:text-white"
-            title="Screenshot"
-        >
-            <CameraIcon size={20} />
-        </button>
+        <IconTooltip label="Screenshot">
+          <button
+              onClick={() => setShowScreenshotModal(true)}
+              className="p-2 rounded hover:bg-gray-700 transition-colors text-gray-400 hover:text-white"
+              aria-label="Screenshot"
+          >
+              <CameraIcon size={20} />
+          </button>
+        </IconTooltip>
       </div>
 
       {isAnyProcessing && (
-          <div className="absolute top-4 right-4 z-20 flex items-center gap-2 p-2 bg-gray-800/80 backdrop-blur rounded-lg border border-gray-700 text-brand-400">
-             <Spinner size={20} />
-             {activeLabels.length > 0 && (
-               <span className="text-[11px] uppercase tracking-wider text-brand-300">{activeLabels.join(' · ')}</span>
-             )}
-          </div>
+          <>
+            {/* Top-right telemetry pill — signals what's running. */}
+            <div className="absolute top-4 right-4 z-20 flex items-center gap-2 px-2.5 py-1.5 bg-gray-950/85 backdrop-blur-md rounded-lg border border-signal-info/40 shadow-lg ring-1 ring-signal-info/20">
+                <span className="inline-block w-2 h-2 rounded-full bg-signal-info animate-pulse shadow-[0_0_10px_rgba(0,212,255,0.7)]" />
+                <span className="text-[10px] font-display font-semibold tracking-widest text-signal-info">WORKING</span>
+                {activeLabels.length > 0 && (
+                  <span className="text-[10px] font-mono text-signal-info/80 max-w-[180px] truncate">
+                    {activeLabels.join(' · ')}
+                  </span>
+                )}
+            </div>
+            {/* Canvas shimmer veil — diagonal sweep makes progress feel alive
+                during multi-second parses (DXF, STL, ColorFlow trace+extrude). */}
+            <div className="absolute inset-0 z-[5] pointer-events-none overflow-hidden">
+              <div className="absolute inset-0 opacity-25 bg-gradient-to-br from-transparent via-signal-info/15 to-transparent bg-[length:200%_200%] animate-[shimmer_2.4s_linear_infinite]" />
+            </div>
+          </>
       )}
 
       {(() => {
@@ -582,8 +606,24 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
                 RIGHT: THREE.MOUSE.PAN
             }}
         />
-        <ambientLight intensity={0.5} />
-        <directionalLight position={[100, -50, 100]} intensity={1} castShadow={false} />
+        {/* Product-photo lighting rig — cool hemisphere fill, warm key from
+            the upper-right, gentler cool rim from the upper-left to suggest
+            the same warm/cool bloom the canvas backdrop paints. */}
+        <hemisphereLight args={[0xe8f2ff, 0x1a1a1f, 0.55]} />
+        <directionalLight position={[180, -120, 220]} intensity={1.15} color={0xfff0e0} />
+        <directionalLight position={[-160, 80, 140]} intensity={0.35} color={0xc0e0ff} />
+        {/* Soft contact shadow under the pad — gives the model the same
+            "resting on a surface" weight the 2D viewer gets from its
+            canvas drop shadow. Sits just below the base z=0 plane. */}
+        <ContactShadows
+          position={[0, 0, -0.01]}
+          rotation={[Math.PI / 2, 0, 0]}
+          scale={1200}
+          blur={2.6}
+          opacity={0.55}
+          far={40}
+          color={0x000000}
+        />
         
             {/* Route to ColorFlowModel in colorflow mode, ImperativeModel in pattern mode */}
             {mode === 'colorflow' ? (
