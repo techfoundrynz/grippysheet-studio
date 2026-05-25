@@ -5,6 +5,7 @@ import { FlipHorizontal, BookOpen } from 'lucide-react';
 import ShapeUploader from '../ShapeUploader';
 import ControlField from '../ui/ControlField';
 import DebouncedInput from '../DebouncedInput';
+import NumberStepper from '../ui/NumberStepper';
 import ToggleButton from '../ui/ToggleButton';
 import PatternLibraryModal, { PatternPreset } from '../PatternLibraryModal';
 import { useAlert } from '../../context/AlertContext';
@@ -231,14 +232,14 @@ const BaseControls: React.FC<BaseControlsProps> = ({
         </ControlField>
       )}
 
-      <ControlField label="Thickness (mm)" tooltip="Total thickness (height) of the base sheet (min 0.5mm)">
-        <DebouncedInput
-          type="number"
+      <ControlField label="Thickness" tooltip="Total thickness (height) of the base sheet (min 0.5mm)">
+        <NumberStepper
           value={thickness}
-          onChange={(val) => updateSettings({ thickness: Math.max(0.5, Number(val)) })}
-          step="0.1"
-          min="0.5"
-          className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-brand-500/40 focus:border-transparent transition-all outline-none"
+          onChange={(val) => updateSettings({ thickness: val })}
+          step={0.1}
+          min={0.5}
+          unit="mm"
+          aria-label="Thickness in millimetres"
         />
       </ControlField>
 

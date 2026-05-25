@@ -904,7 +904,25 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
           frames={1}
           key={`shadow-${(cutoutShapes && cutoutShapes.length) ?? 0}-${(colorFlowGeom?.layers.length ?? 0)}-${(colorFlowGeom?.spikes.length ?? 0)}`}
         />
-        
+        {/* Studio floor — a near-black circular plane sitting just under the
+            contact-shadow pass so the shadow lands on a surface instead of
+            disappearing into the canvas backdrop. Sized far past the pad
+            bounds (radius ~2800mm vs ~200-260mm pad) so the edge never reads
+            as a disc, only as "ground". Scene is Z-up; circleGeometry defaults
+            to the XY plane, so no rotation is needed. */}
+        <mesh position={[0, 0, -0.5]} renderOrder={-2}>
+          <circleGeometry args={[2800, 96]} />
+          <meshStandardMaterial color={0x0e1218} metalness={0} roughness={0.95} />
+        </mesh>
+        {/* Warm-bloom tint — a much smaller plane biased off-center toward the
+            upper-left, at a whisper of brand-orange opacity. Echoes the warm
+            radial bloom on the 2D canvas backdrop without being visible as a
+            shape. Sits a hair above the floor to avoid z-fighting. */}
+        <mesh position={[-220, 220, -0.49]} renderOrder={-1}>
+          <circleGeometry args={[900, 64]} />
+          <meshStandardMaterial color={0xff6b1a} metalness={0} roughness={1} transparent opacity={0.04} />
+        </mesh>
+
             {/* Route to ColorFlowModel in colorflow mode, ImperativeModel in pattern mode */}
             {mode === 'colorflow' ? (
               <ColorFlowModel
