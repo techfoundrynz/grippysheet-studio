@@ -18,7 +18,7 @@ import { resolvedStackOrder } from './stackOrder';
 import type { ExtrudedGeometry } from './pipeline/extrude';
 import type { Response as WorkerResponse, TracedLayerEntry, ExtrudedLayerEntry } from './workerProtocol';
 import { useAlert } from '../context/AlertContext';
-import { emitProcessing } from '../utils/eventBus';
+import { emitProcessing, eventBus } from '../utils/eventBus';
 import { useDebouncedCommit } from '../utils/useDebouncedCommit';
 
 import { BaseStatusBanner } from './controls/BaseStatusBanner';
@@ -175,6 +175,17 @@ export const ColorFlowControls: React.FC<Props> = ({
     }
     setImageDims({ w: width, h: height });
   }, [showAlert, onImageAssetChanged]);
+
+  // Subscribe to canvas drag-drop. When the user drops an image onto the
+  // viewer, ModelViewer emits `file-drop` and we hydrate the bytes through
+  // the same `handleImageFile` path the right-panel dropzone uses.
+  useEffect(() => {
+    return eventBus.on('file-drop', (e: { file: File; kind: string }) => {
+      if (e.kind === 'image:colorflow') {
+        void handleImageFile(e.file);
+      }
+    });
+  }, [handleImageFile]);
 
   // Quantize whenever inputs change (debounced 200ms internally; slider drafts
   // add another ~250ms on top).

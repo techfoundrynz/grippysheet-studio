@@ -14,7 +14,7 @@ import type { Centroid } from './colorflow/pipeline/quantize';
 import type { ExtrudedGeometry } from './colorflow/pipeline/extrude';
 import type { SpikeSource } from './colorflow/ColorFlowControls';
 import { generateSpikes } from './colorflow/spikes';
-import { emitProcessing } from './utils/eventBus';
+import { emitProcessing, eventBus } from './utils/eventBus';
 import { exportProjectBundle, type ProjectAssets } from './utils/projectUtils';
 
 const App = () => {
@@ -51,6 +51,17 @@ const App = () => {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // Canvas drag-drop bridge — when ModelViewer emits a file-drop event,
+  // switch to the relevant tab so the user sees what just happened. The
+  // payload itself is consumed by the tab-specific controls (ColorFlow
+  // image hydration / Base outline loader).
+  React.useEffect(() => {
+    return eventBus.on('file-drop', (e: { kind: 'image:colorflow' | 'shape:base' }) => {
+      if (e.kind === 'image:colorflow') setActiveTab('colorflow');
+      else if (e.kind === 'shape:base') setActiveTab('base');
+    });
   }, []);
 
   const handleReset = () => {

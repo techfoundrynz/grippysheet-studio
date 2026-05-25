@@ -56,3 +56,23 @@ export interface ToastEvent {
 export function emitToast(event: ToastEvent) {
     eventBus.emit('toast', event);
 }
+
+/**
+ * Canvas-to-controls file-drop bridge. When a user drops a file onto the
+ * viewer (instead of into the right-panel dropzone), the viewer emits
+ * this event so the appropriate control panel can claim the file.
+ *
+ *   `image:colorflow`  → ColorFlowControls hydrates it as the trace source
+ *   `shape:base`       → BaseControls hydrates it as the deck outline
+ *
+ * App-level state is also responsible for switching the active tab when
+ * the kind tells us which surface should now be focused.
+ */
+export interface FileDropEvent {
+    file: File;
+    kind: 'image:colorflow' | 'shape:base';
+}
+
+export function emitFileDrop(event: FileDropEvent) {
+    eventBus.emit('file-drop', event);
+}

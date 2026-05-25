@@ -10,7 +10,7 @@ import PatternLibraryModal, { PatternPreset } from '../PatternLibraryModal';
 import { useAlert } from '../../context/AlertContext';
 import { parseShapeFile } from '../../utils/shapeLoader';
 import { OUTLINE_LIBRARY, getOutlineBySlug } from '../../colorflow/outlineLibrary';
-import { emitProcessing } from '../../utils/eventBus';
+import { emitProcessing, eventBus } from '../../utils/eventBus';
 
 interface BaseControlsProps {
   settings: BaseSettings;
@@ -28,6 +28,7 @@ const BaseControls: React.FC<BaseControlsProps> = ({
   const { size, thickness, color, cutoutShapes } = settings;
   const [fileName, setFileName] = React.useState<string | null>(null);
   const [showLibrary, setShowLibrary] = React.useState(false);
+  const [hoverColorName, setHoverColorName] = React.useState<string | null>(null);
   const { showAlert } = useAlert();
 
   const handlePickPreset = async (slug: string) => {
@@ -60,6 +61,24 @@ const BaseControls: React.FC<BaseControlsProps> = ({
   };
 
   const currentLibraryEntry = settings.outlineSlug ? getOutlineBySlug(settings.outlineSlug) : null;
+
+  // Canvas drag-drop bridge. When a user drops a DXF/SVG anywhere on the
+  // viewer, ModelViewer emits `file-drop` and we treat it the same as if
+  // they used the ShapeUploader directly.
+  React.useEffect(() => {
+    return eventBus.on('file-drop', async (e: { file: File; kind: string }) => {
+      if (e.kind !== 'shape:base') return;
+      const name = e.file.name;
+      const ext = name.toLowerCase().endsWith('.svg') ? 'svg' : 'dxf';
+      const content = await e.file.text();
+      const parsed = parseShapeFile(content, ext);
+      if (parsed.success) {
+        handleOutlineLoaded(parsed.shapes, name, ext, content);
+      } else {
+        showAlert({ title: 'Could not load outline', message: parsed.error ?? 'unknown error', type: 'error' });
+      }
+    });
+  }, []);
 
   return (
     <section className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
@@ -221,8 +240,13 @@ const BaseControls: React.FC<BaseControlsProps> = ({
            <label className="text-sm font-medium text-gray-300">Color</label>
            {(() => {
              const activeName = Object.entries(COLORS).find(([, v]) => v === color)?.[0];
-             return activeName && (
-               <span className="text-[10px] font-mono text-signal-ready tracking-wide">{activeName}</span>
+             const displayName = hoverColorName ?? activeName;
+             const isPreview = hoverColorName && hoverColorName !== activeName;
+             return displayName && (
+               <span className={`text-[10px] font-mono tracking-wide transition-colors ${isPreview ? 'text-brand-300' : 'text-signal-ready'}`}>
+                 {isPreview && <span className="text-gray-500 mr-1">preview:</span>}
+                 {displayName}
+               </span>
              );
            })()}
          </div>
@@ -233,6 +257,10 @@ const BaseControls: React.FC<BaseControlsProps> = ({
                 <button
                   key={value}
                   onClick={() => updateSettings({ color: value })}
+                  onMouseEnter={() => setHoverColorName(name)}
+                  onMouseLeave={() => setHoverColorName(null)}
+                  onFocus={() => setHoverColorName(name)}
+                  onBlur={() => setHoverColorName(null)}
                   className={`relative w-7 h-7 rounded-md transition-all hover:scale-110 active:scale-95 ${
                     isActive
                       ? 'ring-2 ring-signal-ready ring-offset-2 ring-offset-gray-900 shadow-glow-ready'
@@ -247,6 +275,19 @@ const BaseControls: React.FC<BaseControlsProps> = ({
                 </button>
               );
             })}
+         </div>
+         {/* Mini pad preview — silhouette tinted with the swatch the user
+             is hovering. Lets them audition a colour without committing. */}
+         <div className="flex items-center justify-center h-16 mt-1 bg-gray-950/40 rounded-md border border-gray-800/60">
+           <svg viewBox="0 0 100 78" className="h-12 w-auto" aria-hidden="true">
+             <path
+               d="M8 4 H92 Q96 4 96 8 V62 Q96 66 92 66 H80 L78 74 H72 L70 66 H30 L28 74 H22 L20 66 H8 Q4 66 4 62 V8 Q4 4 8 4 Z"
+               fill={(hoverColorName && COLORS[hoverColorName]) || color}
+               stroke="rgba(255,255,255,0.55)"
+               strokeWidth="1"
+               style={{ transition: 'fill 120ms ease' }}
+             />
+           </svg>
          </div>
       </div>
     </section>

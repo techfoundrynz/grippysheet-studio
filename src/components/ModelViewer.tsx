@@ -18,7 +18,7 @@ import { TwoDViewer } from '../colorflow/TwoDViewer';
 import { shapeToPolygon, transformOutlinePolygon, type OutlinePolygon } from '../colorflow/outlineToPolygon';
 import type { Centroid } from '../colorflow/pipeline/quantize';
 import type { ExtrudedGeometry } from '../colorflow/pipeline/extrude';
-import { eventBus } from '../utils/eventBus';
+import { eventBus, emitFileDrop, emitToast } from '../utils/eventBus';
 import IconTooltip from './ui/IconTooltip';
 
 interface ModelViewerProps {
@@ -223,9 +223,110 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
     return () => window.removeEventListener('keydown', onKey);
   }, [renderMode]);
 
+  // Idle wayfinding hint. After ~8s of cursor inactivity on the viewer
+  // AND the user hasn't dismissed it before, surface a contextual nudge
+  // toward the next likely action. `localStorage` remembers the dismissal
+  // so users only see the hint once per browser.
+  const [showHint, setShowHint] = useState(false);
+  const idleTimerRef = React.useRef<number | null>(null);
+  const hintDismissed = React.useRef<boolean>((() => {
+    try { return localStorage.getItem('viewer_hint_dismissed') === 'true'; }
+    catch { return false; }
+  })());
+  useEffect(() => {
+    if (hintDismissed.current) return;
+    const reset = () => {
+      setShowHint(false);
+      if (idleTimerRef.current) window.clearTimeout(idleTimerRef.current);
+      idleTimerRef.current = window.setTimeout(() => setShowHint(true), 8000);
+    };
+    reset();
+    window.addEventListener('mousemove', reset);
+    window.addEventListener('keydown', reset);
+    return () => {
+      window.removeEventListener('mousemove', reset);
+      window.removeEventListener('keydown', reset);
+      if (idleTimerRef.current) window.clearTimeout(idleTimerRef.current);
+    };
+  }, []);
+  const dismissHint = () => {
+    setShowHint(false);
+    try { localStorage.setItem('viewer_hint_dismissed', 'true'); } catch { /* ignore */ }
+    hintDismissed.current = true;
+  };
+  // Pick which hint to show based on the current scene state. Order matters:
+  // first true match wins.
+  const hint = (() => {
+    const hasBase = !!(cutoutShapes && cutoutShapes.length > 0);
+    const hasColorFlow = mode === 'colorflow' && !!colorFlowGeom;
+    if (!hasBase) return { line1: 'Drag a deck DXF onto the canvas', line2: 'or pick from the library in the Base tab' };
+    if (renderMode === '2d') return { line1: 'Press 3 to spin it in 3D', line2: 'or drop an image for a multi-color print' };
+    if (!hasColorFlow) return { line1: 'Drop an image to start a ColorFlow', line2: 'PNG · JPG · SVG — anywhere on the canvas' };
+    return null;
+  })();
+
+  // Canvas-level drag-and-drop. Lets users drop an image or DXF anywhere
+  // on the viewer instead of hunting for the right-panel uploader. Image
+  // files route to ColorFlow; DXFs route to the base outline. The drop
+  // counter tracks nested enter/leave events so the overlay doesn't
+  // flicker when the cursor crosses child elements.
+  const [dropKind, setDropKind] = useState<'image' | 'shape' | null>(null);
+  const dragCounter = React.useRef(0);
+  const dragKindFromEvent = (e: React.DragEvent): 'image' | 'shape' | null => {
+    const items = e.dataTransfer.items;
+    if (!items) return 'image'; // can't classify yet, assume image
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      if (it.kind !== 'file') continue;
+      if (it.type.startsWith('image/')) return 'image';
+    }
+    // Fall back: extension sniff via dataTransfer.files is empty until drop,
+    // so assume image when no image MIME shows up (DXF/STL have no MIME).
+    return 'shape';
+  };
+  const onDragEnter = (e: React.DragEvent) => {
+    if (!Array.from(e.dataTransfer.types).includes('Files')) return;
+    e.preventDefault();
+    dragCounter.current += 1;
+    if (dragCounter.current === 1) setDropKind(dragKindFromEvent(e));
+  };
+  const onDragOver = (e: React.DragEvent) => {
+    if (Array.from(e.dataTransfer.types).includes('Files')) e.preventDefault();
+  };
+  const onDragLeave = (e: React.DragEvent) => {
+    if (!Array.from(e.dataTransfer.types).includes('Files')) return;
+    dragCounter.current = Math.max(0, dragCounter.current - 1);
+    if (dragCounter.current === 0) setDropKind(null);
+  };
+  const onDrop = (e: React.DragEvent) => {
+    if (!Array.from(e.dataTransfer.types).includes('Files')) return;
+    e.preventDefault();
+    dragCounter.current = 0;
+    setDropKind(null);
+    const file = e.dataTransfer.files[0];
+    if (!file) return;
+    const isImage = file.type.startsWith('image/');
+    const name = file.name.toLowerCase();
+    const isDxf = name.endsWith('.dxf');
+    const isSvg = name.endsWith('.svg');
+    if (isImage) {
+      emitFileDrop({ file, kind: 'image:colorflow' });
+      emitToast({ message: 'Image dropped', detail: file.name, tone: 'info' });
+    } else if (isDxf || isSvg) {
+      emitFileDrop({ file, kind: 'shape:base' });
+      emitToast({ message: 'Outline dropped', detail: file.name, tone: 'info' });
+    } else {
+      emitToast({ message: 'Unsupported file', detail: file.name, tone: 'error' });
+    }
+  };
+
 
   return (
     <div
+      onDragEnter={onDragEnter}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
       className="w-full h-full rounded-lg overflow-hidden border border-gray-800 relative group"
       style={{
         // Mirror the 2D canvas atmosphere — near-black base with warm/cool
@@ -533,6 +634,46 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
           </button>
         </IconTooltip>
       </div>
+
+      {/* Idle wayfinding pill — fades in after ~8s of inactivity, points
+          at the next likely action based on what's loaded. Dismissable;
+          the dismissal is remembered in localStorage. */}
+      {showHint && hint && !dropKind && (
+        <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-20 animate-in fade-in slide-in-from-bottom-2 duration-500">
+          <div className="flex items-start gap-3 pl-4 pr-2 py-2.5 rounded-xl bg-gray-950/85 backdrop-blur-md border border-brand-500/40 shadow-glow-brand ring-1 ring-white/5 max-w-sm">
+            <span className="text-brand-400 text-base leading-none mt-0.5">★</span>
+            <div className="flex-1 min-w-0">
+              <div className="text-xs font-display font-semibold text-gray-100 tracking-wide">{hint.line1}</div>
+              <div className="text-[10px] font-mono text-gray-500 mt-0.5">{hint.line2}</div>
+            </div>
+            <button
+              onClick={dismissHint}
+              className="self-start p-1 rounded text-gray-500 hover:text-white hover:bg-gray-800 transition-colors"
+              aria-label="Dismiss hint"
+              title="Dismiss"
+            >
+              <span className="text-xs leading-none">✕</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Drop-target overlay — full-canvas hint when a file is being
+          dragged in. Image kind suggests ColorFlow; shape kind suggests
+          base outline. Both share the brand-orange glow treatment. */}
+      {dropKind && (
+        <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none bg-brand-500/[0.04] backdrop-blur-[2px] animate-in fade-in duration-150">
+          <div className="px-6 py-5 rounded-2xl border-2 border-dashed border-brand-500 bg-gray-950/85 shadow-glow-brand text-center">
+            <div className="text-3xl mb-2">{dropKind === 'image' ? '🎨' : '📐'}</div>
+            <div className="font-display font-bold text-lg tracking-wide text-white">
+              {dropKind === 'image' ? 'Drop to start a ColorFlow' : 'Drop to load the deck outline'}
+            </div>
+            <div className="text-[11px] font-mono text-gray-400 mt-1">
+              {dropKind === 'image' ? 'PNG · JPG · SVG · WebP' : 'DXF · SVG'}
+            </div>
+          </div>
+        </div>
+      )}
 
       {isAnyProcessing && (
           <>
