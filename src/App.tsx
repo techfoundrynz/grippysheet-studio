@@ -64,6 +64,15 @@ const App = () => {
     });
   }, []);
 
+  // Imperative tab-switch bus. Used by the viewer context menu's
+  // "Open Library" item so it can land the user on the Base tab before
+  // popping the library modal (BaseControls subscribes separately).
+  React.useEffect(() => {
+    return eventBus.on('set-active-tab', (e: { tab: 'base' | 'inlay' | 'colorflow' | 'geometry' }) => {
+      setActiveTab(e.tab);
+    });
+  }, []);
+
   const handleReset = () => {
     setBaseSettings(defaultBaseSettings);
     setGeometrySettings(defaultGeometrySettings);

@@ -18,8 +18,9 @@ import { TwoDViewer } from '../colorflow/TwoDViewer';
 import { shapeToPolygon, transformOutlinePolygon, type OutlinePolygon } from '../colorflow/outlineToPolygon';
 import type { Centroid } from '../colorflow/pipeline/quantize';
 import type { ExtrudedGeometry } from '../colorflow/pipeline/extrude';
-import { eventBus, emitFileDrop, emitToast } from '../utils/eventBus';
+import { eventBus, emitFileDrop, emitToast, emitOpenOutlineLibrary, emitSetActiveTab } from '../utils/eventBus';
 import IconTooltip from './ui/IconTooltip';
+import ContextMenu, { ContextMenuItem } from './ui/ContextMenu';
 
 interface ModelViewerProps {
   mode?: 'pattern' | 'colorflow';
@@ -106,15 +107,18 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
   const [canvasReady, setCanvasReady] = useState(false);
   // Global processing keys → label. UI shows spinner if non-empty.
   const [processingMap, setProcessingMap] = useState<Map<string, string>>(() => new Map());
-  const processingMapRef = React.useRef(processingMap);
-  processingMapRef.current = processingMap;
 
   useEffect(() => {
     return eventBus.on('processing', (e: { key: string; busy: boolean; label?: string }) => {
-      const next = new Map(processingMapRef.current);
-      if (e.busy) next.set(e.key, e.label ?? '');
-      else next.delete(e.key);
-      setProcessingMap(next);
+      // Functional setState — two emits on the same tick (e.g. one phase
+      // ending while the next begins) would otherwise both clone the same
+      // stale ref and the second would clobber the first's mutation.
+      setProcessingMap((prev) => {
+        const next = new Map(prev);
+        if (e.busy) next.set(e.key, e.label ?? '');
+        else next.delete(e.key);
+        return next;
+      });
     });
   }, []);
 
@@ -228,13 +232,13 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
   // toward the next likely action. `localStorage` remembers the dismissal
   // so users only see the hint once per browser.
   const [showHint, setShowHint] = useState(false);
-  const idleTimerRef = React.useRef<number | null>(null);
-  const hintDismissed = React.useRef<boolean>((() => {
+  const [hintDismissed, setHintDismissed] = useState<boolean>(() => {
     try { return localStorage.getItem('viewer_hint_dismissed') === 'true'; }
     catch { return false; }
-  })());
+  });
+  const idleTimerRef = React.useRef<number | null>(null);
   useEffect(() => {
-    if (hintDismissed.current) return;
+    if (hintDismissed) return;
     const reset = () => {
       setShowHint(false);
       if (idleTimerRef.current) window.clearTimeout(idleTimerRef.current);
@@ -246,13 +250,20 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
     return () => {
       window.removeEventListener('mousemove', reset);
       window.removeEventListener('keydown', reset);
-      if (idleTimerRef.current) window.clearTimeout(idleTimerRef.current);
+      if (idleTimerRef.current) {
+        window.clearTimeout(idleTimerRef.current);
+        idleTimerRef.current = null;
+      }
     };
-  }, []);
+    // hintDismissed is a real dep — once it flips true, the effect re-runs
+    // and the cleanup unsubscribes the listeners + clears the timer so the
+    // hint can't re-fire later in the same session.
+  }, [hintDismissed]);
   const dismissHint = () => {
     setShowHint(false);
-    try { localStorage.setItem('viewer_hint_dismissed', 'true'); } catch { /* ignore */ }
-    hintDismissed.current = true;
+    setHintDismissed(true);
+    try { localStorage.setItem('viewer_hint_dismissed', 'true'); }
+    catch (err) { console.warn('[viewer-hint] localStorage write failed', err); }
   };
   // Pick which hint to show based on the current scene state. Order matters:
   // first true match wins.
@@ -270,19 +281,93 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
   // files route to ColorFlow; DXFs route to the base outline. The drop
   // counter tracks nested enter/leave events so the overlay doesn't
   // flicker when the cursor crosses child elements.
-  const [dropKind, setDropKind] = useState<'image' | 'shape' | null>(null);
+  // Right-click context menu. Tracks both open-state and the click
+  // coordinates so the menu portal can position at the cursor. Set via
+  // onContextMenu on the outer viewer div; cleared by ContextMenu's
+  // own click-outside / Escape handling.
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+
+  const handleContextMenu = (e: React.MouseEvent) => {
+    // Only intercept right-clicks on the empty canvas — let native menus
+    // through on inputs / contenteditables that might land here later.
+    const target = e.target as HTMLElement | null;
+    if (target) {
+      const tag = target.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || target.isContentEditable) return;
+    }
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY });
+  };
+
+  const contextMenuItems: Array<ContextMenuItem | false | null> = (() => {
+    const switchTo = renderMode === '2d' ? '3d' : '2d';
+    const items: Array<ContextMenuItem | false | null> = [
+      {
+        label: switchTo === '3d' ? 'Switch to 3D' : 'Switch to 2D',
+        shortcut: switchTo === '3d' ? '3' : '2',
+        onClick: () => {
+          setRenderMode(switchTo);
+          emitToast({
+            message: switchTo === '3d' ? 'Switched to 3D' : 'Switched to 2D',
+            detail: switchTo === '3d' ? 'O for orthographic · I for isometric' : 'top-down preview',
+            tone: 'info',
+          });
+        },
+      },
+    ];
+    if (renderMode === '3d') {
+      items.push({ separator: true });
+      items.push({
+        label: 'Reset View',
+        shortcut: 'O',
+        onClick: () => {
+          setViewState({ type: 'ortho', timestamp: Date.now() });
+          emitToast({ message: 'View reset', detail: 'orthographic', tone: 'info' });
+        },
+      });
+      items.push({
+        label: 'Take Screenshot',
+        onClick: () => setShowScreenshotModal(true),
+      });
+    }
+    items.push({ separator: true });
+    items.push({
+      label: 'Open Library',
+      onClick: () => {
+        // Switch to Base tab first so the modal opens against the
+        // right surface, then ask BaseControls to flip its showLibrary.
+        emitSetActiveTab('base');
+        emitOpenOutlineLibrary();
+        emitToast({ message: 'Outline library', detail: 'pick a deck shape', tone: 'info' });
+      },
+    });
+    return items;
+  })();
+
+  // Drag-classify: returns 'image' for image MIME, 'shape' only when one of
+  // the dragged entries advertises a DXF/SVG MIME (or comes with no MIME
+  // hint at all — common for these formats), and 'unknown' otherwise so
+  // the overlay doesn't promise a successful drop for unsupported types.
+  const [dropKind, setDropKind] = useState<'image' | 'shape' | 'unknown' | null>(null);
   const dragCounter = React.useRef(0);
-  const dragKindFromEvent = (e: React.DragEvent): 'image' | 'shape' | null => {
+  const dragKindFromEvent = (e: React.DragEvent): 'image' | 'shape' | 'unknown' => {
     const items = e.dataTransfer.items;
-    if (!items) return 'image'; // can't classify yet, assume image
+    if (!items || items.length === 0) return 'unknown';
+    let sawShapeMime = false;
+    let sawUnknownMime = false;
     for (let i = 0; i < items.length; i++) {
       const it = items[i];
       if (it.kind !== 'file') continue;
       if (it.type.startsWith('image/')) return 'image';
+      if (it.type === '' || it.type === 'application/octet-stream') {
+        // DXF/SVG often come through without a MIME on Linux/Windows.
+        sawUnknownMime = true;
+      } else if (it.type === 'image/svg+xml' || it.type === 'application/dxf') {
+        sawShapeMime = true;
+      }
     }
-    // Fall back: extension sniff via dataTransfer.files is empty until drop,
-    // so assume image when no image MIME shows up (DXF/STL have no MIME).
-    return 'shape';
+    if (sawShapeMime || sawUnknownMime) return 'shape';
+    return 'unknown';
   };
   const onDragEnter = (e: React.DragEvent) => {
     if (!Array.from(e.dataTransfer.types).includes('Files')) return;
@@ -303,20 +388,27 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
     e.preventDefault();
     dragCounter.current = 0;
     setDropKind(null);
-    const file = e.dataTransfer.files[0];
-    if (!file) return;
+    // Multi-file drops: take the first and warn so the user knows the
+    // others were ignored. Beats silent truncation.
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length === 0) return;
+    if (files.length > 1) {
+      emitToast({ message: 'Multiple files dropped', detail: `using first · ${files[0].name}`, tone: 'info' });
+    }
+    const file = files[0];
     const isImage = file.type.startsWith('image/');
-    const name = file.name.toLowerCase();
-    const isDxf = name.endsWith('.dxf');
-    const isSvg = name.endsWith('.svg');
+    const lower = file.name.toLowerCase();
+    const isDxf = lower.endsWith('.dxf');
+    const isSvg = lower.endsWith('.svg');
+    // Success toasts ('Image loaded', 'Outline loaded') are now fired by
+    // the consuming subscriber once the parse + decode actually succeed.
+    // We only emit error toasts here for truly unsupported formats.
     if (isImage) {
       emitFileDrop({ file, kind: 'image:colorflow' });
-      emitToast({ message: 'Image dropped', detail: file.name, tone: 'info' });
     } else if (isDxf || isSvg) {
       emitFileDrop({ file, kind: 'shape:base' });
-      emitToast({ message: 'Outline dropped', detail: file.name, tone: 'info' });
     } else {
-      emitToast({ message: 'Unsupported file', detail: file.name, tone: 'error' });
+      emitToast({ message: 'Unsupported file', detail: `${file.name} · expected image / DXF / SVG`, tone: 'error' });
     }
   };
 
@@ -327,6 +419,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
+      onContextMenu={handleContextMenu}
       className="w-full h-full rounded-lg overflow-hidden border border-gray-800 relative group"
       style={{
         // Mirror the 2D canvas atmosphere — near-black base with warm/cool
@@ -661,19 +754,31 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
       {/* Drop-target overlay — full-canvas hint when a file is being
           dragged in. Image kind suggests ColorFlow; shape kind suggests
           base outline. Both share the brand-orange glow treatment. */}
-      {dropKind && (
-        <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none bg-brand-500/[0.04] backdrop-blur-[2px] animate-in fade-in duration-150">
-          <div className="px-6 py-5 rounded-2xl border-2 border-dashed border-brand-500 bg-gray-950/85 shadow-glow-brand text-center">
-            <div className="text-3xl mb-2">{dropKind === 'image' ? '🎨' : '📐'}</div>
-            <div className="font-display font-bold text-lg tracking-wide text-white">
-              {dropKind === 'image' ? 'Drop to start a ColorFlow' : 'Drop to load the deck outline'}
-            </div>
-            <div className="text-[11px] font-mono text-gray-400 mt-1">
-              {dropKind === 'image' ? 'PNG · JPG · SVG · WebP' : 'DXF · SVG'}
+      {dropKind && (() => {
+        const unsupported = dropKind === 'unknown';
+        const accent = unsupported ? 'border-signal-error bg-signal-error/[0.04]' : 'border-brand-500 bg-brand-500/[0.04]';
+        const halo = unsupported ? '' : 'shadow-glow-brand';
+        const glyph = dropKind === 'image' ? '🎨' : dropKind === 'shape' ? '📐' : '⛔';
+        const headline = dropKind === 'image'
+          ? 'Drop to start a ColorFlow'
+          : dropKind === 'shape'
+            ? 'Drop to load the deck outline'
+            : 'Unsupported file';
+        const sub = dropKind === 'image'
+          ? 'PNG · JPG · SVG · WebP'
+          : dropKind === 'shape'
+            ? 'DXF · SVG'
+            : 'release elsewhere to cancel';
+        return (
+          <div className={`absolute inset-0 z-30 flex items-center justify-center pointer-events-none ${accent} backdrop-blur-[2px] animate-in fade-in duration-150`}>
+            <div className={`px-6 py-5 rounded-2xl border-2 border-dashed ${accent.split(' ')[0]} bg-gray-950/85 ${halo} text-center`}>
+              <div className="text-3xl mb-2">{glyph}</div>
+              <div className="font-display font-bold text-lg tracking-wide text-white">{headline}</div>
+              <div className="text-[11px] font-mono text-gray-400 mt-1">{sub}</div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {isAnyProcessing && (
           <>
@@ -793,6 +898,11 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
           opacity={0.55}
           far={40}
           color={0x000000}
+          // Bake the shadow once instead of every frame. The scene is
+          // effectively static between user actions; re-bake is triggered
+          // by remounting via the `key` (changes when the model changes).
+          frames={1}
+          key={`shadow-${(cutoutShapes && cutoutShapes.length) ?? 0}-${(colorFlowGeom?.layers.length ?? 0)}-${(colorFlowGeom?.spikes.length ?? 0)}`}
         />
         
             {/* Route to ColorFlowModel in colorflow mode, ImperativeModel in pattern mode */}
@@ -951,10 +1061,17 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
       </Canvas>
       </div>
       </ErrorBoundary>
-      <ScreenshotModal 
-         isOpen={showScreenshotModal} 
+      <ScreenshotModal
+         isOpen={showScreenshotModal}
          onClose={() => setShowScreenshotModal(false)}
          onCapture={handleCapture}
+      />
+      <ContextMenu
+        open={contextMenu !== null}
+        x={contextMenu?.x ?? 0}
+        y={contextMenu?.y ?? 0}
+        items={contextMenuItems}
+        onClose={() => setContextMenu(null)}
       />
     </div>
   );

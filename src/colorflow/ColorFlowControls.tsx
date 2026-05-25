@@ -18,7 +18,7 @@ import { resolvedStackOrder } from './stackOrder';
 import type { ExtrudedGeometry } from './pipeline/extrude';
 import type { Response as WorkerResponse, TracedLayerEntry, ExtrudedLayerEntry } from './workerProtocol';
 import { useAlert } from '../context/AlertContext';
-import { emitProcessing, eventBus } from '../utils/eventBus';
+import { emitProcessing, eventBus, emitToast, consumePendingFileDrop } from '../utils/eventBus';
 import { useDebouncedCommit } from '../utils/useDebouncedCommit';
 
 import { BaseStatusBanner } from './controls/BaseStatusBanner';
@@ -152,38 +152,55 @@ export const ColorFlowControls: React.FC<Props> = ({
   const handleImageFile = useCallback(async (file: File) => {
     if (!file.type.startsWith('image/')) {
       showAlert({ title: 'Not an image', message: 'Drop a PNG, JPG, or WebP file.', type: 'error' });
+      emitToast({ message: 'Unsupported image', detail: file.name, tone: 'error' });
       return;
     }
-    setImageName(file.name);
-    const bytes = await file.arrayBuffer();
-    // Pre-claim the hydration tracker so the upcoming App re-render's
-    // initialImageAsset doesn't trigger a redundant ImageBitmap decode of
-    // bytes we're already turning into a bitmap below.
-    lastHydratedBytesRef.current = bytes;
-    onImageAssetChanged?.({ name: file.name, bytes });
-    const bitmap = await createImageBitmap(file);
-    let { width, height } = bitmap;
-    if (Math.max(width, height) > MAX_IMG_DIM) {
-      const scale = MAX_IMG_DIM / Math.max(width, height);
-      const downsized = await createImageBitmap(bitmap, { resizeWidth: Math.round(width * scale), resizeHeight: Math.round(height * scale) });
-      width = downsized.width;
-      height = downsized.height;
-      setImageBitmap((prev) => { prev?.close(); return downsized; });
-      bitmap.close();
-    } else {
-      setImageBitmap((prev) => { prev?.close(); return bitmap; });
+    // Decode + downsize can throw on corrupt/partial bytes; we wrap the
+    // whole pipeline so the caller (drag-drop subscriber or right-panel
+    // dropzone) gets a useful surface instead of an unhandled rejection.
+    try {
+      setImageName(file.name);
+      const bytes = await file.arrayBuffer();
+      lastHydratedBytesRef.current = bytes;
+      onImageAssetChanged?.({ name: file.name, bytes });
+      const bitmap = await createImageBitmap(file);
+      let { width, height } = bitmap;
+      if (Math.max(width, height) > MAX_IMG_DIM) {
+        const scale = MAX_IMG_DIM / Math.max(width, height);
+        const downsized = await createImageBitmap(bitmap, { resizeWidth: Math.round(width * scale), resizeHeight: Math.round(height * scale) });
+        width = downsized.width;
+        height = downsized.height;
+        setImageBitmap((prev) => { prev?.close(); return downsized; });
+        bitmap.close();
+      } else {
+        setImageBitmap((prev) => { prev?.close(); return bitmap; });
+      }
+      setImageDims({ w: width, h: height });
+      emitToast({ message: 'Image loaded', detail: file.name, tone: 'ready' });
+    } catch (err: any) {
+      showAlert({ title: 'Could not load image', message: err?.message ?? String(err), type: 'error' });
+      emitToast({ message: 'Image failed', detail: file.name, tone: 'error' });
     }
-    setImageDims({ w: width, h: height });
   }, [showAlert, onImageAssetChanged]);
 
   // Subscribe to canvas drag-drop. When the user drops an image onto the
   // viewer, ModelViewer emits `file-drop` and we hydrate the bytes through
-  // the same `handleImageFile` path the right-panel dropzone uses.
+  // the same `handleImageFile` path the right-panel dropzone uses. Also
+  // replay any in-flight drop that fired before this subscriber mounted
+  // (e.g. first drop after page load, while this panel was still Frozen).
   useEffect(() => {
+    const claim = (file: File) => {
+      // handleImageFile already toasts + alerts on failure; explicit catch
+      // here is a belt-and-suspenders guard against the promise rejecting
+      // before the inner try/catch runs (e.g. synchronous throw).
+      handleImageFile(file).catch((err) => {
+        console.error('[ColorFlow] drop handler crashed', err);
+      });
+    };
+    const pending = consumePendingFileDrop('image:colorflow');
+    if (pending) claim(pending.file);
     return eventBus.on('file-drop', (e: { file: File; kind: string }) => {
-      if (e.kind === 'image:colorflow') {
-        void handleImageFile(e.file);
-      }
+      if (e.kind === 'image:colorflow') claim(e.file);
     });
   }, [handleImageFile]);
 

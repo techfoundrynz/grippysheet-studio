@@ -10,7 +10,7 @@ import PatternLibraryModal, { PatternPreset } from '../PatternLibraryModal';
 import { useAlert } from '../../context/AlertContext';
 import { parseShapeFile } from '../../utils/shapeLoader';
 import { OUTLINE_LIBRARY, getOutlineBySlug } from '../../colorflow/outlineLibrary';
-import { emitProcessing, eventBus } from '../../utils/eventBus';
+import { emitProcessing, eventBus, emitToast, consumePendingFileDrop } from '../../utils/eventBus';
 
 interface BaseControlsProps {
   settings: BaseSettings;
@@ -62,22 +62,54 @@ const BaseControls: React.FC<BaseControlsProps> = ({
 
   const currentLibraryEntry = settings.outlineSlug ? getOutlineBySlug(settings.outlineSlug) : null;
 
+  // Viewer context-menu bridge. The right-click "Open Library" item in
+  // ModelViewer emits this event so we can pop the outline-library modal
+  // without prop-drilling a controller down through Controls → BaseControls.
+  React.useEffect(() => {
+    return eventBus.on('open-outline-library', () => {
+      setShowLibrary(true);
+    });
+  }, []);
+
   // Canvas drag-drop bridge. When a user drops a DXF/SVG anywhere on the
   // viewer, ModelViewer emits `file-drop` and we treat it the same as if
-  // they used the ShapeUploader directly.
+  // they used the ShapeUploader directly. The entire async pipeline is
+  // wrapped in try/catch because `file.text()` and `parseShapeFile()` can
+  // both throw on bad/binary input — without this guard, a bad drop would
+  // surface only as an unhandled rejection in devtools.
   React.useEffect(() => {
-    return eventBus.on('file-drop', async (e: { file: File; kind: string }) => {
+    const handleDrop = async (e: { file: File; kind: string }) => {
       if (e.kind !== 'shape:base') return;
       const name = e.file.name;
-      const ext = name.toLowerCase().endsWith('.svg') ? 'svg' : 'dxf';
-      const content = await e.file.text();
-      const parsed = parseShapeFile(content, ext);
-      if (parsed.success) {
-        handleOutlineLoaded(parsed.shapes, name, ext, content);
-      } else {
-        showAlert({ title: 'Could not load outline', message: parsed.error ?? 'unknown error', type: 'error' });
+      const lower = name.toLowerCase();
+      const ext: 'dxf' | 'svg' | null = lower.endsWith('.svg')
+        ? 'svg'
+        : lower.endsWith('.dxf') ? 'dxf' : null;
+      if (!ext) {
+        showAlert({ title: 'Unsupported outline file', message: `${name} — supported: .dxf, .svg`, type: 'error' });
+        emitToast({ message: 'Unsupported outline', detail: name, tone: 'error' });
+        return;
       }
-    });
+      try {
+        const content = await e.file.text();
+        const parsed = parseShapeFile(content, ext);
+        if (parsed.success) {
+          handleOutlineLoaded(parsed.shapes, name, ext, content);
+          emitToast({ message: 'Outline loaded', detail: name, tone: 'ready' });
+        } else {
+          showAlert({ title: 'Could not load outline', message: parsed.error ?? 'unknown error', type: 'error' });
+          emitToast({ message: 'Outline failed', detail: parsed.error ?? name, tone: 'error' });
+        }
+      } catch (err: any) {
+        showAlert({ title: 'Could not load outline', message: err?.message ?? String(err), type: 'error' });
+        emitToast({ message: 'Outline failed', detail: name, tone: 'error' });
+      }
+    };
+    // Replay any drop that fired before this subscriber mounted (first drop
+    // after page load, while the Base tab was Frozen).
+    const pending = consumePendingFileDrop('shape:base');
+    if (pending) void handleDrop(pending);
+    return eventBus.on('file-drop', handleDrop);
   }, []);
 
   return (
