@@ -17,7 +17,6 @@ interface OutputPanelProps {
   colorFlowGeom?: {
     base: ExtrudedGeometry;
     layers: { centroid: Centroid; position: number; geom: ExtrudedGeometry }[];
-    fills: { centroid: Centroid; position: number; geom: ExtrudedGeometry }[];
     spikes: { centroidIndex: number; geom: ExtrudedGeometry; color: string }[];
   } | null;
   /** Optional filename prefix for the 3MF download. */
@@ -176,18 +175,6 @@ const OutputPanel: React.FC<OutputPanelProps> = ({ meshRef, debugMode = false, c
           const hex = `${c.r.toString(16).padStart(2,'0')}${c.g.toString(16).padStart(2,'0')}${c.b.toString(16).padStart(2,'0')}`;
           parts.push({
             name: `color_${entry.position + 1}_${hex}`,
-            mesh: entry.geom,
-            color: `#${hex}`,
-          });
-        });
-        // Per-color fillers above each non-topmost slab. Named `_fill` so a
-        // slicer's "Load filaments from project" path can group them with their
-        // matching color slab (same hex displaycolor → same filament).
-        colorFlowGeom.fills.forEach((entry) => {
-          const c = entry.centroid;
-          const hex = `${c.r.toString(16).padStart(2,'0')}${c.g.toString(16).padStart(2,'0')}${c.b.toString(16).padStart(2,'0')}`;
-          parts.push({
-            name: `color_${entry.position + 1}_${hex}_fill`,
             mesh: entry.geom,
             color: `#${hex}`,
           });

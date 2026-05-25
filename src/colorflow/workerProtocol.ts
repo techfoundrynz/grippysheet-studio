@@ -47,11 +47,5 @@ export type Response =
   | { id: number; kind: 'progress'; phase: string }
   | { id: number; kind: 'quantized'; palette: Centroid[]; assignments: Uint16Array }
   | { id: number; kind: 'traced'; layers: TracedLayerEntry[] }
-  | { id: number; kind: 'extruded'; baseGeom: TransferredGeom;
-      layerGeoms: ExtrudedLayerEntry[];
-      /** Per-color fillers above each color's stair-step slab, extending the
-       *  column to a uniform top so spikes can ground without floating over
-       *  shorter columns. Empty for the topmost stack position (no fill
-       *  needed). The geom uses the color's polygon only (not the union). */
-      fillGeoms: ExtrudedLayerEntry[] }
+  | { id: number; kind: 'extruded'; baseGeom: TransferredGeom; layerGeoms: ExtrudedLayerEntry[] }
   | { id: number; kind: 'error'; phase: string; message: string };

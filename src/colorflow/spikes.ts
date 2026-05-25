@@ -154,6 +154,9 @@ export function buildSpikeGeometriesForColors(
   stackOrder: number[],
   spikeMaxMm: number,
 ): Array<{ centroidIndex: number; geom: ExtrudedGeometry }> {
+  const positionByCentroid = new Map<number, number>();
+  for (let i = 0; i < stackOrder.length; i++) positionByCentroid.set(stackOrder[i], i);
+
   // Group tiles by centroidIndex.
   const groups = new Map<number, TileAssignment[]>();
   for (const tile of tileAssignments) {
@@ -164,15 +167,16 @@ export function buildSpikeGeometriesForColors(
 
   const result: Array<{ centroidIndex: number; geom: ExtrudedGeometry }> = [];
 
-  // Uniform grounding: every column reaches `baseMm + N×colorLayerMm` once the
-  // per-color fillers (worker.ts) extend each color upward, so spikes ground on
-  // a flat plane regardless of which colour the tile centre landed on. Tiles
-  // that fell outside any color region (centroidIndex === -1) have no column to
-  // ground on — skip them.
-  const uniformBottomZ = baseMm + stackOrder.length * colorLayerMm;
+  // Per-color grounding (preserves the per-LEVEL stair-step topography):
+  // each tile rises from the top of its assigned colour's slab. Tiles outside
+  // any colour region (centroidIndex === -1) have no column to ground on —
+  // skip them. Boundary clipping (so tile footprints never overhang into a
+  // shorter adjacent column) happens upstream in `generateSpikes`.
   for (const [centroidIndex, tiles] of groups) {
     if (centroidIndex < 0) continue;
-    const bottomZ = uniformBottomZ;
+    const pos = positionByCentroid.get(centroidIndex) ?? -1;
+    if (pos < 0) continue;
+    const bottomZ = baseMm + (pos + 1) * colorLayerMm;
     const topZ = spikeMaxMm;
     if (topZ <= bottomZ + 1e-6) continue;
 
@@ -241,6 +245,9 @@ export function buildSpikesFromMesh(
   const zOffset = -bbox.min.z;
   const naturalH = Math.max(1e-6, bbox.max.z - bbox.min.z);
 
+  const positionByCentroid = new Map<number, number>();
+  for (let i = 0; i < stackOrder.length; i++) positionByCentroid.set(stackOrder[i], i);
+
   const groups = new Map<number, TileAssignment[]>();
   for (const tile of tileAssignments) {
     const arr = groups.get(tile.colorIndex) ?? [];
@@ -250,15 +257,14 @@ export function buildSpikesFromMesh(
 
   const result: Array<{ centroidIndex: number; geom: ExtrudedGeometry }> = [];
 
-  // Uniform grounding (see buildSpikeGeometriesForColors): the per-color
-  // fillers (worker.ts) extend every column to `baseMm + N×colorLayerMm`, so
-  // spike bases sit on a flat top regardless of the local colour's stack
-  // position. Tiles that landed outside any color region have nothing to
-  // ground on; skip them.
-  const uniformBottomZ = baseMm + stackOrder.length * colorLayerMm;
+  // Per-color grounding (see buildSpikeGeometriesForColors). Each spike rises
+  // from the top of its colour's slab. Tiles outside any colour region have
+  // nothing to ground on; skip them. Boundary clipping happens upstream.
   for (const [centroidIndex, tiles] of groups) {
     if (centroidIndex < 0) continue;
-    const bottomZ = uniformBottomZ;
+    const pos = positionByCentroid.get(centroidIndex) ?? -1;
+    if (pos < 0) continue;
+    const bottomZ = baseMm + (pos + 1) * colorLayerMm;
     const spikeHeight = spikeMaxMm - bottomZ;
     if (spikeHeight <= 1e-6) continue;
     const zScale = spikeHeight / naturalH;
@@ -343,9 +349,15 @@ export function generateSpikes(input: {
 
   const spikeTop = effectiveSpikeMaxMm(spikeMaxMm, baseMm, palette.length, colorLayerMm);
 
-  // Compute tile footprint + a builder function dispatched on the pattern type.
+  // Compute tile footprint + a builder function dispatched on the pattern
+  // type, plus the local 2D outline we'll use to clip tiles whose footprint
+  // would overhang into a shorter adjacent column. For Shape patterns we use
+  // the actual outline; for STL patterns we use the bbox rectangle (the
+  // tightest approximation that doesn't require a per-frame convex hull).
   let tileWidth = 0;
   let tileHeight = 0;
+  let localFootprint: Array<[number, number]> = [];
+  let footprintExtraScale = 1;
   let buildForColor: ((assignments: TileAssignment[]) => Array<{ centroidIndex: number; geom: ExtrudedGeometry }>) | null = null;
 
   if (patternShape instanceof THREE.Shape) {
@@ -355,6 +367,7 @@ export function generateSpikes(input: {
     if (tileWidth < 0.05 || tileHeight < 0.05) {
       return { groups: [], diag: `pattern tile too small (${tileWidth.toFixed(2)}×${tileHeight.toFixed(2)}mm)` };
     }
+    localFootprint = tilePoly.outer;
     buildForColor = (assignments) => buildSpikeGeometriesForColors(
       assignments, { outer: tilePoly.outer, holes: tilePoly.holes },
       baseMm, colorLayerMm, stackOrder, spikeTop,
@@ -367,6 +380,13 @@ export function generateSpikes(input: {
     if (tileWidth < 0.05 || tileHeight < 0.05) {
       return { groups: [], diag: `pattern tile too small (${tileWidth.toFixed(2)}×${tileHeight.toFixed(2)}mm)` };
     }
+    localFootprint = [
+      [bbox.min.x, bbox.min.y],
+      [bbox.max.x, bbox.min.y],
+      [bbox.max.x, bbox.max.y],
+      [bbox.min.x, bbox.max.y],
+    ];
+    footprintExtraScale = patternScale;
     buildForColor = (assignments) => buildSpikesFromMesh(
       patternShape, assignments, baseMm, colorLayerMm, stackOrder, patternScale, spikeTop,
     );
@@ -392,7 +412,40 @@ export function generateSpikes(input: {
 
   const colorPolygons = layersInMm.map((l) => ({ centroidIndex: l.centroidIndex, polygon: l.polygon }));
   const tileAssignments = assignTilesToColors(tilesInOutline, colorPolygons, stackOrder);
-  const rawGroups = buildForColor(tileAssignments);
+
+  // Boundary clip: drop any tile whose footprint would overhang the colour
+  // region it's grounded on. Without this, a tile sitting near a colour edge
+  // grounds at colour C's top but its corners hang in mid-air over the
+  // adjacent shorter column. We test every footprint vertex against the
+  // specific colour polygon that contains the tile centre — the same polygon
+  // `assignTilesToColors` used for the colour assignment.
+  const polygonsByCentroid = new Map<number, Polygon[]>();
+  for (const cp of colorPolygons) {
+    const arr = polygonsByCentroid.get(cp.centroidIndex) ?? [];
+    arr.push(cp.polygon);
+    polygonsByCentroid.set(cp.centroidIndex, arr);
+  }
+  const fittedAssignments = tileAssignments.filter((tile) => {
+    if (tile.colorIndex < 0) return false;
+    const polys = polygonsByCentroid.get(tile.colorIndex) ?? [];
+    for (const poly of polys) {
+      if (!pointInPolygon(tile.x, tile.y, poly)) continue;
+      const cos = Math.cos(tile.rotation);
+      const sin = Math.sin(tile.rotation);
+      const s = tile.scale * footprintExtraScale;
+      for (const [lx, ly] of localFootprint) {
+        const sx = lx * s;
+        const sy = ly * s;
+        const wx = sx * cos - sy * sin + tile.x;
+        const wy = sx * sin + sy * cos + tile.y;
+        if (!pointInPolygon(wx, wy, poly)) return false;
+      }
+      return true;
+    }
+    return false;
+  });
+
+  const rawGroups = buildForColor(fittedAssignments);
 
   const groups: Array<{ centroidIndex: number; geom: ExtrudedGeometry; color: string }> = [];
   for (const g of rawGroups) {
@@ -403,6 +456,6 @@ export function generateSpikes(input: {
     groups.push({ ...g, color });
   }
 
-  const diag = `${rawTiles.length} tiles raw, ${tilesInOutline.length} inside outline, ${rawGroups.length} color groups`;
+  const diag = `${rawTiles.length} raw / ${tilesInOutline.length} in outline / ${fittedAssignments.length} fit color / ${rawGroups.length} groups`;
   return { groups, diag };
 }

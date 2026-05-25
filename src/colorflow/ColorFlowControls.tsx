@@ -54,10 +54,6 @@ export interface SpikeSource {
 export interface ColorFlowGeomData {
   base: ExtrudedGeometry;
   layers: { centroid: Centroid; position: number; geom: ExtrudedGeometry }[];
-  /** Per-color filler meshes above each non-topmost color's stair-step
-   *  slab, extending each column to a uniform top. Empty when there's
-   *  only one colour. Indexed by `position` (the colour's stack pos). */
-  fills: { centroid: Centroid; position: number; geom: ExtrudedGeometry }[];
   /** Source data used by App-level spike regeneration. Spikes themselves
    *  are computed downstream so Geometry-tab changes flow live. */
   source: SpikeSource;
@@ -288,11 +284,6 @@ export const ColorFlowControls: React.FC<Props> = ({
             position: entry.position,
             geom: entry.geom,
           }));
-          const fills = resp.fillGeoms.map((entry: ExtrudedLayerEntry) => ({
-            centroid: palette[entry.centroidIndex],
-            position: entry.position,
-            geom: entry.geom,
-          }));
           const source: SpikeSource = {
             outlinePolygon: {
               outer: outlinePolygon.outer.map(([x, y]) => [x, y] as [number, number]),
@@ -306,7 +297,7 @@ export const ColorFlowControls: React.FC<Props> = ({
             baseMm,
             colorLayerMm: settings.colorLayerMm,
           };
-          onGeometryReady({ base: resp.baseGeom, layers: pairs, fills, source });
+          onGeometryReady({ base: resp.baseGeom, layers: pairs, source });
         }
       } catch (err) {
         if (err instanceof RequestCancelledError) return;
