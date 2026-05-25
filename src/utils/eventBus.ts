@@ -38,3 +38,21 @@ export interface ProcessingEvent {
 export function emitProcessing(event: ProcessingEvent) {
     eventBus.emit('processing', event);
 }
+
+/**
+ * Toast-feedback protocol. Lightweight ephemeral confirmation for actions
+ * that don't open a modal but the user still benefits from "I did the thing"
+ * acknowledgement — reset, project save, screenshot capture, etc.
+ */
+export interface ToastEvent {
+    /** Headline displayed in the toast pill. */
+    message: string;
+    /** Optional second line — file name, count, etc. */
+    detail?: string;
+    /** Visual treatment. `ready` = neon-green confirm; `info` = cyan; `error` = red. */
+    tone?: 'ready' | 'info' | 'error';
+}
+
+export function emitToast(event: ToastEvent) {
+    eventBus.emit('toast', event);
+}

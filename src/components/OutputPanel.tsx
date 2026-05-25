@@ -7,7 +7,7 @@ import * as THREE from 'three';
 import type { Centroid } from '../colorflow/pipeline/quantize';
 import type { ExtrudedGeometry } from '../colorflow/pipeline/extrude';
 import { build3MF, type MeshPart } from '../colorflow/threeMfWriter';
-import { emitProcessing } from '../utils/eventBus';
+import { emitProcessing, emitToast } from '../utils/eventBus';
 
 interface OutputPanelProps {
   meshRef: React.RefObject<THREE.Group | null>;
@@ -151,9 +151,10 @@ const OutputPanel: React.FC<OutputPanelProps> = ({ meshRef, debugMode = false, c
     link.href = url;
     link.download = filename;
     link.click();
-    
+
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
+    emitToast({ message: 'STL exported', detail: filename, tone: 'ready' });
   };
 
   function downloadBlob(blob: Blob, filename: string) {
@@ -194,7 +195,9 @@ const OutputPanel: React.FC<OutputPanelProps> = ({ meshRef, debugMode = false, c
         const blob = await build3MF(parts, 'footpad_assembly');
         const stem = (colorFlowImageName || 'design').replace(/\.[^.]+$/, '');
         const suffix = colorFlowOutlineSlug || 'outline';
-        downloadBlob(blob, `${stem}_${suffix}.3mf`);
+        const filename = `${stem}_${suffix}.3mf`;
+        downloadBlob(blob, filename);
+        emitToast({ message: '3MF exported', detail: filename, tone: 'ready' });
         return;
       }
 
@@ -217,7 +220,9 @@ const OutputPanel: React.FC<OutputPanelProps> = ({ meshRef, debugMode = false, c
       exportGroup.updateMatrixWorld(true);
 
       const blob = await exportTo3MF(exportGroup, {});
-      downloadBlob(blob, 'grippysheet-model.3mf');
+      const filename = 'grippysheet-model.3mf';
+      downloadBlob(blob, filename);
+      emitToast({ message: '3MF exported', detail: filename, tone: 'ready' });
     } catch (e) {
       console.error("3MF Export Error:", e);
       showAlert({

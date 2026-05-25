@@ -198,6 +198,31 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
     };
   }, [opacityMenuRef, displayMenuRef, outlinesMenuRef, wireframeMenuRef, debugMenuRef]);
 
+  // Keyboard shortcuts. Match the hints printed in the IconTooltip kbds:
+  //   2 / 3 → 2D/3D mode toggle
+  //   O     → orthographic view (3D only)
+  //   I     → isometric view (3D only)
+  //   F     → FPS counter toggle
+  // Never fires while a text input / textarea / contenteditable is focused.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target) {
+        const tag = target.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable) return;
+      }
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const k = e.key.toLowerCase();
+      if (k === '2') { setRenderMode('2d'); e.preventDefault(); }
+      else if (k === '3') { setRenderMode('3d'); e.preventDefault(); }
+      else if (k === 'o' && renderMode === '3d') { setViewState({ type: 'ortho', timestamp: Date.now() }); e.preventDefault(); }
+      else if (k === 'i' && renderMode === '3d') { setViewState({ type: 'iso', timestamp: Date.now() }); e.preventDefault(); }
+      else if (k === 'f') { setShowFps((v) => !v); e.preventDefault(); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [renderMode]);
+
 
   return (
     <div
@@ -218,16 +243,20 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
         {/* 2D / 3D mode toggle — bigger pill with animated active indicator
             so it reads as the primary viewer control, not chrome. */}
         <div className="relative inline-flex bg-gray-950/60 rounded-lg p-0.5 text-xs font-display font-semibold tracking-wide">
-          <button
-            onClick={() => setRenderMode('2d')}
-            className={`relative z-10 px-3.5 py-1.5 rounded-md transition-colors ${renderMode === '2d' ? 'text-white' : 'text-gray-400 hover:text-gray-200'}`}
-            title="2D top-down preview — lightweight, always live"
-          >2D</button>
-          <button
-            onClick={() => setRenderMode('3d')}
-            className={`relative z-10 px-3.5 py-1.5 rounded-md transition-colors ${renderMode === '3d' ? 'text-white' : 'text-gray-400 hover:text-gray-200'}`}
-            title="Full 3D render — orbit, ortho, iso views"
-          >3D</button>
+          <IconTooltip label="2D top-down preview" shortcut="2">
+            <button
+              onClick={() => setRenderMode('2d')}
+              className={`relative z-10 px-3.5 py-1.5 rounded-md transition-colors ${renderMode === '2d' ? 'text-white' : 'text-gray-400 hover:text-gray-200'}`}
+              aria-label="2D preview"
+            >2D</button>
+          </IconTooltip>
+          <IconTooltip label="3D render" shortcut="3">
+            <button
+              onClick={() => setRenderMode('3d')}
+              className={`relative z-10 px-3.5 py-1.5 rounded-md transition-colors ${renderMode === '3d' ? 'text-white' : 'text-gray-400 hover:text-gray-200'}`}
+              aria-label="3D render"
+            >3D</button>
+          </IconTooltip>
           {/* Sliding active indicator. */}
           <span
             className="absolute top-0.5 bottom-0.5 w-[calc(50%-2px)] rounded-md bg-gradient-to-br from-brand-500 to-accent-500 shadow-glow-brand transition-transform duration-200 ease-out"
@@ -399,7 +428,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
         
         <div className="w-px bg-gray-700 mx-1" />
 
-        <IconTooltip label="FPS counter">
+        <IconTooltip label="FPS counter" shortcut="F">
           <button
               onClick={() => setShowFps(!showFps)}
               className={`p-2 rounded hover:bg-gray-700 transition-colors ${showFps ? 'bg-signal-info/15 text-signal-info' : 'text-gray-400'}`}

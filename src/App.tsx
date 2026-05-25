@@ -8,6 +8,7 @@ import { BaseSettings, InlaySettings, GeometrySettings } from './types/schemas';
 import type { ProjectDataV2 } from './types/schemas';
 import { defaultBaseSettings, defaultInlaySettings, defaultGeometrySettings } from './utils/schemaDefaults';
 import WelcomeModal from "./components/WelcomeModal";
+import ToastHost from "./components/ui/ToastHost";
 import { defaultColorFlowSettings, type ColorFlowSettings } from "./colorflow/schema";
 import type { Centroid } from './colorflow/pipeline/quantize';
 import type { ExtrudedGeometry } from './colorflow/pipeline/extrude';
@@ -187,6 +188,7 @@ const App = () => {
 
   return (
     <AlertProvider>
+      <ToastHost />
       <div className="h-[100dvh] flex flex-col bg-gray-950 text-gray-100 overflow-hidden">
         <main className="flex-1 flex flex-col md:flex-row overflow-hidden">
           <div className="h-1/2 md:h-auto flex-1 flex flex-col p-4 min-w-0">

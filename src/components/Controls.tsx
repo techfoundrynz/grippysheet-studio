@@ -1,6 +1,7 @@
 import React from 'react';
 import { Freeze } from 'react-freeze';
 import { exportProjectBundle, importProjectBundle, ProjectAssets } from '../utils/projectUtils';
+import { emitToast } from '../utils/eventBus';
 import { BaseSettings, InlaySettings, GeometrySettings, ProjectSchemaV1 } from '../types/schemas';
 import type { ProjectDataV2 } from '../types/schemas';
 import { parseShapeFile } from '../utils/shapeLoader';
@@ -112,6 +113,7 @@ const Controls: React.FC<ControlsProps> = ({
           cancelText: "Cancel",
           onConfirm: () => {
               if (onReset) onReset();
+              emitToast({ message: 'Reset', detail: 'all settings restored', tone: 'info' });
           }
       });
   };
@@ -193,12 +195,14 @@ const Controls: React.FC<ControlsProps> = ({
               cancelText: "Cancel",
               onConfirm: () => {
                   exportProjectBundle('pattern', baseSettings, inlaySettings, geometrySettings, undefined, projectAssets);
+                  emitToast({ message: 'Project saved', detail: 'partial bundle (.zip)', tone: 'ready' });
               }
           });
           return;
       }
 
       exportProjectBundle('pattern', baseSettings, inlaySettings, geometrySettings, undefined, projectAssets);
+      emitToast({ message: 'Project saved', detail: 'bundled to .zip', tone: 'ready' });
   };
 
   const handleImportClick = () => {
@@ -289,6 +293,7 @@ const Controls: React.FC<ControlsProps> = ({
                    setBaseSettings(newBase);
                    setInlaySettings(newInlay);
                    setGeometrySettings(newGeometry);
+                   emitToast({ message: 'Project loaded', detail: 'settings + assets restored', tone: 'ready' });
               };
 
               if (versionMismatch) {
@@ -407,16 +412,36 @@ const Controls: React.FC<ControlsProps> = ({
         </div>
 
         <div className={`transition-all duration-300 ease-in-out overflow-hidden ${isCollapsed ? 'max-h-0 opacity-0 md:max-h-[500px] md:opacity-100 m-0' : 'max-h-[500px] opacity-100'}`}>
-          <SegmentedControl
-            value={activeTab}
-            onChange={(val) => setActiveTab(val as any)}
-            options={[
-              { value: 'base', label: 'Base' },
-              { value: 'inlay', label: 'Inlay', disabled: colorFlowActive },
-              { value: 'colorflow', label: 'ColorFlow' },
-              { value: 'geometry', label: 'Geometry' },
-            ]}
-          />
+          {(() => {
+            // Compute small "filled" badges per tab so the strip narrates
+            // state at a glance — a Base tab with no outline reads as
+            // "you haven't done this yet", a ColorFlow tab with 5 colors
+            // shows "5" in its chip.
+            const baseFilled = !!(baseSettings.cutoutShapes && baseSettings.cutoutShapes.length > 0);
+            const inlayCount = inlaySettings.items?.length ?? 0;
+            const colorFlowCount = colorFlowPaletteSize;
+            const geometryFilled = !!(geometrySettings.patternShapes && geometrySettings.patternShapes.length > 0);
+            const dot = (active: boolean) => (
+              <span className={`ml-1.5 inline-block w-1.5 h-1.5 rounded-full ${active ? 'bg-signal-ready shadow-[0_0_6px_rgba(0,255,136,0.7)]' : 'bg-gray-700'}`} />
+            );
+            const count = (n: number) => (
+              <span className={`ml-1.5 inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded text-[9px] font-mono font-semibold ${n > 0 ? 'bg-signal-ready/15 text-signal-ready' : 'bg-gray-800 text-gray-600'}`}>
+                {n}
+              </span>
+            );
+            return (
+              <SegmentedControl
+                value={activeTab}
+                onChange={(val) => setActiveTab(val as any)}
+                options={[
+                  { value: 'base', label: <span className="inline-flex items-center">Base{dot(baseFilled)}</span> },
+                  { value: 'inlay', label: <span className="inline-flex items-center">Inlay{inlayCount > 0 ? count(inlayCount) : dot(false)}</span>, disabled: colorFlowActive },
+                  { value: 'colorflow', label: <span className="inline-flex items-center">ColorFlow{colorFlowCount > 0 ? count(colorFlowCount) : dot(false)}</span> },
+                  { value: 'geometry', label: <span className="inline-flex items-center">Geometry{dot(geometryFilled)}</span> },
+                ]}
+              />
+            );
+          })()}
         </div>
       </div>
 
