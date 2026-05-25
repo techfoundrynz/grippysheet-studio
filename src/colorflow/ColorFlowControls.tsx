@@ -101,8 +101,8 @@ export const ColorFlowControls: React.FC<Props> = ({
       try {
         const blob = new Blob([initialImageAsset.bytes]);
         const bitmap = await createImageBitmap(blob);
-        if (cancelled) return;
-        setImageBitmap(bitmap);
+        if (cancelled) { bitmap.close(); return; }
+        setImageBitmap((prev) => { prev?.close(); return bitmap; });
         setImageName(initialImageAsset.name);
         setImageDims({ w: bitmap.width, h: bitmap.height });
       } catch (err) {
@@ -168,10 +168,10 @@ export const ColorFlowControls: React.FC<Props> = ({
       const downsized = await createImageBitmap(bitmap, { resizeWidth: Math.round(width * scale), resizeHeight: Math.round(height * scale) });
       width = downsized.width;
       height = downsized.height;
-      setImageBitmap(downsized);
+      setImageBitmap((prev) => { prev?.close(); return downsized; });
       bitmap.close();
     } else {
-      setImageBitmap(bitmap);
+      setImageBitmap((prev) => { prev?.close(); return bitmap; });
     }
     setImageDims({ w: width, h: height });
   }, [showAlert, onImageAssetChanged]);
@@ -200,6 +200,10 @@ export const ColorFlowControls: React.FC<Props> = ({
         const rendered = off.transferToImageBitmap();
         const mask = buildOutlineCanvasMask(outlinePolygon, canvas);
 
+        // Transfer the rendered bitmap + the mask buffer rather than
+        // structured-clone them. Otherwise every quantize call leaves a
+        // GPU-backed ImageBitmap behind that the GC can't reliably free
+        // — the app crashes after enough pipeline runs.
         const resp = await request<Extract<WorkerResponse, { kind: 'quantized' }>>({
           kind: 'quantize',
           image: rendered,
@@ -207,7 +211,7 @@ export const ColorFlowControls: React.FC<Props> = ({
           width: canvas.w,
           height: canvas.h,
           opts: { colorCount: settings.colorCount, simplify: settings.simplify, seed: 42 },
-        });
+        }, mask ? [rendered, mask.buffer] : [rendered]);
         if (cancelled || resp.kind !== 'quantized') return;
         setPalette(resp.palette);
         setAssignments(resp.assignments);

@@ -34,6 +34,11 @@ async function handleQuantize(req: Extract<Request, { kind: 'quantize' }>) {
   sctx.drawImage(image, 0, 0, sw, sh);
   const sampleData = sctx.getImageData(0, 0, sw, sh);
 
+  // Release the GPU-backed bitmap now that both canvases have copied their
+  // pixel data — leaving it until handler return relies on V8 GC and tends
+  // to accumulate across many quantize cycles, eventually OOM-ing the tab.
+  image.close();
+
   // If outline mask is provided, mark sample-resolution pixels outside it as transparent.
   if (mask) {
     for (let i = 0; i < sw * sh; i++) {
