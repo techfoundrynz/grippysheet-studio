@@ -502,20 +502,24 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
         );
       })()}
 
-      {showFps && (
-        <div
-          ref={fpsRef}
-          className="absolute bottom-4 right-4 z-10 p-2 bg-gray-800/80 backdrop-blur rounded-lg border border-gray-700 text-purple-400 tabular-nums text-sm font-bold pointer-events-none select-none w-20 text-center"
-        >
-          0 FPS
+      {/* Consolidated bottom-right info chip — pad size + (optional) FPS in
+          one panel. Skipped entirely in 2D since TwoDViewer paints its own
+          pad-dim chip into the canvas overlay. The FPS counter is kept here
+          (separate ref) so FpsTracker can mutate textContent without React. */}
+      {renderMode === '3d' && (
+        <div className="absolute bottom-4 right-4 z-10 flex items-center gap-2 px-2.5 py-1 bg-gray-900/70 backdrop-blur-sm border border-gray-700/60 rounded-md text-[11px] font-mono tabular-nums pointer-events-none select-none shadow-lg">
+          <span className={padDims.fromOutline ? 'text-gray-200' : 'text-gray-500'}>
+            <span className="text-gray-500">pad </span>
+            {padDims.w.toFixed(1)} × {padDims.h.toFixed(1)} mm
+          </span>
+          {showFps && (
+            <>
+              <span className="text-gray-700">·</span>
+              <span ref={fpsRef} className="text-purple-300 font-semibold w-14 text-right">0 FPS</span>
+            </>
+          )}
         </div>
       )}
-
-      {/* Size readout, bottom-left. Subtle when from default size, brighter
-          when it reflects the actual loaded outline. */}
-      <div className={`absolute bottom-4 left-4 z-10 px-2 py-1 bg-gray-800/80 backdrop-blur rounded border border-gray-700 text-[11px] tabular-nums pointer-events-none select-none ${padDims.fromOutline ? 'text-gray-200' : 'text-gray-500'}`}>
-        {padDims.w.toFixed(1)} × {padDims.h.toFixed(1)} mm
-      </div>
 
       {/* Initial-Canvas-load veil — disappears once the renderer reports
           `onCreated`. Avoids a black flash on first paint. Skipped in 2D mode

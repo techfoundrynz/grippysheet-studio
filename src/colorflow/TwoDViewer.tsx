@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { type OutlinePolygon } from './outlineToPolygon';
 import { generateTilePositions } from '../utils/patternUtils';
@@ -99,6 +99,11 @@ export const TwoDViewer: React.FC<Props> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  // Dimension lines fade in on hover so the canvas reads cleaner at rest.
+  const [showDims, setShowDims] = useState(false);
+  // Track pad dimensions so the HTML overlay shows the same numbers the
+  // canvas-drawn lines do when toggled in.
+  const [padDimsMm, setPadDimsMm] = useState<{ w: number; h: number } | null>(null);
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -143,9 +148,8 @@ export const TwoDViewer: React.FC<Props> = ({
     // Compute world→canvas transform: fit-centered with PAD_PX margin.
     const wMm = outlinePolygon.maxX - outlinePolygon.minX;
     const hMm = outlinePolygon.maxY - outlinePolygon.minY;
-    // Reserve right strip for legend (max 80px) when palette has entries.
-    const legendW = palette.length > 0 ? 90 : 0;
-    const availW = W - PAD_PX * 2 - legendW;
+    // The legend now lives in an HTML overlay; the canvas uses the full width.
+    const availW = W - PAD_PX * 2;
     const availH = H - PAD_PX * 2;
     const scale = Math.min(availW / wMm, availH / hMm);
     const renderW = wMm * scale;
@@ -212,19 +216,25 @@ export const TwoDViewer: React.FC<Props> = ({
       }
     }
 
-    // Suppress labels on sliver polygons: per colour, drop anything below
-    // 15% of that colour's largest polygon AND below an absolute 25 mm² floor.
-    const maxAreaPerCentroid = new Map<number, number>();
-    for (const cand of labelCandidates) {
-      const cur = maxAreaPerCentroid.get(cand.centroidIndex) ?? 0;
-      if (cand.areaMm2 > cur) maxAreaPerCentroid.set(cand.centroidIndex, cand.areaMm2);
-    }
-    const SLIVER_REL = 0.15;
+    // Sliver suppression: label only the top-K largest polygons per colour,
+    // and never label anything below an absolute area floor. A K of 3 keeps
+    // legends readable on busy designs (a colour that breaks into 30 tiny
+    // pockets gets 3 numbered hot-spots, not 30 illegible L-tags).
+    const LABEL_TOP_K = 3;
     const SLIVER_ABS_MM2 = 25;
-    const layerLabels = labelCandidates.filter((cand) => {
-      const maxA = maxAreaPerCentroid.get(cand.centroidIndex) ?? cand.areaMm2;
-      return cand.areaMm2 >= SLIVER_ABS_MM2 || cand.areaMm2 >= maxA * SLIVER_REL;
-    });
+    const byCentroid = new Map<number, typeof labelCandidates>();
+    for (const cand of labelCandidates) {
+      const bucket = byCentroid.get(cand.centroidIndex) ?? [];
+      bucket.push(cand);
+      byCentroid.set(cand.centroidIndex, bucket);
+    }
+    const layerLabels: typeof labelCandidates = [];
+    for (const bucket of byCentroid.values()) {
+      bucket.sort((a, b) => b.areaMm2 - a.areaMm2);
+      for (const cand of bucket.slice(0, LABEL_TOP_K)) {
+        if (cand.areaMm2 >= SLIVER_ABS_MM2) layerLabels.push(cand);
+      }
+    }
 
     // 2b. Pattern-mode inlays. Rendered after color regions but before
     //     spike tiles so spikes can sit on top.
@@ -371,19 +381,32 @@ export const TwoDViewer: React.FC<Props> = ({
       }
     }
 
-    // 5. Dimension lines + size labels
-    drawDimensionLines(ctx, outlinePolygon, offsetX, offsetY, renderW, renderH, scale);
-
-    // 5. Layer-order legend (right strip)
-    if (palette.length > 0 && legendW > 0) {
-      drawLegend(ctx, palette, stackOrder, W - legendW + 4, PAD_PX, legendW - 8, H - PAD_PX * 2);
+    // 5. Dimension lines — hover-only so the design reads cleanly at rest.
+    //    Numbers are also surfaced in the bottom-left HTML chip whenever the
+    //    outline changes, so this is purely visual reinforcement on hover.
+    if (showDims) {
+      drawDimensionLines(ctx, outlinePolygon, offsetX, offsetY, renderW, renderH, scale);
     }
-  }, [outlinePolygon, layersInMm, palette, stackOrder, inlayItems, geometrySettings, baseColor, spikeColorMatch]);
+  }, [outlinePolygon, layersInMm, palette, stackOrder, inlayItems, geometrySettings, baseColor, spikeColorMatch, showDims]);
 
   // Repaint when any draw input changes.
   useEffect(() => {
     draw();
   }, [draw]);
+
+  // Publish the outline's pad dimensions to the HTML overlay chip. Kept in
+  // sync with the same source the canvas draws from so the readout never
+  // drifts from the rendered geometry.
+  useEffect(() => {
+    if (!outlinePolygon || outlinePolygon.outer.length === 0) {
+      setPadDimsMm(null);
+      return;
+    }
+    setPadDimsMm({
+      w: outlinePolygon.maxX - outlinePolygon.minX,
+      h: outlinePolygon.maxY - outlinePolygon.minY,
+    });
+  }, [outlinePolygon]);
 
   // Repaint when the container resizes (the draw call reads getBoundingClientRect).
   useEffect(() => {
@@ -394,9 +417,54 @@ export const TwoDViewer: React.FC<Props> = ({
     return () => ro.disconnect();
   }, [draw]);
 
+  // Layer entries for the HTML legend overlay, in stack order so the rendered
+  // list matches the printed top-down stack.
+  const legendEntries = stackOrder
+    .map((centroidIdx, displayIdx) => {
+      const c = palette[centroidIdx];
+      if (!c) return null;
+      const hex = `#${c.r.toString(16).padStart(2, '0')}${c.g.toString(16).padStart(2, '0')}${c.b.toString(16).padStart(2, '0')}`;
+      return { displayIdx, hex, rgb: `rgb(${c.r}, ${c.g}, ${c.b})` };
+    })
+    .filter((x): x is { displayIdx: number; hex: string; rgb: string } => x !== null);
+
   return (
-    <div ref={containerRef} className="absolute inset-0 bg-slate-900">
+    <div
+      ref={containerRef}
+      className="absolute inset-0 bg-slate-900"
+      onMouseEnter={() => setShowDims(true)}
+      onMouseLeave={() => setShowDims(false)}
+    >
       <canvas ref={canvasRef} className="block" />
+
+      {/* HTML legend overlay — replaces the canvas-painted strip. Renders
+          crisp text at any DPR and stays out of the canvas drawing budget. */}
+      {legendEntries.length > 0 && (
+        <div className="absolute top-3 right-3 z-10 px-3 py-2 bg-gray-900/70 backdrop-blur-sm border border-gray-700/60 rounded-md text-xs shadow-lg pointer-events-none select-none">
+          <div className="text-[10px] uppercase tracking-wide font-medium text-gray-400 mb-1.5">Layers</div>
+          <div className="flex flex-col gap-1">
+            {legendEntries.map(({ displayIdx, hex, rgb }) => (
+              <div key={displayIdx} className="flex items-center gap-2">
+                <div className="w-3.5 h-3.5 rounded-sm ring-1 ring-white/15" style={{ background: rgb }} />
+                <span className="text-gray-300 font-mono text-[10px] w-6">L{displayIdx + 1}</span>
+                <span className="text-gray-500 font-mono text-[10px]">{hex.toUpperCase()}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Pad-dim chip — always visible so users know the canvas scale. The
+          dimension *lines* are reserved for hover so the rest area stays clean. */}
+      {padDimsMm && (
+        <div className="absolute bottom-3 left-3 z-10 px-2.5 py-1 bg-gray-900/70 backdrop-blur-sm border border-gray-700/60 rounded-md text-[11px] font-mono text-gray-300 shadow-lg pointer-events-none select-none">
+          <span className="text-gray-500">pad </span>
+          <span className="text-gray-200">{padDimsMm.w.toFixed(1)}</span>
+          <span className="text-gray-500"> × </span>
+          <span className="text-gray-200">{padDimsMm.h.toFixed(1)}</span>
+          <span className="text-gray-500"> mm</span>
+        </div>
+      )}
     </div>
   );
 };
@@ -440,45 +508,6 @@ function drawDimensionLines(
   ctx.textAlign = 'center';
   ctx.fillText(`${hMm.toFixed(1)} mm`, 0, -2);
   ctx.restore();
-}
-
-function drawLegend(
-  ctx: CanvasRenderingContext2D,
-  palette: Centroid[],
-  stackOrder: number[],
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-) {
-  ctx.fillStyle = 'rgba(15, 23, 42, 0.7)';
-  ctx.fillRect(x, y, w, h);
-  ctx.strokeStyle = 'rgba(71, 85, 105, 0.5)';
-  ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
-
-  ctx.fillStyle = 'rgba(226, 232, 240, 0.9)';
-  ctx.font = '10px ui-sans-serif, system-ui';
-  ctx.textAlign = 'left';
-  ctx.fillText('LAYERS', x + 8, y + 14);
-
-  const rowH = 22;
-  const startY = y + 26;
-  // Iterate in stack order so labels match 3D rendering ("layer 1 = bottom").
-  for (let i = 0; i < stackOrder.length; i++) {
-    const c = palette[stackOrder[i]];
-    if (!c) continue;
-    const ry = startY + i * rowH;
-    if (ry + rowH > y + h) break;
-    ctx.fillStyle = `rgb(${c.r}, ${c.g}, ${c.b})`;
-    ctx.fillRect(x + 8, ry, 14, 14);
-    ctx.strokeStyle = 'rgba(71, 85, 105, 0.7)';
-    ctx.strokeRect(x + 8.5, ry + 0.5, 13, 13);
-    ctx.fillStyle = 'rgba(203, 213, 225, 0.95)';
-    ctx.font = '10px ui-monospace, monospace';
-    const hex = `#${c.r.toString(16).padStart(2, '0')}${c.g.toString(16).padStart(2, '0')}${c.b.toString(16).padStart(2, '0')}`;
-    ctx.fillText(`L${i + 1}`, x + 28, ry + 6);
-    ctx.fillText(hex.toUpperCase(), x + 28, ry + 16);
-  }
 }
 
 function outlinePolygonToShape(polygon: OutlinePolygon): THREE.Shape {
