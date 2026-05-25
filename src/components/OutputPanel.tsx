@@ -234,11 +234,11 @@ const OutputPanel: React.FC<OutputPanelProps> = ({ meshRef, debugMode = false, c
             <button
             onClick={handleExport3MF}
             // Primary CTA — the goal action of the whole tool.
-            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors shadow-sm"
+            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-br from-brand-500 to-accent-500 hover:from-brand-400 hover:to-accent-500 text-white font-display font-bold tracking-wide rounded-lg transition-all shadow-glow-brand ring-1 ring-white/15"
             >
             <Box size={18} />
-            Export 3MF
-            <span className="text-blue-200 text-xs font-normal">· Bambu / Orca</span>
+            EXPORT 3MF
+            <span className="text-white/70 text-xs font-mono font-normal tracking-normal">· Bambu / Orca</span>
             </button>
 
             <button

@@ -37,7 +37,7 @@ export const SpikeControls: React.FC<Props> = ({
       ? '↻  Update spike preview — changes pending'
       : '✓  Spike preview up to date';
   const buttonClasses = buttonState === 'first'
-    ? 'bg-gradient-to-br from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white shadow-md ring-1 ring-white/10'
+    ? 'bg-gradient-to-br from-brand-500 to-accent-500 hover:from-brand-400 hover:to-accent-500 text-white shadow-glow-brand ring-1 ring-white/15 font-display'
     : buttonState === 'stale'
       ? 'bg-amber-500 hover:bg-amber-600 text-white shadow-md ring-2 ring-amber-300/40 animate-pulse'
       : 'bg-gray-800 border border-gray-700 text-gray-400 cursor-default';
@@ -50,7 +50,7 @@ export const SpikeControls: React.FC<Props> = ({
           <span>Spike overlay</span>
         </h3>
         {hasPattern && buttonState === 'stale' && (
-          <span className="text-[10px] text-amber-400 font-medium">changes pending</span>
+          <span className="text-[10px] text-signal-pending font-medium">changes pending</span>
         )}
       </div>
 
@@ -97,7 +97,7 @@ export const SpikeControls: React.FC<Props> = ({
                   const v = Math.max(0, Math.min(20, +e.target.value || 0));
                   setSettings((s) => ({ ...s, spikeMaxMm: v }));
                 }}
-                className="w-full bg-gray-900 border border-gray-700 rounded-md px-2 py-1.5 text-xs font-mono text-gray-100 focus:outline-none focus:border-purple-500/60 focus:ring-1 focus:ring-purple-500/20"
+                className="w-full bg-gray-900 border border-gray-700 rounded-md px-2 py-1.5 text-xs font-mono text-gray-100 focus:outline-none focus:border-brand-500/60 focus:ring-1 focus:ring-brand-500/20"
               />
             </label>
             <label className="flex items-center gap-2 text-xs text-gray-300 select-none cursor-pointer">
@@ -105,13 +105,13 @@ export const SpikeControls: React.FC<Props> = ({
                 type="checkbox"
                 checked={settings.spikeColorMatch}
                 onChange={(e) => setSettings((s) => ({ ...s, spikeColorMatch: e.target.checked }))}
-                className="accent-purple-500"
+                className="accent-brand-500"
               />
               color-match spikes to the region below
             </label>
           </div>
           <p className="text-[10px] text-gray-500 mt-2 font-mono">
-            resolved top: <span className="text-purple-300 font-semibold">{effectiveSpikeMaxMm(settings.spikeMaxMm, baseMm, paletteSize, settings.colorLayerMm).toFixed(2)}mm</span>
+            resolved top: <span className="text-signal-ready font-semibold">{effectiveSpikeMaxMm(settings.spikeMaxMm, baseMm, paletteSize, settings.colorLayerMm).toFixed(2)}mm</span>
           </p>
         </>
       )}

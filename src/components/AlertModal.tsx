@@ -91,7 +91,7 @@ const AlertModal: React.FC<AlertModalProps> = ({
                         value={inputValue}
                         onChange={(e) => setInputValue(e.target.value)}
                         placeholder={inputPlaceholder}
-                        className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500 placeholder-gray-500 text-sm"
+                        className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-brand-500/40/50 focus:border-brand-500 placeholder-gray-500 text-sm"
                         autoFocus
                         onKeyDown={(e) => {
                             if (e.key === 'Enter') {

@@ -765,7 +765,7 @@ const SVGPaintModal: React.FC<SVGPaintModalProps> = ({ isOpen, onClose, shapes, 
     const toolBtn = (tool: ActiveTool, extraActive?: boolean) =>
         `flex items-center justify-center gap-2 py-2 rounded-md text-sm font-medium transition-all ${
             activeTool === tool || extraActive
-                ? 'bg-purple-600/30 text-purple-300 ring-1 ring-purple-500/50'
+                ? 'bg-brand-500/30 text-brand-300 ring-1 ring-brand-500/50'
                 : 'text-gray-400 hover:text-gray-200 hover:bg-gray-700/50'
         }`;
 
@@ -782,12 +782,12 @@ const SVGPaintModal: React.FC<SVGPaintModalProps> = ({ isOpen, onClose, shapes, 
                 {/* Header */}
                 <div className="flex items-center justify-between px-5 py-3 border-b border-gray-800 shrink-0">
                     <div className="flex items-center gap-3">
-                        <div className="p-1.5 bg-purple-500/10 rounded-lg text-purple-400">
+                        <div className="p-1.5 bg-brand-500/10 rounded-lg text-brand-400">
                             <Droplet size={20} />
                         </div>
                         <h2 className="text-lg font-bold text-white">Paint Inlay</h2>
                         {hasSelection && (
-                            <span className="text-xs px-2 py-0.5 bg-purple-600/20 text-purple-300 rounded-full border border-purple-500/30">
+                            <span className="text-xs px-2 py-0.5 bg-brand-500/20 text-brand-300 rounded-full border border-brand-500/30">
                                 {selectedIndices.size} selected
                             </span>
                         )}
@@ -984,7 +984,7 @@ const SVGPaintModal: React.FC<SVGPaintModalProps> = ({ isOpen, onClose, shapes, 
                                         <Eraser size={15} /><span>Erase</span>
                                     </button>
                                     <button onClick={() => setIsEyedropperActive(v => !v)} title="Eyedropper"
-                                        className={`flex items-center justify-center gap-1 py-2 rounded-md text-xs font-medium transition-all ${isEyedropperActive ? 'bg-purple-600/20 text-purple-400 ring-1 ring-purple-500/50' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-700/50'}`}>
+                                        className={`flex items-center justify-center gap-1 py-2 rounded-md text-xs font-medium transition-all ${isEyedropperActive ? 'bg-brand-500/20 text-brand-400 ring-1 ring-brand-500/50' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-700/50'}`}>
                                         <Pipette size={15} /><span>Pick</span>
                                     </button>
                                 </div>
@@ -995,7 +995,7 @@ const SVGPaintModal: React.FC<SVGPaintModalProps> = ({ isOpen, onClose, shapes, 
                                 <div className="bg-gray-800/60 border border-gray-700 rounded-lg p-3 space-y-3">
                                     <div className="flex items-center justify-between">
                                         <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Font</h3>
-                                        {loadingFontKey && <span className="text-xs text-purple-400 animate-pulse">Loading…</span>}
+                                        {loadingFontKey && <span className="text-xs text-brand-400 animate-pulse">Loading…</span>}
                                     </div>
 
                                     {/* Preset + custom selector */}
@@ -1003,7 +1003,7 @@ const SVGPaintModal: React.FC<SVGPaintModalProps> = ({ isOpen, onClose, shapes, 
                                         <select
                                             value={activeFontKey}
                                             onChange={e => { setActiveFontKey(e.target.value); loadFont(e.target.value); }}
-                                            className="w-full bg-gray-700 border border-gray-600 rounded-md pl-2 pr-7 py-1.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-purple-500 appearance-none"
+                                            className="w-full bg-gray-700 border border-gray-600 rounded-md pl-2 pr-7 py-1.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-brand-500/40 appearance-none"
                                         >
                                             <optgroup label="Preset Fonts">
                                                 {PRESET_FONTS.map(f => (
@@ -1037,7 +1037,7 @@ const SVGPaintModal: React.FC<SVGPaintModalProps> = ({ isOpen, onClose, shapes, 
                                         </div>
                                         <input type="range" min="4" max="100" step="1" value={fontSize}
                                             onChange={e => setFontSize(Number(e.target.value))}
-                                            className="w-full accent-purple-500 cursor-pointer" />
+                                            className="w-full accent-brand-500 cursor-pointer" />
                                     </div>
 
                                     <p className="text-xs text-gray-500 leading-relaxed">Click on the canvas to place text at that position.</p>
@@ -1083,7 +1083,7 @@ const SVGPaintModal: React.FC<SVGPaintModalProps> = ({ isOpen, onClose, shapes, 
                                                     commitShapes(next);
                                                 }
                                             }}
-                                            className="w-full accent-purple-500 cursor-pointer" />
+                                            className="w-full accent-brand-500 cursor-pointer" />
                                     </div>
                                     <div>
                                         <div className="flex justify-between text-xs text-gray-400 mb-1">
@@ -1092,7 +1092,7 @@ const SVGPaintModal: React.FC<SVGPaintModalProps> = ({ isOpen, onClose, shapes, 
                                         </div>
                                         <input type="range" min="0" max="10" step="0.5" value={activeStrokeWidth}
                                             onChange={e => setActiveStrokeWidth(parseFloat(e.target.value))}
-                                            className="w-full accent-purple-500 cursor-pointer" />
+                                            className="w-full accent-brand-500 cursor-pointer" />
                                     </div>
                                 </div>
                             </div>
@@ -1221,7 +1221,7 @@ const SVGPaintModal: React.FC<SVGPaintModalProps> = ({ isOpen, onClose, shapes, 
                         <button onClick={onClose} className="px-4 py-1.5 bg-gray-800 hover:bg-gray-700 text-white rounded-lg text-sm font-medium transition-colors">
                             Cancel
                         </button>
-                        <button onClick={handleSave} className="flex items-center gap-2 px-5 py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-purple-900/20">
+                        <button onClick={handleSave} className="flex items-center gap-2 px-5 py-1.5 bg-brand-500 hover:bg-brand-500 text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-glow-brand">
                             <Check size={16} /> Save Changes
                         </button>
                     </div>

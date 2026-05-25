@@ -272,7 +272,7 @@ const GeometryControls: React.FC<GeometryControlsProps> = ({
                           updateSettings({ patternScale: newScale });
                         }
                       }}
-                      className="text-gray-400 hover:text-purple-400 transition-colors"
+                      className="text-gray-400 hover:text-brand-400 transition-colors"
                       title={
                         isTiled
                           ? "Auto Scale Tile Pattern"
@@ -302,7 +302,7 @@ const GeometryControls: React.FC<GeometryControlsProps> = ({
                     updateSettings(updateObject);
                   }}
                   step="0.1"
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none"
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-brand-500/40 focus:border-transparent transition-all outline-none"
                 />
               </ControlField>
             </div>
@@ -323,7 +323,7 @@ const GeometryControls: React.FC<GeometryControlsProps> = ({
                   placeholder="Auto"
                   min={0.1}
                   step={0.05}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none"
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-brand-500/40 focus:border-transparent transition-all outline-none"
                 />
               </ControlField>
             </div>
@@ -337,7 +337,7 @@ const GeometryControls: React.FC<GeometryControlsProps> = ({
                     updateSettings({ baseRotation: Number(val) })
                   }
                   step="15"
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none"
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-brand-500/40 focus:border-transparent transition-all outline-none"
                 />
               </ControlField>
             </div>
@@ -360,7 +360,7 @@ const GeometryControls: React.FC<GeometryControlsProps> = ({
                   placeholder="Auto"
                   min={0}
                   step={0.1}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none"
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-brand-500/40 focus:border-transparent transition-all outline-none"
                 />
               </ControlField>
             </div>
@@ -378,7 +378,7 @@ const GeometryControls: React.FC<GeometryControlsProps> = ({
                   onChange={(val) =>
                     updateSettings({ tileSpacing: Number(val) })
                   }
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none"
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-brand-500/40 focus:border-transparent transition-all outline-none"
                 />
               </ControlField>
             </div>
@@ -397,7 +397,7 @@ const GeometryControls: React.FC<GeometryControlsProps> = ({
                             tilingDistribution: e.target.value as any,
                           })
                         }
-                        className="w-full bg-gray-800 border border-gray-700 rounded-lg pl-3 pr-10 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none appearance-none truncate"
+                        className="w-full bg-gray-800 border border-gray-700 rounded-lg pl-3 pr-10 py-2 text-white focus:ring-2 focus:ring-brand-500/40 focus:border-transparent transition-all outline-none appearance-none truncate"
                       >
                         <option value="grid">Grid</option>
                         <option value="offset">Offset</option>
@@ -427,7 +427,7 @@ const GeometryControls: React.FC<GeometryControlsProps> = ({
                               tilingDirection: e.target.value as any,
                             })
                           }
-                          className="w-full bg-gray-800 border border-gray-700 rounded-lg pl-3 pr-10 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none appearance-none truncate"
+                          className="w-full bg-gray-800 border border-gray-700 rounded-lg pl-3 pr-10 py-2 text-white focus:ring-2 focus:ring-brand-500/40 focus:border-transparent transition-all outline-none appearance-none truncate"
                         >
                           <option value="horizontal">Horizontal</option>
                           <option value="vertical">Vertical</option>
@@ -452,7 +452,7 @@ const GeometryControls: React.FC<GeometryControlsProps> = ({
                             tilingOrientation: e.target.value as any,
                           })
                         }
-                        className="w-full bg-gray-800 border border-gray-700 rounded-lg pl-3 pr-10 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none appearance-none truncate"
+                        className="w-full bg-gray-800 border border-gray-700 rounded-lg pl-3 pr-10 py-2 text-white focus:ring-2 focus:ring-brand-500/40 focus:border-transparent transition-all outline-none appearance-none truncate"
                       >
                         <option value="none">None</option>
                         <option value="alternate">Alternate</option>
@@ -480,7 +480,7 @@ const GeometryControls: React.FC<GeometryControlsProps> = ({
                         })
                       }
                       placeholder="None"
-                      className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none"
+                      className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-brand-500/40 focus:border-transparent transition-all outline-none"
                     />
                   </ControlField>
                 </div>
@@ -500,7 +500,7 @@ const GeometryControls: React.FC<GeometryControlsProps> = ({
                 }
                 step="0.5"
                 min="0"
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none"
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-brand-500/40 focus:border-transparent transition-all outline-none"
               />
             </ControlField>
           </div>
@@ -536,7 +536,7 @@ const GeometryControls: React.FC<GeometryControlsProps> = ({
                           holeMode: e.target.value as any,
                         })
                       }
-                      className="w-full bg-gray-800 border border-gray-700 rounded-lg pl-3 pr-10 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none appearance-none truncate"
+                      className="w-full bg-gray-800 border border-gray-700 rounded-lg pl-3 pr-10 py-2 text-white focus:ring-2 focus:ring-brand-500/40 focus:border-transparent transition-all outline-none appearance-none truncate"
                     >
                       <option value="default">Default</option>
                       <option value="margin">Margin</option>

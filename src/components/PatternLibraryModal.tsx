@@ -159,7 +159,7 @@ const PatternLibraryModal: React.FC<PatternLibraryModalProps> = ({ isOpen, onClo
                             key={preset.file}
                             onPointerDown={handlePointerDown}
                             onClick={(e) => handlePatternClick(preset, e)}
-                            className="relative bg-gray-800 hover:bg-gray-700 border border-gray-700 hover:border-purple-500/50 rounded-lg p-4 flex flex-col items-center gap-3 transition-all group cursor-pointer"
+                            className="relative bg-gray-800 hover:bg-gray-700 border border-gray-700 hover:border-brand-500/50 rounded-lg p-4 flex flex-col items-center gap-3 transition-all group cursor-pointer"
                         >
                             {/* 3D Interactive Toggle (Only for patterns) */}
                             {category === 'patterns' && preset.type === 'stl' && (
@@ -170,7 +170,7 @@ const PatternLibraryModal: React.FC<PatternLibraryModalProps> = ({ isOpen, onClo
                                             target="_blank"
                                             rel="noopener noreferrer"
                                             onClick={(e) => e.stopPropagation()}
-                                            className="p-1.5 bg-gray-900/50 hover:bg-purple-500 text-gray-400 hover:text-white rounded-md backdrop-blur-sm transition-colors"
+                                            className="p-1.5 bg-gray-900/50 hover:bg-brand-500 text-gray-400 hover:text-white rounded-md backdrop-blur-sm transition-colors"
                                             title="View Info"
                                         >
                                             <ExternalLink size={14} />
@@ -183,7 +183,7 @@ const PatternLibraryModal: React.FC<PatternLibraryModalProps> = ({ isOpen, onClo
                                         }}
                                         className={`p-1.5 rounded-md backdrop-blur-sm transition-colors ${
                                             interactiveFile === preset.file 
-                                                ? 'bg-purple-500/20 text-purple-400 hover:bg-purple-500/30' 
+                                                ? 'bg-brand-500/20 text-brand-400 hover:bg-brand-500/30' 
                                                 : 'bg-gray-900/60 text-gray-400 hover:text-white hover:bg-gray-800'
                                         }`}
                                         title={interactiveFile === preset.file ? "Exit 3D Mode" : "View in 3D"}
@@ -199,7 +199,7 @@ const PatternLibraryModal: React.FC<PatternLibraryModalProps> = ({ isOpen, onClo
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     onClick={(e) => e.stopPropagation()}
-                                    className="absolute top-2 right-2 p-1.5 bg-gray-900/50 hover:bg-purple-500 text-gray-400 hover:text-white rounded-md backdrop-blur-sm transition-colors z-10"
+                                    className="absolute top-2 right-2 p-1.5 bg-gray-900/50 hover:bg-brand-500 text-gray-400 hover:text-white rounded-md backdrop-blur-sm transition-colors z-10"
                                     title="View Info"
                                 >
                                     <ExternalLink size={14} />

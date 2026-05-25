@@ -34,7 +34,7 @@ export function SegmentedControl<T extends string>({
               isDisabled
                 ? 'text-gray-600 cursor-not-allowed opacity-50'
                 : isActive
-                  ? 'bg-gradient-to-br from-purple-600/90 to-blue-600/90 text-white shadow-md ring-1 ring-white/20'
+                  ? 'bg-gradient-to-br from-brand-500 to-accent-500 text-white shadow-glow-brand ring-1 ring-white/15 font-display'
                   : 'text-gray-400 hover:text-gray-100 hover:bg-gray-800/60'
             }`}
           >

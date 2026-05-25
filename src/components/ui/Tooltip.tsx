@@ -51,7 +51,7 @@ const Tooltip: React.FC<TooltipProps> = ({ content }) => {
       >
         <Info 
           size={14} 
-          className="text-gray-500 hover:text-purple-400 cursor-help transition-colors" 
+          className="text-gray-500 hover:text-brand-400 cursor-help transition-colors" 
         />
       </div>
       

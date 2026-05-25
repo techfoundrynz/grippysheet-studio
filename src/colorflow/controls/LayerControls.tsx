@@ -40,24 +40,24 @@ export const LayerControls: React.FC<Props> = ({ palette, coverage, settings, se
           <button
             type="button"
             onClick={() => setSettings((s) => ({ ...s, sort: 'luma', layerOrder: null }))}
-            className={`px-2 py-1 font-medium transition-colors ${!sortIsManual && settings.sort === 'luma' ? 'bg-purple-600/80 text-white' : 'bg-gray-900 text-gray-400 hover:text-white hover:bg-gray-800'}`}
+            className={`px-2 py-1 font-medium transition-colors ${!sortIsManual && settings.sort === 'luma' ? 'bg-brand-500 text-white shadow-[inset_0_-1px_0_rgba(0,0,0,0.25)]' : 'bg-gray-900 text-gray-400 hover:text-white hover:bg-gray-800'}`}
           >luminance</button>
           <button
             type="button"
             onClick={() => setSettings((s) => ({ ...s, sort: 'coverage', layerOrder: null }))}
-            className={`px-2 py-1 font-medium transition-colors ${!sortIsManual && settings.sort === 'coverage' ? 'bg-purple-600/80 text-white' : 'bg-gray-900 text-gray-400 hover:text-white hover:bg-gray-800'}`}
+            className={`px-2 py-1 font-medium transition-colors ${!sortIsManual && settings.sort === 'coverage' ? 'bg-brand-500 text-white shadow-[inset_0_-1px_0_rgba(0,0,0,0.25)]' : 'bg-gray-900 text-gray-400 hover:text-white hover:bg-gray-800'}`}
           >coverage</button>
           <button
             type="button"
             disabled={!sortIsManual}
-            className={`px-2 py-1 font-medium ${sortIsManual ? 'bg-purple-600/80 text-white' : 'bg-gray-900 text-gray-500'}`}
+            className={`px-2 py-1 font-medium ${sortIsManual ? 'bg-brand-500 text-white shadow-[inset_0_-1px_0_rgba(0,0,0,0.25)]' : 'bg-gray-900 text-gray-500'}`}
           >manual</button>
         </div>
         {sortIsManual && (
           <button
             type="button"
             onClick={() => setSettings((s) => ({ ...s, layerOrder: null }))}
-            className="text-purple-300 hover:text-purple-200 hover:underline"
+            className="text-brand-400 hover:text-brand-300 hover:underline font-medium"
           >reset</button>
         )}
       </div>

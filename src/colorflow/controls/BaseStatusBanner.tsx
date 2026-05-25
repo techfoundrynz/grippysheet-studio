@@ -14,26 +14,26 @@ export const BaseStatusBanner: React.FC<Props> = ({ hasOutline, outlineEntry, on
       <span>Base</span>
     </h3>
     {hasOutline ? (
-      <div className="flex items-center justify-between gap-2 text-xs bg-emerald-950/30 border border-emerald-700/40 rounded-md px-3 py-2">
-        <span className="text-emerald-300 font-medium">
-          ✓ {outlineEntry ? <>{outlineEntry.name} <span className="text-emerald-500/70 font-normal">· {outlineEntry.widthMm}×{outlineEntry.heightMm}mm</span></> : 'custom outline loaded'}
+      <div className="flex items-center justify-between gap-2 text-xs bg-signal-ready/[0.06] border border-signal-ready/30 rounded-md px-3 py-2">
+        <span className="text-signal-ready font-medium">
+          ✓ {outlineEntry ? <>{outlineEntry.name} <span className="text-signal-ready/70 font-normal">· {outlineEntry.widthMm}×{outlineEntry.heightMm}mm</span></> : 'custom outline loaded'}
         </span>
         {onSwitchToBase && (
           <button
             type="button"
             onClick={onSwitchToBase}
-            className="text-purple-300 hover:text-purple-200 hover:underline text-[10px] whitespace-nowrap"
+            className="text-brand-400 hover:text-brand-300 hover:underline font-medium text-[10px] whitespace-nowrap"
           >edit in Base ↗</button>
         )}
       </div>
     ) : (
-      <div className="text-xs bg-amber-950/30 border border-amber-700/40 rounded-md px-3 py-2 text-amber-200">
+      <div className="text-xs bg-signal-pending/[0.06] border border-signal-pending/30 rounded-md px-3 py-2 text-signal-pending">
         <p className="font-medium">⚠ No outline configured yet</p>
         {onSwitchToBase && (
           <button
             type="button"
             onClick={onSwitchToBase}
-            className="text-purple-300 hover:text-purple-200 hover:underline text-[10px] mt-1"
+            className="text-brand-400 hover:text-brand-300 hover:underline font-medium text-[10px] mt-1"
           >Configure in Base tab ↗</button>
         )}
       </div>

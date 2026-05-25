@@ -214,11 +214,11 @@ const InlayControls: React.FC<InlayControlsProps> = ({
               onClick={() => setSelectedInlayId(item.id)}
               className={`flex items-center gap-2 p-2 rounded cursor-pointer text-sm transition-colors ${
                 selectedInlayId === item.id
-                  ? "bg-purple-500/20 text-purple-300 border border-purple-500/30"
+                  ? "bg-brand-500/20 text-brand-300 border border-brand-500/30"
                   : "bg-gray-700/50 text-gray-300 hover:bg-gray-700 hover:text-white border border-transparent"
               } ${
                 dragOverIndex === index && draggedIndex !== index
-                  ? "border-t-2 border-t-purple-500"
+                  ? "border-t-2 border-t-brand-500"
                   : ""
               } ${
                 draggedIndex === index
@@ -378,7 +378,7 @@ const InlayControls: React.FC<InlayControlsProps> = ({
                   const scale = Math.max(0.01, Math.round(newScale * 20) / 20);
                   updateItem(selectedItem.id, { scale: scale });
                 }}
-                className="text-gray-400 hover:text-purple-400 transition-colors"
+                className="text-gray-400 hover:text-brand-400 transition-colors"
                 title="Auto Scale to Fit"
               >
                 <Maximize size={14} />
@@ -412,7 +412,7 @@ const InlayControls: React.FC<InlayControlsProps> = ({
               }}
               step="0.01"
               min="0.01"
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none"
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-brand-500/40 focus:border-transparent transition-all outline-none"
             />
           </ControlField>
 
@@ -442,7 +442,7 @@ const InlayControls: React.FC<InlayControlsProps> = ({
               <select
                 value={selectedItem.modifier || 'none'}
                 onChange={(e) => updateItem(selectedItem.id, { modifier: e.target.value as any })}
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg pl-3 pr-10 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none appearance-none truncate"
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg pl-3 pr-10 py-2 text-white focus:ring-2 focus:ring-brand-500/40 focus:border-transparent transition-all outline-none appearance-none truncate"
               >
                 <option value="none">None</option>
                 <option value="cut">Cut</option>
@@ -486,7 +486,7 @@ const InlayControls: React.FC<InlayControlsProps> = ({
                     updateItem(selectedItem.id, { positionPreset: preset });
                   }
                 }}
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg pl-3 pr-10 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none appearance-none truncate"
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg pl-3 pr-10 py-2 text-white focus:ring-2 focus:ring-brand-500/40 focus:border-transparent transition-all outline-none appearance-none truncate"
               >
                 <option value="center">Center</option>
                 <option value="top">Top</option>
@@ -528,7 +528,7 @@ const InlayControls: React.FC<InlayControlsProps> = ({
                     <select
                       value={selectedItem.tilingDistribution || 'grid'}
                       onChange={(e) => updateItem(selectedItem.id, { tilingDistribution: e.target.value as any })}
-                      className="w-full bg-gray-800 border border-gray-700 rounded-lg pl-3 pr-10 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none appearance-none truncate"
+                      className="w-full bg-gray-800 border border-gray-700 rounded-lg pl-3 pr-10 py-2 text-white focus:ring-2 focus:ring-brand-500/40 focus:border-transparent transition-all outline-none appearance-none truncate"
                     >
                       <option value="grid">Grid</option>
                       <option value="offset">Offset</option>
@@ -558,7 +558,7 @@ const InlayControls: React.FC<InlayControlsProps> = ({
                     onChange={(val) =>
                       updateItem(selectedItem.id, { x: Number(val), positionPreset: 'manual' })
                     }
-                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none"
+                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-brand-500/40 focus:border-transparent transition-all outline-none"
                   />
                 </ControlField>
               </div>
@@ -570,7 +570,7 @@ const InlayControls: React.FC<InlayControlsProps> = ({
                     onChange={(val) =>
                       updateItem(selectedItem.id, { y: Number(val), positionPreset: 'manual' })
                     }
-                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none"
+                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-brand-500/40 focus:border-transparent transition-all outline-none"
                   />
                 </ControlField>
               </div>
@@ -606,7 +606,7 @@ const InlayControls: React.FC<InlayControlsProps> = ({
                       updateItem(selectedItem.id, { rotation: num });
                     }
                   }}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none"
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-brand-500/40 focus:border-transparent transition-all outline-none"
                 />
               </ControlField>
             </div>
@@ -643,7 +643,7 @@ const InlayControls: React.FC<InlayControlsProps> = ({
                   step="0.1"
                   min="0.1"
                   max={maxDepth}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none"
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-brand-500/40 focus:border-transparent transition-all outline-none"
                 />
               </ControlField>
             </div>
@@ -658,7 +658,7 @@ const InlayControls: React.FC<InlayControlsProps> = ({
                   onChange={(val) => updateItem(selectedItem.id, { extend: Number(val) })}
                   step="0.1"
                   min="0"
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none"
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-brand-500/40 focus:border-transparent transition-all outline-none"
                 />
               </ControlField>
             </div>

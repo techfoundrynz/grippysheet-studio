@@ -378,8 +378,10 @@ const Controls: React.FC<ControlsProps> = ({
                       <ChevronDown size={20} className={`transition-transform duration-300 ${isCollapsed ? '-rotate-90' : 'rotate-0'}`} />
                   </Button>
              )}
-             <h2 className="text-xl font-bold bg-gradient-to-r from-purple-400 to-cyan-400 bg-clip-text text-transparent">
-                GrippySheet Studio
+             <h2 className="font-display text-xl font-bold tracking-tight">
+                <span className="bg-gradient-to-r from-brand-400 via-brand-500 to-accent-500 bg-clip-text text-transparent">GRIPPY</span>
+                <span className="text-gray-200">SHEET</span>
+                <span className="text-signal-ready text-[10px] font-mono font-semibold ml-1.5 align-top tracking-widest">STUDIO</span>
              </h2>
           </div>
           <div className="flex gap-2">

@@ -28,10 +28,13 @@ const WelcomeModal: React.FC<WelcomeModalProps> = ({ onClose }) => {
                 {/* Header */}
                 <div className="flex items-start justify-between">
                     <div>
-                        <h2 className="text-2xl font-bold bg-gradient-to-r from-purple-400 to-cyan-400 bg-clip-text text-transparent mb-1">
-                            Welcome to GrippySheet Studio
+                        <h2 className="font-display text-2xl font-bold tracking-tight mb-1">
+                            <span className="text-gray-300">Welcome to </span>
+                            <span className="bg-gradient-to-r from-brand-400 via-brand-500 to-accent-500 bg-clip-text text-transparent">GRIPPY</span>
+                            <span className="text-gray-100">SHEET</span>
+                            <span className="text-signal-ready text-xs font-mono font-semibold ml-1.5 align-top tracking-widest">STUDIO</span>
                         </h2>
-                        <p className="text-gray-400 text-sm">Design custom printable grip tape patterns</p>
+                        <p className="text-gray-400 text-sm font-mono">// custom grip tape for onewheel &amp; friends</p>
                     </div>
                     <Button 
                         onClick={handleClose}
@@ -47,7 +50,7 @@ const WelcomeModal: React.FC<WelcomeModalProps> = ({ onClose }) => {
                 <div className="space-y-3">
                     <p className="text-gray-300 text-sm leading-relaxed mb-4">
                         Get started by uploading your grip outline and configuring your shapes — or
-                        switch to <span className="text-purple-400 font-bold">ColorFlow</span> mode
+                        switch to <span className="text-brand-400 font-bold">ColorFlow</span> mode
                         (top right) to design a multi-color flat print from a raster image.
                     </p>
 
@@ -120,7 +123,7 @@ const WelcomeModal: React.FC<WelcomeModalProps> = ({ onClose }) => {
                         onClick={handleClose}
                         variant="primary"
                         size="lg"
-                        className="w-full font-bold rounded-xl shadow-lg shadow-purple-900/20 active:scale-[0.98]"
+                        className="w-full font-display font-bold tracking-wide rounded-xl active:scale-[0.98]"
                     >
                         Get Started
                     </Button>
@@ -130,7 +133,7 @@ const WelcomeModal: React.FC<WelcomeModalProps> = ({ onClose }) => {
                             <div className="relative flex items-center">
                                 <input
                                     type="checkbox"
-                                    className="peer h-4 w-4 rounded border-gray-600 bg-gray-700 text-purple-500 focus:ring-purple-500/50 focus:ring-offset-gray-900 transition-all"
+                                    className="peer h-4 w-4 rounded border-gray-600 bg-gray-700 text-brand-500 focus:ring-brand-500/50 focus:ring-offset-gray-900 transition-all accent-brand-500"
                                     checked={dontShowAgain}
                                     onChange={(e) => setDontShowAgain(e.target.checked)}
                                 />

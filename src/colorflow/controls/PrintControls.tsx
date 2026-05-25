@@ -28,13 +28,13 @@ export const PrintControls: React.FC<Props> = ({ hasLayers, paletteSize, baseMm,
             const v = Math.max(0.05, Math.min(2, +e.target.value || 0.4));
             setSettings((s) => ({ ...s, colorLayerMm: v }));
           }}
-          className="w-full bg-gray-900 border border-gray-700 rounded-md px-2 py-1.5 text-xs font-mono text-gray-100 focus:outline-none focus:border-purple-500/60 focus:ring-1 focus:ring-purple-500/20"
+          className="w-full bg-gray-900 border border-gray-700 rounded-md px-2 py-1.5 text-xs font-mono text-gray-100 focus:outline-none focus:border-brand-500/60 focus:ring-1 focus:ring-brand-500/20"
         />
       </label>
     </div>
     {paletteSize > 0 && (
       <p className="text-[10px] text-gray-500 mt-2 font-mono">
-        total <span className="text-purple-300 font-semibold">{(baseMm + paletteSize * settings.colorLayerMm).toFixed(2)}mm</span>
+        total <span className="text-signal-ready font-semibold">{(baseMm + paletteSize * settings.colorLayerMm).toFixed(2)}mm</span>
         <span className="text-gray-600"> = </span>
         {baseMm.toFixed(2)} base + {paletteSize} × {settings.colorLayerMm.toFixed(2)}
       </p>

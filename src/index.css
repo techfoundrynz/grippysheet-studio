@@ -12,7 +12,18 @@ body,
 }
 
 body {
-  @apply antialiased bg-gray-950;
+  @apply antialiased bg-gray-950 font-sans text-gray-100;
+  /* Darker carbon base — the techy-fun aesthetic reads better on near-black. */
+  background-color: #07090c;
+  background-image:
+    radial-gradient(circle at 12% 18%, rgba(255, 107, 26, 0.05), transparent 40%),
+    radial-gradient(circle at 88% 82%, rgba(0, 212, 255, 0.04), transparent 45%);
+}
+
+/* Selection follows the brand. */
+::selection {
+  background: rgba(255, 107, 26, 0.35);
+  color: #fff;
 }
 
 ::-webkit-scrollbar {

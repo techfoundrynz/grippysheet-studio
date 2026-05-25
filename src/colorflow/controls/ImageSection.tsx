@@ -42,8 +42,8 @@ export const ImageSection: React.FC<Props> = ({
         onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) onImageFile(f); }}
         className={`border-2 border-dashed rounded-lg p-5 text-center text-sm cursor-pointer transition-colors ${
           hasImage
-            ? 'border-emerald-500/40 bg-emerald-950/20 text-emerald-300 hover:border-emerald-400 hover:bg-emerald-950/30'
-            : 'border-gray-700 text-gray-400 hover:border-purple-500/60 hover:bg-gray-900/40 hover:text-gray-200'
+            ? 'border-signal-ready/40 bg-signal-ready/[0.05] text-signal-ready hover:border-signal-ready/60 hover:bg-signal-ready/[0.08]'
+            : 'border-gray-700 text-gray-400 hover:border-brand-500/60 hover:bg-brand-500/5 hover:text-gray-200'
         }`}
       >
         {hasImage
@@ -69,7 +69,7 @@ export const ImageSection: React.FC<Props> = ({
                   const v = Math.max(-200, Math.min(200, +e.target.value || 0));
                   setSettings((s) => ({ ...s, imageOffsetMm: { ...s.imageOffsetMm, x: v } }));
                 }}
-                className="w-full mt-1 bg-gray-900 border border-gray-700 rounded-md px-2 py-1.5 text-xs font-mono text-gray-100 normal-case tracking-normal focus:outline-none focus:border-purple-500/60 focus:ring-1 focus:ring-purple-500/20"
+                className="w-full mt-1 bg-gray-900 border border-gray-700 rounded-md px-2 py-1.5 text-xs font-mono text-gray-100 normal-case tracking-normal focus:outline-none focus:border-brand-500/60 focus:ring-1 focus:ring-brand-500/20"
               />
             </label>
             <label className="block text-[10px] font-medium text-gray-400 uppercase tracking-wide">
@@ -81,7 +81,7 @@ export const ImageSection: React.FC<Props> = ({
                   const v = Math.max(-200, Math.min(200, +e.target.value || 0));
                   setSettings((s) => ({ ...s, imageOffsetMm: { ...s.imageOffsetMm, y: v } }));
                 }}
-                className="w-full mt-1 bg-gray-900 border border-gray-700 rounded-md px-2 py-1.5 text-xs font-mono text-gray-100 normal-case tracking-normal focus:outline-none focus:border-purple-500/60 focus:ring-1 focus:ring-purple-500/20"
+                className="w-full mt-1 bg-gray-900 border border-gray-700 rounded-md px-2 py-1.5 text-xs font-mono text-gray-100 normal-case tracking-normal focus:outline-none focus:border-brand-500/60 focus:ring-1 focus:ring-brand-500/20"
               />
             </label>
             <label className="block text-[10px] font-medium text-gray-400 uppercase tracking-wide">
@@ -93,14 +93,14 @@ export const ImageSection: React.FC<Props> = ({
                   const v = Math.max(0.2, Math.min(3, +e.target.value || 1));
                   setSettings((s) => ({ ...s, imageScale: v }));
                 }}
-                className="w-full mt-1 bg-gray-900 border border-gray-700 rounded-md px-2 py-1.5 text-xs font-mono text-gray-100 normal-case tracking-normal focus:outline-none focus:border-purple-500/60 focus:ring-1 focus:ring-purple-500/20"
+                className="w-full mt-1 bg-gray-900 border border-gray-700 rounded-md px-2 py-1.5 text-xs font-mono text-gray-100 normal-case tracking-normal focus:outline-none focus:border-brand-500/60 focus:ring-1 focus:ring-brand-500/20"
               />
             </label>
           </div>
           <button
             type="button"
             onClick={() => setSettings((s) => ({ ...s, imageOffsetMm: { x: 0, y: 0 }, imageScale: 1.0 }))}
-            className="text-[10px] text-purple-300 hover:text-purple-200 hover:underline"
+            className="text-[10px] text-brand-400 hover:text-brand-300 hover:underline font-medium"
           >
             ↺ Reset to fit-centered
           </button>

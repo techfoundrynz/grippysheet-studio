@@ -206,12 +206,12 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
         <div className="inline-flex rounded border border-gray-700 overflow-hidden text-xs font-medium">
           <button
             onClick={() => setRenderMode('2d')}
-            className={`px-2 py-1 ${renderMode === '2d' ? 'bg-blue-600 text-white' : 'bg-gray-900 text-gray-400 hover:text-white'}`}
+            className={`px-2 py-1 ${renderMode === '2d' ? 'bg-brand-500 text-white shadow-glow-brand' : 'bg-gray-900 text-gray-400 hover:text-white'}`}
             title="2D top-down preview (lightweight)"
           >2D</button>
           <button
             onClick={() => setRenderMode('3d')}
-            className={`px-2 py-1 ${renderMode === '3d' ? 'bg-blue-600 text-white' : 'bg-gray-900 text-gray-400 hover:text-white'}`}
+            className={`px-2 py-1 ${renderMode === '3d' ? 'bg-brand-500 text-white shadow-glow-brand' : 'bg-gray-900 text-gray-400 hover:text-white'}`}
             title="Full 3D render"
           >3D</button>
         </div>
@@ -221,7 +221,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
         <button
           onClick={() => setViewState({ type: 'ortho', timestamp: Date.now() })}
           disabled={renderMode === '2d'}
-          className={`p-2 rounded hover:bg-gray-700 transition-colors ${viewState.type === 'ortho' && renderMode === '3d' ? 'bg-blue-500/20 text-blue-400' : 'text-gray-400'} disabled:opacity-30 disabled:cursor-not-allowed`}
+          className={`p-2 rounded hover:bg-gray-700 transition-colors ${viewState.type === 'ortho' && renderMode === '3d' ? 'bg-brand-500/15 text-brand-400' : 'text-gray-400'} disabled:opacity-30 disabled:cursor-not-allowed`}
           title="Orthographic View"
         >
           <Layers size={20} />
@@ -229,7 +229,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
         <button
           onClick={() => setViewState({ type: 'iso', timestamp: Date.now() })}
           disabled={renderMode === '2d'}
-          className={`p-2 rounded hover:bg-gray-700 transition-colors ${viewState.type === 'iso' && renderMode === '3d' ? 'bg-blue-500/20 text-blue-400' : 'text-gray-400'} disabled:opacity-30 disabled:cursor-not-allowed`}
+          className={`p-2 rounded hover:bg-gray-700 transition-colors ${viewState.type === 'iso' && renderMode === '3d' ? 'bg-brand-500/15 text-brand-400' : 'text-gray-400'} disabled:opacity-30 disabled:cursor-not-allowed`}
           title="Isometric View"
         >
           <Box size={20} />
@@ -340,7 +340,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
                             onClick={() => setDebugState(prev => ({...prev, pattern: !prev.pattern}))}
                             className={`w-full text-left px-3 py-2 rounded transition-colors text-sm flex items-center gap-2 ${
                                 debugState.pattern 
-                                    ? 'bg-blue-500/20 text-blue-400' 
+                                    ? 'bg-brand-500/15 text-brand-400' 
                                     : 'text-gray-300 hover:bg-gray-700'
                             }`}
                         >
@@ -378,7 +378,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
 
         <button
             onClick={() => setShowFps(!showFps)}
-            className={`p-2 rounded hover:bg-gray-700 transition-colors ${showFps ? 'bg-purple-500/20 text-purple-400' : 'text-gray-400'}`}
+            className={`p-2 rounded hover:bg-gray-700 transition-colors ${showFps ? 'bg-signal-info/15 text-signal-info' : 'text-gray-400'}`}
             title="Toggle FPS Counter"
         >
             <Activity size={20} />
@@ -451,7 +451,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
             {showDisplayMenu && (
                 <div className="absolute top-full right-0 mt-2 bg-gray-800 border border-gray-700 rounded shadow-lg overflow-hidden whitespace-nowrap z-50 flex flex-col min-w-[100px]">
                     <button 
-                        className={`text-left px-4 py-2 text-sm hover:bg-gray-700 transition-colors ${displayMode === 'normal' ? 'bg-blue-500/20 text-blue-400' : 'text-gray-300'}`}
+                        className={`text-left px-4 py-2 text-sm hover:bg-gray-700 transition-colors ${displayMode === 'normal' ? 'bg-brand-500/15 text-brand-400' : 'text-gray-300'}`}
                         onClick={() => { setDisplayMode('normal'); setShowDisplayMenu(false); }}
                     >
                         Normal
@@ -475,10 +475,10 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
       </div>
 
       {isAnyProcessing && (
-          <div className="absolute top-4 right-4 z-20 flex items-center gap-2 p-2 bg-gray-800/80 backdrop-blur rounded-lg border border-gray-700 text-blue-400">
+          <div className="absolute top-4 right-4 z-20 flex items-center gap-2 p-2 bg-gray-800/80 backdrop-blur rounded-lg border border-gray-700 text-brand-400">
              <Spinner size={20} />
              {activeLabels.length > 0 && (
-               <span className="text-[11px] uppercase tracking-wider text-blue-300">{activeLabels.join(' · ')}</span>
+               <span className="text-[11px] uppercase tracking-wider text-brand-300">{activeLabels.join(' · ')}</span>
              )}
           </div>
       )}
@@ -495,7 +495,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
             <div className="bg-gray-900/85 backdrop-blur border border-gray-700 rounded-lg px-5 py-4 text-center max-w-sm">
               <p className="text-sm text-gray-200 font-medium">Pick a base outline to start</p>
               <p className="text-[11px] text-gray-400 mt-1">
-                Use the <span className="text-blue-400">Base tab</span> → Outline Library — or upload your own DXF.
+                Use the <span className="text-brand-400">Base tab</span> → Outline Library — or upload your own DXF.
               </p>
             </div>
           </div>
@@ -515,7 +515,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
           {showFps && (
             <>
               <span className="text-gray-700">·</span>
-              <span ref={fpsRef} className="text-purple-300 font-semibold w-14 text-right">0 FPS</span>
+              <span ref={fpsRef} className="text-signal-ready font-semibold w-14 text-right">0 FPS</span>
             </>
           )}
         </div>

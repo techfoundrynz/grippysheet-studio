@@ -59,30 +59,69 @@ const BaseControls: React.FC<BaseControlsProps> = ({
       }
   };
 
+  const currentLibraryEntry = settings.outlineSlug ? getOutlineBySlug(settings.outlineSlug) : null;
+
   return (
     <section className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
-      <div className="space-y-2">
-        <div className="mb-3">
-          <label className="block text-xs text-gray-400 mb-1">Outline Library</label>
-          <select
-            onChange={(e) => handlePickPreset(e.target.value)}
-            value={settings.outlineSlug ?? ''}
-            className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-1 text-sm"
-          >
-            <option value="">— upload your own DXF below —</option>
-            {(['xr','gt','pint','other'] as const).map((g) => (
-              <optgroup key={g} label={g.toUpperCase()}>
-                {OUTLINE_LIBRARY.filter((o) => o.group === g).map((o) => (
-                  <option key={o.slug} value={o.slug}>{o.name} · {o.widthMm}×{o.heightMm}mm</option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
-        </div>
+      <div className="space-y-3">
+        {/* Current selection pill — shown above the picker when a library
+            outline is active so users see what's loaded without opening
+            the gallery again. Uses the brand 'ready' signal-green styling. */}
+        {currentLibraryEntry && (
+          <div className="flex items-center justify-between gap-2 bg-signal-ready/[0.06] border border-signal-ready/30 rounded-md px-3 py-2 text-xs">
+            <span className="text-signal-ready font-medium">
+              ✓ {currentLibraryEntry.name}
+              <span className="text-signal-ready/70 font-mono ml-1.5 text-[10px]">
+                {currentLibraryEntry.widthMm}×{currentLibraryEntry.heightMm}mm
+              </span>
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowLibrary(true)}
+              className="text-brand-400 hover:text-brand-300 hover:underline text-[10px] font-medium whitespace-nowrap"
+            >
+              change ↗
+            </button>
+          </div>
+        )}
+
+        {/* Primary outline-picker CTA. The visual gallery is the recommended
+            path for 95% of users; the old dropdown buried the same content
+            in OS-styled chrome. Custom DXF upload stays below as a secondary
+            "or your own file" path. */}
+        <button
+          type="button"
+          onClick={() => setShowLibrary(true)}
+          className={`group w-full flex items-center gap-3 px-4 py-4 rounded-lg border-2 border-dashed transition-all ${
+            currentLibraryEntry
+              ? 'border-gray-700 hover:border-brand-500/60 bg-gray-900/40 hover:bg-brand-500/[0.04]'
+              : 'border-brand-500/40 hover:border-brand-500 bg-gradient-to-br from-brand-500/10 to-accent-500/10 hover:from-brand-500/15 hover:to-accent-500/15 shadow-glow-brand'
+          }`}
+        >
+          <div className={`flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center transition-colors ${
+            currentLibraryEntry
+              ? 'bg-gray-800 group-hover:bg-brand-500/20 text-gray-400 group-hover:text-brand-400'
+              : 'bg-brand-500/20 group-hover:bg-brand-500/30 text-brand-400 group-hover:text-brand-300'
+          }`}>
+            <BookOpen size={20} />
+          </div>
+          <div className="flex-1 text-left">
+            <div className="font-display font-semibold text-sm tracking-wide text-gray-100">
+              {currentLibraryEntry ? 'Browse outline library' : 'Pick an outline'}
+            </div>
+            <div className="text-[10px] text-gray-500 font-mono mt-0.5">
+              {OUTLINE_LIBRARY.length} stock decks · XR · GT · Pint · Floatwheel
+            </div>
+          </div>
+          <span className="text-brand-400 font-mono text-xs opacity-0 group-hover:opacity-100 transition-opacity">
+            open ↗
+          </span>
+        </button>
+
         <ShapeUploader
-            label="Upload Outline" 
+            label="Or upload your own DXF"
             shapes={cutoutShapes || null}
-            fileName={fileName}
+            fileName={currentLibraryEntry ? null : fileName}
             onUpload={(loadedShapes, name, type, content) => handleOutlineLoaded(loadedShapes, name, type, content)}
             onClear={() => {
                 updateSettings({ cutoutShapes: [] });
@@ -90,15 +129,6 @@ const BaseControls: React.FC<BaseControlsProps> = ({
                 if (onOutlineAssetChanged) onOutlineAssetChanged(null);
             }}
             allowedTypes={['dxf']}
-            adornment={
-                <button
-                    onClick={() => setShowLibrary(true)}
-                    className="p-1 rounded-lg transition-colors border bg-gray-700/50 hover:bg-gray-700 text-gray-400 hover:text-white border-gray-600 hover:border-gray-500"
-                    title="Open Outline Library"
-                >
-                    <BookOpen size={12} />
-                </button>
-            }
         />
         
         <PatternLibraryModal
@@ -107,11 +137,18 @@ const BaseControls: React.FC<BaseControlsProps> = ({
             category="outlines"
             onSelect={async (preset: PatternPreset) => {
                 setShowLibrary(false);
+                // Recover the library slug so the "current selection" pill
+                // and project export both know this is a stock outline,
+                // not a one-off DXF upload.
+                const libraryEntry = OUTLINE_LIBRARY.find((o) => o.file.endsWith(`/${preset.file}`));
                 try {
+                    if (libraryEntry) {
+                        await handlePickPreset(libraryEntry.slug);
+                        return;
+                    }
                     const response = await fetch(`/${preset.category}/${preset.file}`);
                     if (!response.ok) throw new Error('Failed to fetch');
                     const text = await response.text();
-                    
                     if (preset.type === 'dxf' || preset.type === 'svg') {
                         const result = parseShapeFile(text, preset.type as 'dxf'|'svg');
                         if (result.success) {
@@ -138,7 +175,7 @@ const BaseControls: React.FC<BaseControlsProps> = ({
             type="number"
             value={size}
             onChange={(val) => updateSettings({ size: Number(val) })}
-            className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none"
+            className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-brand-500/40 focus:border-transparent transition-all outline-none"
           />
         </ControlField>
       )}
@@ -150,7 +187,7 @@ const BaseControls: React.FC<BaseControlsProps> = ({
           onChange={(val) => updateSettings({ thickness: Math.max(0.5, Number(val)) })}
           step="0.1"
           min="0.5"
-          className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none"
+          className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-brand-500/40 focus:border-transparent transition-all outline-none"
         />
       </ControlField>
 
@@ -162,7 +199,7 @@ const BaseControls: React.FC<BaseControlsProps> = ({
                     type="number"
                     value={settings.baseOutlineRotation || 0}
                     onChange={(val) => updateSettings({ baseOutlineRotation: Number(val) })}
-                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none"
+                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-brand-500/40 focus:border-transparent transition-all outline-none"
                     />
                 </ControlField>
               </div>

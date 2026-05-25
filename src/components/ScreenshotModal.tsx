@@ -17,8 +17,8 @@ const ScreenshotModal: React.FC<ScreenshotModalProps> = ({ isOpen, onClose, onCa
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
             <div className="bg-gray-800 border border-gray-700 rounded-xl shadow-2xl max-w-sm w-full p-6 space-y-4 animate-in fade-in zoom-in duration-200">
                 <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-3 text-purple-400">
-                        <div className="p-2 bg-purple-400/10 rounded-lg">
+                    <div className="flex items-center gap-3 text-brand-400">
+                        <div className="p-2 bg-brand-500/10 rounded-lg">
                             <Camera size={24} />
                         </div>
                         <h3 className="text-lg font-bold text-white">Capture Screenshot</h3>
@@ -41,7 +41,7 @@ const ScreenshotModal: React.FC<ScreenshotModalProps> = ({ isOpen, onClose, onCa
                         {/* Transparent Option */}
                         <button
                             onClick={() => setSelectedColor(null)}
-                            className={`h-8 rounded-md border flex items-center justify-center transition-all ${selectedColor === null ? 'border-purple-500 ring-2 ring-purple-500/20' : 'border-gray-600 hover:border-gray-500'}`}
+                            className={`h-8 rounded-md border flex items-center justify-center transition-all ${selectedColor === null ? 'border-brand-500 ring-2 ring-brand-500/20' : 'border-gray-600 hover:border-gray-500'}`}
                             title="Transparent"
                         >
                             <div className="w-full h-full bg-[linear-gradient(45deg,#374151_25%,transparent_25%,transparent_75%,#374151_75%,#374151),linear-gradient(45deg,#374151_25%,transparent_25%,transparent_75%,#374151_75%,#374151)] bg-[length:8px_8px] bg-[position:0_0,4px_4px] opacity-20 rounded-sm overflow-hidden" />
@@ -52,7 +52,7 @@ const ScreenshotModal: React.FC<ScreenshotModalProps> = ({ isOpen, onClose, onCa
                             <button
                                 key={color}
                                 onClick={() => setSelectedColor(color)}
-                                className={`h-8 rounded-md transition-all ${selectedColor === color ? 'ring-2 ring-purple-500 ring-offset-2 ring-offset-gray-800' : 'hover:scale-105'}`}
+                                className={`h-8 rounded-md transition-all ${selectedColor === color ? 'ring-2 ring-brand-500 ring-offset-2 ring-offset-gray-800' : 'hover:scale-105'}`}
                                 style={{ backgroundColor: color }}
                             />
                         ))}
@@ -62,7 +62,7 @@ const ScreenshotModal: React.FC<ScreenshotModalProps> = ({ isOpen, onClose, onCa
                 <div className="pt-2">
                     <button
                         onClick={() => onCapture(selectedColor)}
-                        className="w-full px-4 py-3 bg-purple-500 hover:bg-purple-600 text-white rounded-lg font-bold transition-all flex items-center justify-center gap-2 shadow-lg hover:shadow-purple-500/25"
+                        className="w-full px-4 py-3 bg-brand-500 hover:bg-brand-500 text-white rounded-lg font-bold transition-all flex items-center justify-center gap-2 shadow-lg hover:shadow-glow-brand"
                     >
                         <ImageDown size={20} />
                         Capture Image
