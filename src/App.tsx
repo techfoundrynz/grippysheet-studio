@@ -24,6 +24,7 @@ const App = () => {
   const [colorFlowGeom, setColorFlowGeom] = useState<{
     base: ExtrudedGeometry;
     layers: { centroid: Centroid; position: number; geom: ExtrudedGeometry }[];
+    fills: { centroid: Centroid; position: number; geom: ExtrudedGeometry }[];
     source: SpikeSource;
   } | null>(null);
   const [projectAssets, setProjectAssets] = useState<ProjectAssets>({ inlays: {} });
@@ -173,6 +174,7 @@ const App = () => {
     return {
       base: colorFlowGeom.base,
       layers: colorFlowGeom.layers,
+      fills: colorFlowGeom.fills,
       spikes: spikeGroups,
       source: colorFlowGeom.source,
     };

@@ -6,6 +6,10 @@ import type { ExtrudedGeometry } from './pipeline/extrude';
 interface Props {
   baseGeom: ExtrudedGeometry | null;
   layers: Array<{ centroid: Centroid; position: number; geom: ExtrudedGeometry }>;
+  /** Per-color filler meshes above each non-topmost color's slab, extending
+   *  the column to a uniform top. Rendered with the same colour as the
+   *  matching layer so the user sees one cohesive colour blob per region. */
+  fills?: Array<{ centroid: Centroid; position: number; geom: ExtrudedGeometry }>;
   spikes?: Array<{ centroidIndex: number; geom: ExtrudedGeometry; color: string }>;
   displayMode?: 'normal' | 'toon';
   /** Hex color string (or any THREE.Color-compatible) for the base mesh material. */
@@ -48,10 +52,11 @@ function disposeMeshArray(meshes: THREE.Mesh[]) {
  * settings doesn't churn the base + color GPU buffers, and changing baseColor
  * doesn't re-upload the color/spike geometries either.
  */
-export const ColorFlowModel = React.forwardRef<THREE.Group, Props>(({ baseGeom, layers, spikes = [], displayMode = 'normal', baseColor }, ref) => {
+export const ColorFlowModel = React.forwardRef<THREE.Group, Props>(({ baseGeom, layers, fills = [], spikes = [], displayMode = 'normal', baseColor }, ref) => {
   const localGroupRef = useRef<THREE.Group>(null);
   const baseRef = useRef<THREE.Mesh | null>(null);
   const layerMeshesRef = useRef<THREE.Mesh[]>([]);
+  const fillMeshesRef = useRef<THREE.Mesh[]>([]);
   const spikeMeshesRef = useRef<THREE.Mesh[]>([]);
 
   React.useImperativeHandle(ref, () => localGroupRef.current!, []);
@@ -101,6 +106,26 @@ export const ColorFlowModel = React.forwardRef<THREE.Group, Props>(({ baseGeom, 
       layerMeshesRef.current = [];
     };
   }, [layers, displayMode]);
+
+  // Fill meshes (per-color filler above each non-topmost slab so columns
+  // reach a uniform top). Same colour as the matching layer.
+  useEffect(() => {
+    const group = localGroupRef.current;
+    if (!group) return;
+    disposeMeshArray(fillMeshesRef.current);
+    fillMeshesRef.current = [];
+    for (const { centroid: c, position, geom } of fills) {
+      const hex = `${c.r.toString(16).padStart(2,'0')}${c.g.toString(16).padStart(2,'0')}${c.b.toString(16).padStart(2,'0')}`;
+      const mesh = new THREE.Mesh(makeBufferGeom(geom), makeMaterial(new THREE.Color(c.r / 255, c.g / 255, c.b / 255), displayMode));
+      mesh.name = `Fill_${position + 1}_${hex}`;
+      group.add(mesh);
+      fillMeshesRef.current.push(mesh);
+    }
+    return () => {
+      disposeMeshArray(fillMeshesRef.current);
+      fillMeshesRef.current = [];
+    };
+  }, [fills, displayMode]);
 
   // Spike meshes: depend on spikes + displayMode only.
   useEffect(() => {

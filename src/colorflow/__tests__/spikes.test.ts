@@ -81,23 +81,39 @@ describe('buildSpikeGeometriesForColors', () => {
     expect(byColor[0].geom.positions.length).toBeGreaterThan(byColor[1].geom.positions.length);
   });
 
-  it('places spikes at the correct Z range per color', () => {
+  it('grounds every spike at the uniform stack-top regardless of color', () => {
+    // Per-color fillers (worker-side) extend every column to baseMm + N×layer,
+    // so spike bases share a flat plane. Tiles on different colors should all
+    // start at z = 1 + 3×0.4 = 2.2 (with N=3 here).
     const tiles = [
-      { x: 0, y: 0, rotation: 0, scale: 1, colorIndex: 1 }, // stack pos 1 → bottomZ = 1 + 2×0.4 = 1.8
+      { x: 0, y: 0, rotation: 0, scale: 1, colorIndex: 0 },   // pos 0 (shortest)
+      { x: 5, y: 0, rotation: 0, scale: 1, colorIndex: 2 },   // pos 2 (tallest)
     ];
-    const result = buildSpikeGeometriesForColors(tiles, tileShape, 1.0, 0.4, [0, 1], 3.0);
-    const zs = new Set<number>();
-    for (let i = 2; i < result[0].geom.positions.length; i += 3) {
-      zs.add(+result[0].geom.positions[i].toFixed(3));
+    const result = buildSpikeGeometriesForColors(tiles, tileShape, 1.0, 0.4, [0, 1, 2], 3.0);
+    for (const group of result) {
+      const zs = new Set<number>();
+      for (let i = 2; i < group.geom.positions.length; i += 3) {
+        zs.add(+group.geom.positions[i].toFixed(3));
+      }
+      expect(zs.has(2.2)).toBe(true);  // uniform bottom
+      expect(zs.has(3.0)).toBe(true);  // spikeMaxMm
     }
-    expect(zs.has(1.8)).toBe(true);
-    expect(zs.has(3.0)).toBe(true);
   });
 
-  it('skips groups with degenerate Z range (spikeMax <= bottom)', () => {
+  it('skips groups with degenerate Z range (spikeMax <= uniform bottom)', () => {
     const tiles = [{ x: 0, y: 0, rotation: 0, scale: 1, colorIndex: 1 }];
-    // bottomZ for color 1 = 1 + 2×0.4 = 1.8; topZ = 1.5 → degenerate, skipped.
+    // uniform bottom = 1 + 2×0.4 = 1.8; topZ = 1.5 → degenerate, skipped.
     const result = buildSpikeGeometriesForColors(tiles, tileShape, 1.0, 0.4, [0, 1], 1.5);
     expect(result).toEqual([]);
+  });
+
+  it('skips tiles outside every color region (colorIndex === -1)', () => {
+    const tiles = [
+      { x: 0, y: 0, rotation: 0, scale: 1, colorIndex: -1 }, // gap between regions
+      { x: 5, y: 0, rotation: 0, scale: 1, colorIndex: 0 },
+    ];
+    const result = buildSpikeGeometriesForColors(tiles, tileShape, 1.0, 0.4, [0, 1], 3.0);
+    // Only color 0 should produce a group; the -1 tile is dropped.
+    expect(result.map((r) => r.centroidIndex)).toEqual([0]);
   });
 });

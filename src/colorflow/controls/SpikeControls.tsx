@@ -92,7 +92,7 @@ export const SpikeControls: React.FC<Props> = ({
         </>
       ) : (
         <p className="text-[10px] text-gray-500">
-          No pattern tile configured — pick one in the Geometry tab to add a grip spike layer on top.
+          No pattern tile configured — pick one above to add a grip spike layer on top.
         </p>
       )}
     </section>

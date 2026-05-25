@@ -35,6 +35,7 @@ interface ModelViewerProps {
   colorFlowGeom?: {
     base: ExtrudedGeometry;
     layers: { centroid: Centroid; position: number; geom: ExtrudedGeometry }[];
+    fills: { centroid: Centroid; position: number; geom: ExtrudedGeometry }[];
     spikes: { centroidIndex: number; geom: ExtrudedGeometry; color: string }[];
     source?: {
       layersInMm: import('../colorflow/workerProtocol').TracedLayerEntry[];
@@ -569,6 +570,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
                 ref={meshRef}
                 baseGeom={colorFlowGeom?.base ?? null}
                 layers={colorFlowGeom?.layers ?? []}
+                fills={colorFlowGeom?.fills ?? []}
                 spikes={colorFlowGeom?.spikes ?? []}
                 displayMode={displayMode}
                 baseColor={color}

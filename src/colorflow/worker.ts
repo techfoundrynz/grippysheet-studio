@@ -137,11 +137,35 @@ async function handleExtrude(req: Extract<Request, { kind: 'extrude' }>) {
     });
   }
 
+  // PER-COLOR FILLER: each color C at stack pos p (other than the topmost)
+  // extends upward to a uniform column top (z = baseMm + N*colorLayerMm).
+  // Above the C-pixels, the column is solid C from base+(p+1)*layer up to
+  // the uniform top — so spikes can ground on a flat plane instead of
+  // floating over shorter columns at color boundaries. Slicer reads each
+  // fill as part of its color's filament group (same hex). The topmost
+  // color (pos N-1) needs no fill; its slab already reaches the top.
+  const fillGeoms: { centroidIndex: number; position: number; geom: TransferredGeom }[] = [];
+  const totalTopZ = baseMm + stackOrder.length * colorLayerMm;
+  for (let level = 0; level < stackOrder.length - 1; level++) {
+    const centroidIndex = stackOrder[level];
+    const fillBottomZ = baseMm + (level + 1) * colorLayerMm;
+    const colorPolygons = layers
+      .filter((e) => e.centroidIndex === centroidIndex)
+      .map((e) => e.polygon);
+    if (colorPolygons.length === 0) continue;
+    const geom = buildLevelMesh(colorPolygons, fillBottomZ, totalTopZ);
+    if (!geom) continue;
+    fillGeoms.push({ centroidIndex, position: level, geom });
+  }
+
   const transfer: Transferable[] = [baseMesh.positions.buffer, baseMesh.indices.buffer];
   for (const entry of layerGeoms) {
     transfer.push(entry.geom.positions.buffer, entry.geom.indices.buffer);
   }
-  post({ id, kind: 'extruded', baseGeom: baseMesh, layerGeoms }, transfer);
+  for (const entry of fillGeoms) {
+    transfer.push(entry.geom.positions.buffer, entry.geom.indices.buffer);
+  }
+  post({ id, kind: 'extruded', baseGeom: baseMesh, layerGeoms, fillGeoms }, transfer);
 }
 
 ctx.onmessage = async (e: MessageEvent<Request>) => {

@@ -154,9 +154,6 @@ export function buildSpikeGeometriesForColors(
   stackOrder: number[],
   spikeMaxMm: number,
 ): Array<{ centroidIndex: number; geom: ExtrudedGeometry }> {
-  const positionByCentroid = new Map<number, number>();
-  for (let i = 0; i < stackOrder.length; i++) positionByCentroid.set(stackOrder[i], i);
-
   // Group tiles by centroidIndex.
   const groups = new Map<number, TileAssignment[]>();
   for (const tile of tileAssignments) {
@@ -167,9 +164,15 @@ export function buildSpikeGeometriesForColors(
 
   const result: Array<{ centroidIndex: number; geom: ExtrudedGeometry }> = [];
 
+  // Uniform grounding: every column reaches `baseMm + N×colorLayerMm` once the
+  // per-color fillers (worker.ts) extend each color upward, so spikes ground on
+  // a flat plane regardless of which colour the tile centre landed on. Tiles
+  // that fell outside any color region (centroidIndex === -1) have no column to
+  // ground on — skip them.
+  const uniformBottomZ = baseMm + stackOrder.length * colorLayerMm;
   for (const [centroidIndex, tiles] of groups) {
-    const pos = centroidIndex >= 0 ? positionByCentroid.get(centroidIndex) ?? -1 : -1;
-    const bottomZ = pos >= 0 ? baseMm + (pos + 1) * colorLayerMm : baseMm;
+    if (centroidIndex < 0) continue;
+    const bottomZ = uniformBottomZ;
     const topZ = spikeMaxMm;
     if (topZ <= bottomZ + 1e-6) continue;
 
@@ -238,9 +241,6 @@ export function buildSpikesFromMesh(
   const zOffset = -bbox.min.z;
   const naturalH = Math.max(1e-6, bbox.max.z - bbox.min.z);
 
-  const positionByCentroid = new Map<number, number>();
-  for (let i = 0; i < stackOrder.length; i++) positionByCentroid.set(stackOrder[i], i);
-
   const groups = new Map<number, TileAssignment[]>();
   for (const tile of tileAssignments) {
     const arr = groups.get(tile.colorIndex) ?? [];
@@ -250,9 +250,15 @@ export function buildSpikesFromMesh(
 
   const result: Array<{ centroidIndex: number; geom: ExtrudedGeometry }> = [];
 
+  // Uniform grounding (see buildSpikeGeometriesForColors): the per-color
+  // fillers (worker.ts) extend every column to `baseMm + N×colorLayerMm`, so
+  // spike bases sit on a flat top regardless of the local colour's stack
+  // position. Tiles that landed outside any color region have nothing to
+  // ground on; skip them.
+  const uniformBottomZ = baseMm + stackOrder.length * colorLayerMm;
   for (const [centroidIndex, tiles] of groups) {
-    const pos = centroidIndex >= 0 ? positionByCentroid.get(centroidIndex) ?? -1 : -1;
-    const bottomZ = pos >= 0 ? baseMm + (pos + 1) * colorLayerMm : baseMm;
+    if (centroidIndex < 0) continue;
+    const bottomZ = uniformBottomZ;
     const spikeHeight = spikeMaxMm - bottomZ;
     if (spikeHeight <= 1e-6) continue;
     const zScale = spikeHeight / naturalH;
