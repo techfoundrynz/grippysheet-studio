@@ -30,7 +30,10 @@ export const LayerControls: React.FC<Props> = ({ palette, coverage, settings, se
 
   return (
     <section>
-      <h3 className="text-xs uppercase tracking-widest text-gray-400 mb-2">⑤ Layers</h3>
+      <h3 className="flex items-baseline gap-2 text-sm font-semibold text-gray-100 mb-3">
+        <span className="text-xs font-mono text-gray-500">05</span>
+        <span>Layers</span>
+      </h3>
       <div className="flex items-center gap-2 mb-2 text-[10px]">
         <span className="text-gray-500">sort:</span>
         <div className="inline-flex rounded border border-gray-700 overflow-hidden">

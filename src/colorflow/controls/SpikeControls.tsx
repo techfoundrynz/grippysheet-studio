@@ -45,7 +45,7 @@ export const SpikeControls: React.FC<Props> = ({
   return (
     <section>
       <div className="flex items-baseline justify-between mb-3">
-        <h3 className="text-xs uppercase tracking-widest text-gray-400">Spike overlay</h3>
+        <h3 className="text-sm font-semibold text-gray-100">Spike overlay</h3>
         {hasPattern && buttonState === 'stale' && (
           <span className="text-[10px] text-amber-400">changes pending</span>
         )}

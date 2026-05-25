@@ -9,7 +9,10 @@ interface Props {
 
 export const BaseStatusBanner: React.FC<Props> = ({ hasOutline, outlineEntry, onSwitchToBase }) => (
   <section>
-    <h3 className="text-xs uppercase tracking-widest text-gray-400 mb-2">① Base</h3>
+    <h3 className="flex items-baseline gap-2 text-sm font-semibold text-gray-100 mb-3">
+      <span className="text-xs font-mono text-gray-500">01</span>
+      <span>Base</span>
+    </h3>
     {hasOutline ? (
       <div className="flex items-center justify-between gap-2 text-xs bg-gray-900 border border-gray-700 rounded px-3 py-2">
         <span className="text-green-400">

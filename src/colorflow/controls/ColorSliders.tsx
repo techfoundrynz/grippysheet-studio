@@ -23,7 +23,10 @@ export const ColorSliders: React.FC<Props> = ({
   detailDraft, setDetailDraft,
 }) => (
   <section className={hasImage ? '' : 'opacity-40 pointer-events-none'}>
-    <h3 className="text-xs uppercase tracking-widest text-gray-400 mb-2">③ Colors</h3>
+    <h3 className="flex items-baseline gap-2 text-sm font-semibold text-gray-100 mb-3">
+      <span className="text-xs font-mono text-gray-500">03</span>
+      <span>Colors</span>
+    </h3>
     <div className="space-y-3">
       <label className="block text-xs text-gray-400">
         colors <span className="text-purple-400 font-mono">{colorCountDraft}</span>

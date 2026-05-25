@@ -22,7 +22,10 @@ export const ImageSection: React.FC<Props> = ({
 
   return (
     <section className={hasOutline ? '' : 'opacity-40 pointer-events-none'}>
-      <h3 className="text-xs uppercase tracking-widest text-gray-400 mb-2">② Image</h3>
+      <h3 className="flex items-baseline gap-2 text-sm font-semibold text-gray-100 mb-3">
+        <span className="text-xs font-mono text-gray-500">02</span>
+        <span>Image</span>
+      </h3>
       <div
         ref={dropRef}
         onClick={() => {

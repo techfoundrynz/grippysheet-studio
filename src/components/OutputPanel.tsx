@@ -228,25 +228,26 @@ const OutputPanel: React.FC<OutputPanelProps> = ({ meshRef, debugMode = false, c
   };
 
   return (
-    <div className={`bg-gray-800 p-6 rounded-lg border border-gray-700 space-y-4 shadow-lg ${className}`}>
-      <div className="space-y-2">        
-        <div className="grid grid-cols-1 gap-2">
+    <div className={`space-y-2 ${className}`}>
+      <div className="space-y-1.5">
+        <div className="grid grid-cols-1 gap-1.5">
             <button
             onClick={handleExport3MF}
-            // Primary Style (Blue, Large)
-            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors shadow-sm"
+            // Primary CTA — the goal action of the whole tool.
+            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors shadow-sm"
             >
-            <Box size={20} />
-            Export 3MF (Bambu/Orca)
+            <Box size={18} />
+            Export 3MF
+            <span className="text-blue-200 text-xs font-normal">· Bambu / Orca</span>
             </button>
 
             <button
             onClick={() => handleExport('merged')}
-            // Secondary Style (Gray, Smaller text/padding matches Base/Pattern)
-            className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-gray-700 hover:bg-gray-600 text-white text-sm font-medium rounded-lg transition-colors border border-gray-600"
+            // Secondary — single-mesh STL fallback.
+            className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 text-gray-400 hover:text-white text-xs font-medium rounded-md hover:bg-gray-700/50 transition-colors"
             >
-            <Layers size={16} />
-            Export Merged STL
+            <Layers size={13} />
+            Export merged STL
             </button>
             
             {debugMode && (

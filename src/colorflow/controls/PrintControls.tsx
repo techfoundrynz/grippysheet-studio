@@ -11,7 +11,10 @@ interface Props {
 
 export const PrintControls: React.FC<Props> = ({ hasLayers, paletteSize, baseMm, settings, setSettings }) => (
   <section className={hasLayers ? '' : 'opacity-40 pointer-events-none'}>
-    <h3 className="text-xs uppercase tracking-widest text-gray-400 mb-2">④ Print</h3>
+    <h3 className="flex items-baseline gap-2 text-sm font-semibold text-gray-100 mb-3">
+      <span className="text-xs font-mono text-gray-500">04</span>
+      <span>Print</span>
+    </h3>
     <div className="grid grid-cols-1 gap-2 text-xs text-gray-400">
       <label>layer mm (each color rises this much above the base)
         <input

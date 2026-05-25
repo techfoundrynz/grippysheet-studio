@@ -315,44 +315,43 @@ const Controls: React.FC<ControlsProps> = ({
       input.click();
   };
 
-  const renderFooter = (className = "p-4 bg-gray-800 space-y-4") => (
+  const renderFooter = (className = "p-4 bg-gray-800 space-y-3") => (
       <div className={className}>
-            {/* Reset Button */}
-            {onReset && (
-                <Button
-                    onClick={handleResetClick}
-                    variant="danger"
-                    size="md"
-                    className="w-full"
-                    leftIcon={<RotateCcw size={18} />}
-                >
-                    Reset All Settings
-                </Button>
-            )}
-
-
-            <div className="grid grid-cols-2 gap-2 pt-2">
-                <Button
+            {/* Tertiary actions collapsed into a single icon row so the
+                primary Export 3MF CTA below can dominate the footer. */}
+            <div className="flex items-center gap-1 -mx-1">
+                {onReset && (
+                    <button
+                        type="button"
+                        onClick={handleResetClick}
+                        className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-[11px] font-medium text-gray-400 hover:text-red-300 hover:bg-red-950/40 transition-colors"
+                        title="Reset all settings"
+                    >
+                        <RotateCcw size={13} />
+                        Reset
+                    </button>
+                )}
+                <button
+                    type="button"
                     onClick={handleImportClick}
-                    variant="secondary"
-                    size="sm"
-                    leftIcon={<Download size={14} />}
-                    title="Import Project JSON"
+                    className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-[11px] font-medium text-gray-400 hover:text-white hover:bg-gray-700/50 transition-colors"
+                    title="Import project bundle"
                 >
-                    Import Project
-                </Button>
-                <Button
+                    <Download size={13} />
+                    Import
+                </button>
+                <button
+                    type="button"
                     onClick={handleExportClick}
-                    variant="secondary"
-                    size="sm"
-                    leftIcon={<Upload size={14} />}
-                    title="Export Project JSON"
+                    className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-[11px] font-medium text-gray-400 hover:text-white hover:bg-gray-700/50 transition-colors"
+                    title="Export project bundle"
                 >
-                    Export Project
-                </Button>
+                    <Upload size={13} />
+                    Export
+                </button>
             </div>
 
-            {/* Export Buttons */}
+            {/* Primary export — kept prominent. */}
             {exportControls && (
                 <div className="w-full">
                     {exportControls}
