@@ -316,37 +316,38 @@ const Controls: React.FC<ControlsProps> = ({
 
   const renderFooter = (className = "p-4 bg-gray-800 space-y-3") => (
       <div className={className}>
-            {/* Tertiary actions collapsed into a single icon row so the
-                primary Export 3MF CTA below can dominate the footer. */}
-            <div className="flex items-center gap-1 -mx-1">
+            {/* Project actions row — each button has its own icon block + label
+                so they feel like proper affordances, not invisible chrome.
+                Reset takes the dangerous warm-red treatment on hover only. */}
+            <div className="grid grid-cols-3 gap-2">
                 {onReset && (
                     <button
                         type="button"
                         onClick={handleResetClick}
-                        className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-[11px] font-medium text-gray-400 hover:text-red-300 hover:bg-red-950/40 transition-colors"
-                        title="Reset all settings"
+                        className="group flex flex-col items-center gap-1 px-2 py-2 rounded-lg border border-gray-700/60 bg-gray-900/40 hover:border-signal-error/40 hover:bg-signal-error/[0.06] text-gray-400 hover:text-signal-error transition-all"
+                        title="Reset all settings to defaults"
                     >
-                        <RotateCcw size={13} />
-                        Reset
+                        <RotateCcw size={15} strokeWidth={2.25} />
+                        <span className="text-[10px] font-medium tracking-wide uppercase">Reset</span>
                     </button>
                 )}
                 <button
                     type="button"
                     onClick={handleImportClick}
-                    className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-[11px] font-medium text-gray-400 hover:text-white hover:bg-gray-700/50 transition-colors"
-                    title="Import project bundle"
+                    className="group flex flex-col items-center gap-1 px-2 py-2 rounded-lg border border-gray-700/60 bg-gray-900/40 hover:border-brand-500/50 hover:bg-brand-500/[0.04] text-gray-400 hover:text-brand-300 transition-all"
+                    title="Import a saved project bundle (.zip)"
                 >
-                    <Download size={13} />
-                    Import
+                    <Download size={15} strokeWidth={2.25} />
+                    <span className="text-[10px] font-medium tracking-wide uppercase">Import</span>
                 </button>
                 <button
                     type="button"
                     onClick={handleExportClick}
-                    className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-[11px] font-medium text-gray-400 hover:text-white hover:bg-gray-700/50 transition-colors"
-                    title="Export project bundle"
+                    className="group flex flex-col items-center gap-1 px-2 py-2 rounded-lg border border-gray-700/60 bg-gray-900/40 hover:border-brand-500/50 hover:bg-brand-500/[0.04] text-gray-400 hover:text-brand-300 transition-all"
+                    title="Save current project as a bundle (.zip)"
                 >
-                    <Upload size={13} />
-                    Export
+                    <Upload size={15} strokeWidth={2.25} />
+                    <span className="text-[10px] font-medium tracking-wide uppercase">Save</span>
                 </button>
             </div>
 

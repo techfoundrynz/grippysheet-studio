@@ -136,14 +136,24 @@ const PatternLibraryModal: React.FC<PatternLibraryModalProps> = ({ isOpen, onClo
         onSelect(preset);
     };
 
+    const subtitle = category === 'inlays'
+        ? 'Drop-in badges and logos for the deck'
+        : category === 'outlines'
+            ? 'Stock pad shapes — XR, GT, Pint, Floatwheel, more'
+            : 'Tactile grip patterns — pyramids, hex, domes, custom';
+
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="bg-gray-900 border border-gray-700 rounded-xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[80vh] animate-in zoom-in-95 duration-200">
-                <div className="flex items-center justify-between p-4 border-b border-gray-800">
-                    <div className="flex items-center gap-4">
-                        <h3 className="text-lg font-semibold text-white">{title}</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
+            <div className="bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl ring-1 ring-black/40 w-full max-w-3xl flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-200">
+                <div className="flex items-center justify-between p-5 border-b border-gray-800 bg-gradient-to-b from-gray-900 to-gray-900/60 rounded-t-2xl">
+                    <div className="flex items-baseline gap-3">
+                        <h3 className="font-display text-lg font-bold tracking-wide text-white">{title}</h3>
+                        <span className="text-[11px] font-mono text-gray-500">
+                            <span className="text-signal-ready">{filteredPresets.length}</span> presets
+                        </span>
+                        <span className="hidden sm:inline text-xs text-gray-500">— {subtitle}</span>
                     </div>
-                    <Button 
+                    <Button
                         onClick={onClose}
                         variant="ghost"
                         size="icon"
@@ -152,14 +162,14 @@ const PatternLibraryModal: React.FC<PatternLibraryModalProps> = ({ isOpen, onClo
                         <X size={20} />
                     </Button>
                 </div>
-                
-                <div className="p-6 overflow-y-auto grid grid-cols-2 sm:grid-cols-3 gap-4">
+
+                <div className="p-5 overflow-y-auto grid grid-cols-2 sm:grid-cols-3 gap-3">
                     {filteredPresets.map((preset) => (
                         <div
                             key={preset.file}
                             onPointerDown={handlePointerDown}
                             onClick={(e) => handlePatternClick(preset, e)}
-                            className="relative bg-gray-800 hover:bg-gray-700 border border-gray-700 hover:border-brand-500/50 rounded-lg p-4 flex flex-col items-center gap-3 transition-all group cursor-pointer"
+                            className="relative bg-gray-800/60 hover:bg-gray-800 border border-gray-700/60 hover:border-brand-500/60 rounded-xl p-3 flex flex-col items-center gap-2 transition-all group cursor-pointer hover:shadow-glow-brand hover:-translate-y-0.5"
                         >
                             {/* 3D Interactive Toggle (Only for patterns) */}
                             {category === 'patterns' && preset.type === 'stl' && (
@@ -206,7 +216,7 @@ const PatternLibraryModal: React.FC<PatternLibraryModalProps> = ({ isOpen, onClo
                                 </a>
                             )}
 
-                            <div className="w-full aspect-square bg-gray-900 rounded-md flex items-center justify-center p-4">
+                            <div className="w-full aspect-square bg-gradient-to-br from-gray-950 to-gray-900 rounded-lg flex items-center justify-center p-4 ring-1 ring-inset ring-white/5 group-hover:ring-brand-500/20 transition-all">
                                 {preset.type === 'stl' ? (
                                     <STLThumbnail 
                                         url={`/${preset.category}/${preset.file}`}
@@ -231,7 +241,7 @@ const PatternLibraryModal: React.FC<PatternLibraryModalProps> = ({ isOpen, onClo
                                     />
                                 )}
                             </div>
-                            <span className="text-sm font-medium text-gray-300 group-hover:text-white">{preset.name}</span>
+                            <span className="text-xs font-display font-semibold tracking-wide text-gray-300 group-hover:text-white text-center">{preset.name}</span>
                         </div>
                     ))}
                 </div>

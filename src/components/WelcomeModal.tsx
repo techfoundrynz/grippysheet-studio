@@ -47,17 +47,36 @@ const WelcomeModal: React.FC<WelcomeModalProps> = ({ onClose }) => {
                 </div>
 
                 {/* Content / Links */}
-                <div className="space-y-3">
-                    <p className="text-gray-300 text-sm leading-relaxed mb-4">
-                        Get started by uploading your grip outline and configuring your shapes — or
-                        switch to <span className="text-brand-400 font-bold">ColorFlow</span> mode
-                        (top right) to design a multi-color flat print from a raster image.
-                    </p>
+                <div className="space-y-4">
+                    {/* Two-mode feature grid — the core value prop in 2 cards.
+                        The pattern mode + ColorFlow mode are the two creative
+                        paths; surface them up front instead of burying them
+                        in body copy. */}
+                    <div className="grid grid-cols-2 gap-2.5">
+                        <div className="rounded-xl bg-gradient-to-br from-brand-500/10 via-gray-900 to-gray-900 border border-brand-500/30 p-3.5 ring-1 ring-inset ring-white/5">
+                            <div className="flex items-center gap-1.5 mb-2">
+                                <span className="text-[10px] font-mono text-brand-400 tracking-widest">01</span>
+                                <span className="text-brand-300 font-display font-bold text-sm tracking-wide">PATTERN</span>
+                            </div>
+                            <p className="text-[11px] text-gray-400 leading-snug">
+                                Tile a tactile bump pattern (dots, hex, pyramids) across the deck. Add inlay logos with custom transforms.
+                            </p>
+                        </div>
+                        <div className="rounded-xl bg-gradient-to-br from-accent-500/10 via-gray-900 to-gray-900 border border-accent-500/30 p-3.5 ring-1 ring-inset ring-white/5">
+                            <div className="flex items-center gap-1.5 mb-2">
+                                <span className="text-[10px] font-mono text-accent-500 tracking-widest">02</span>
+                                <span className="text-accent-500 font-display font-bold text-sm tracking-wide">COLORFLOW</span>
+                            </div>
+                            <p className="text-[11px] text-gray-400 leading-snug">
+                                Drop an image — quantize it into <span className="text-signal-ready">stacked color layers</span> for multi-filament print.
+                            </p>
+                        </div>
+                    </div>
 
-                    <div className="grid gap-3">
-                         <a 
-                            href="https://github.com/techfoundrynz/grippysheet-studio" 
-                            target="_blank" 
+                    <div className="grid gap-2.5">
+                         <a
+                            href="https://github.com/techfoundrynz/grippysheet-studio"
+                            target="_blank"
                             rel="noopener noreferrer"
                             className="flex items-center gap-4 p-3 rounded-xl bg-gray-800/50 hover:bg-gray-800 border border-gray-700 hover:border-gray-600 transition-all group"
                          >
@@ -65,26 +84,26 @@ const WelcomeModal: React.FC<WelcomeModalProps> = ({ onClose }) => {
                                 <SiGithub size={20} />
                             </div>
                             <div className="flex-1">
-                                <h3 className="font-semibold text-gray-200">View Source Code</h3>
-                                <p className="text-xs text-gray-400">Star us on GitHub</p>
+                                <h3 className="font-semibold text-gray-200 text-sm">Source on GitHub</h3>
+                                <p className="text-[11px] text-gray-400">Open source · star to support</p>
                             </div>
-                            <ExternalLink size={16} className="text-gray-500 group-hover:text-cyan-400 transition-colors" />
+                            <ExternalLink size={14} className="text-gray-500 group-hover:text-signal-info transition-colors" />
                          </a>
 
-                         <a 
-                            href="https://www.printables.com/model/968803-onewheel-grip-tape-dxf-outlines" 
-                            target="_blank" 
+                         <a
+                            href="https://www.printables.com/model/968803-onewheel-grip-tape-dxf-outlines"
+                            target="_blank"
                             rel="noopener noreferrer"
                             className="flex items-center gap-4 p-3 rounded-xl bg-gray-800/50 hover:bg-gray-800 border border-gray-700 hover:border-gray-600 transition-all group"
                          >
-                             <div className="p-2 bg-orange-500/10 rounded-lg group-hover:bg-orange-500/20 transition-colors text-orange-500">
+                             <div className="p-2 bg-brand-500/10 rounded-lg group-hover:bg-brand-500/20 transition-colors text-brand-400">
                                 <Box size={20} />
                             </div>
                             <div className="flex-1">
-                                <h3 className="font-semibold text-gray-200">Download Templates</h3>
-                                <p className="text-xs text-gray-400">Get grip outlines on Printables</p>
+                                <h3 className="font-semibold text-gray-200 text-sm">DXF Templates</h3>
+                                <p className="text-[11px] text-gray-400">More deck outlines on Printables</p>
                             </div>
-                            <ExternalLink size={16} className="text-gray-500 group-hover:text-orange-400 transition-colors" />
+                            <ExternalLink size={14} className="text-gray-500 group-hover:text-brand-400 transition-colors" />
                          </a>
                     </div>
 
@@ -93,7 +112,7 @@ const WelcomeModal: React.FC<WelcomeModalProps> = ({ onClose }) => {
                             onClick={() => setShowHelp(!showHelp)}
                             className="flex items-center justify-between w-full text-left group"
                         >
-                            <h3 className="text-sm font-semibold text-gray-200 group-hover:text-cyan-400 transition-colors">How to use this tool</h3>
+                            <h3 className="text-sm font-semibold text-gray-200 group-hover:text-brand-400 transition-colors">How to use this tool</h3>
                             <ChevronDown 
                                 size={16} 
                                 className={`text-gray-500 transition-transform duration-300 ${showHelp ? 'rotate-180' : ''}`} 

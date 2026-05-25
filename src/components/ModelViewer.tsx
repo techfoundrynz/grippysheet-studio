@@ -200,20 +200,26 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
 
   return (
     <div className="w-full h-full bg-gray-900 rounded-lg overflow-hidden border border-gray-800 relative group">
-      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 flex flex-row gap-2 p-2 bg-gray-800/80 backdrop-blur rounded-lg border border-gray-700">
+      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 flex flex-row items-center gap-2 p-1.5 bg-gray-900/85 backdrop-blur-md rounded-xl border border-gray-700/60 shadow-xl ring-1 ring-black/30">
 
-        {/* 2D / 3D mode toggle — 2D is the lightweight default. */}
-        <div className="inline-flex rounded border border-gray-700 overflow-hidden text-xs font-medium">
+        {/* 2D / 3D mode toggle — bigger pill with animated active indicator
+            so it reads as the primary viewer control, not chrome. */}
+        <div className="relative inline-flex bg-gray-950/60 rounded-lg p-0.5 text-xs font-display font-semibold tracking-wide">
           <button
             onClick={() => setRenderMode('2d')}
-            className={`px-2 py-1 ${renderMode === '2d' ? 'bg-brand-500 text-white shadow-glow-brand' : 'bg-gray-900 text-gray-400 hover:text-white'}`}
-            title="2D top-down preview (lightweight)"
+            className={`relative z-10 px-3.5 py-1.5 rounded-md transition-colors ${renderMode === '2d' ? 'text-white' : 'text-gray-400 hover:text-gray-200'}`}
+            title="2D top-down preview — lightweight, always live"
           >2D</button>
           <button
             onClick={() => setRenderMode('3d')}
-            className={`px-2 py-1 ${renderMode === '3d' ? 'bg-brand-500 text-white shadow-glow-brand' : 'bg-gray-900 text-gray-400 hover:text-white'}`}
-            title="Full 3D render"
+            className={`relative z-10 px-3.5 py-1.5 rounded-md transition-colors ${renderMode === '3d' ? 'text-white' : 'text-gray-400 hover:text-gray-200'}`}
+            title="Full 3D render — orbit, ortho, iso views"
           >3D</button>
+          {/* Sliding active indicator. */}
+          <span
+            className="absolute top-0.5 bottom-0.5 w-[calc(50%-2px)] rounded-md bg-gradient-to-br from-brand-500 to-accent-500 shadow-glow-brand transition-transform duration-200 ease-out"
+            style={{ transform: renderMode === '2d' ? 'translateX(2px)' : 'translateX(calc(100% + 2px))' }}
+          />
         </div>
 
         <div className="w-px bg-gray-700 mx-1" />
@@ -484,12 +490,12 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
       )}
 
       {(() => {
-        // Empty-state guidance overlay. Only when nothing in the scene yet AND
-        // no processing in flight — so we don't shout "pick an outline" while
-        // the very-first outline DXF is loading.
+        // Empty-state guidance overlay — only in 3D mode. The 2D canvas
+        // paints its own hero empty state (ghost deck silhouette + headline)
+        // so the overlay would double up.
         const hasBase = !!(cutoutShapes && cutoutShapes.length > 0);
         const hasColorFlow = mode === 'colorflow' && !!colorFlowGeom;
-        if (hasBase || hasColorFlow || isAnyProcessing) return null;
+        if (hasBase || hasColorFlow || isAnyProcessing || renderMode === '2d') return null;
         return (
           <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none">
             <div className="bg-gray-900/85 backdrop-blur border border-gray-700 rounded-lg px-5 py-4 text-center max-w-sm">

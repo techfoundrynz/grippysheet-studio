@@ -121,7 +121,7 @@ const BaseControls: React.FC<BaseControlsProps> = ({
         <ShapeUploader
             label="Or upload your own DXF"
             shapes={cutoutShapes || null}
-            fileName={currentLibraryEntry ? null : fileName}
+            fileName={currentLibraryEntry ? currentLibraryEntry.name : fileName}
             onUpload={(loadedShapes, name, type, content) => handleOutlineLoaded(loadedShapes, name, type, content)}
             onClear={() => {
                 updateSettings({ cutoutShapes: [] });
@@ -217,17 +217,36 @@ const BaseControls: React.FC<BaseControlsProps> = ({
       )}
 
       <div className="space-y-2">
-         <label className="text-sm font-medium text-gray-300">Color</label>
-         <div className="grid grid-cols-7 gap-y-2 p-1.5 bg-gray-800 rounded-lg border border-gray-700 w-full justify-items-center">
-            {Object.entries(COLORS).map(([name, value]) => (
-              <button
-                key={value}
-                onClick={() => updateSettings({ color: value })}
-                className={`w-6 h-6 rounded-md transition-all hover:scale-110 active:scale-95 ${color === value ? 'ring-2 ring-white' : 'hover:ring-1 hover:ring-white/50'}`}
-                style={{ backgroundColor: value }}
-                title={name}
-              />
-            ))}
+         <div className="flex items-baseline justify-between">
+           <label className="text-sm font-medium text-gray-300">Color</label>
+           {(() => {
+             const activeName = Object.entries(COLORS).find(([, v]) => v === color)?.[0];
+             return activeName && (
+               <span className="text-[10px] font-mono text-signal-ready tracking-wide">{activeName}</span>
+             );
+           })()}
+         </div>
+         <div className="grid grid-cols-7 gap-1.5 p-2.5 bg-gray-900/60 rounded-lg border border-gray-800 w-full justify-items-center">
+            {Object.entries(COLORS).map(([name, value]) => {
+              const isActive = color === value;
+              return (
+                <button
+                  key={value}
+                  onClick={() => updateSettings({ color: value })}
+                  className={`relative w-7 h-7 rounded-md transition-all hover:scale-110 active:scale-95 ${
+                    isActive
+                      ? 'ring-2 ring-signal-ready ring-offset-2 ring-offset-gray-900 shadow-glow-ready'
+                      : 'ring-1 ring-white/10 hover:ring-2 hover:ring-white/40'
+                  }`}
+                  style={{ backgroundColor: value }}
+                  title={name}
+                >
+                  {isActive && (
+                    <span className="absolute inset-0 flex items-center justify-center text-[11px] font-bold text-white mix-blend-difference">✓</span>
+                  )}
+                </button>
+              );
+            })}
          </div>
       </div>
     </section>

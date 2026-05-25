@@ -40,15 +40,21 @@ export const ImageSection: React.FC<Props> = ({
         }}
         onDragOver={(e) => { e.preventDefault(); }}
         onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) onImageFile(f); }}
-        className={`border-2 border-dashed rounded-lg p-5 text-center text-sm cursor-pointer transition-colors ${
+        className={`group border-2 border-dashed rounded-xl p-5 text-center text-sm cursor-pointer transition-all ${
           hasImage
             ? 'border-signal-ready/40 bg-signal-ready/[0.05] text-signal-ready hover:border-signal-ready/60 hover:bg-signal-ready/[0.08]'
-            : 'border-gray-700 text-gray-400 hover:border-brand-500/60 hover:bg-brand-500/5 hover:text-gray-200'
+            : 'border-gray-700 text-gray-400 hover:border-brand-500/60 hover:bg-brand-500/[0.04] hover:text-gray-200 hover:shadow-glow-brand'
         }`}
       >
         {hasImage
           ? <span className="font-medium">✓ {imageName} <span className="text-gray-500 font-normal">· {imageDims?.w}×{imageDims?.h}</span></span>
-          : <span>drag an image here, or click to browse</span>}
+          : (
+            <div className="flex flex-col items-center gap-1.5 py-2">
+              <div className="text-2xl leading-none opacity-60 group-hover:opacity-100 transition-opacity">📥</div>
+              <div className="font-display font-semibold text-sm text-gray-200">Drop your logo or art</div>
+              <div className="text-[11px] text-gray-500 font-mono">PNG · JPG · SVG · up to ~10 megapixels</div>
+            </div>
+          )}
       </div>
       <ImageTransformPreview
         imageBitmap={imageBitmap}
