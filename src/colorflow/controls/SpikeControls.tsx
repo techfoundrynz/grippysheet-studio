@@ -24,29 +24,68 @@ export const SpikeControls: React.FC<Props> = ({
 
   const hasPattern = !!geometrySettings.patternShapes?.[0];
 
-  // Button label / style varies with state.
-  // - canGenerate=false: hidden (handled below)
-  // - !hasSpikes: "Generate preview" (primary)
-  // - hasSpikes + isStale: "Regenerate (changes pending)" (primary)
-  // - hasSpikes + !isStale: "Up to date" (secondary, disabled-feel)
-  const buttonLabel = !hasSpikes
-    ? 'Generate preview'
-    : isStale
-      ? 'Regenerate spikes'
-      : 'Up to date';
-  const buttonPrimary = !hasSpikes || isStale;
+  // Button has three visual states:
+  //   - first run (no spikes yet) → blue primary CTA "Generate spike preview"
+  //   - stale (inputs changed since last gen) → amber + pulse "Update spike preview"
+  //   - up to date → muted "Spike preview up to date" with check
+  // The disabled state keeps "up to date" non-clickable so users don't waste
+  // a regen click on identical inputs.
+  const buttonState: 'first' | 'stale' | 'fresh' = !hasSpikes ? 'first' : isStale ? 'stale' : 'fresh';
+  const buttonLabel = buttonState === 'first'
+    ? '↻  Generate spike preview'
+    : buttonState === 'stale'
+      ? '↻  Update spike preview — changes pending'
+      : '✓  Spike preview up to date';
+  const buttonClasses = buttonState === 'first'
+    ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-md'
+    : buttonState === 'stale'
+      ? 'bg-amber-500 hover:bg-amber-600 text-white shadow-md ring-2 ring-amber-300/40 animate-pulse'
+      : 'bg-gray-700 text-gray-400 cursor-default';
 
   return (
     <section>
-      <h3 className="text-xs uppercase tracking-widest text-gray-400 mb-2">Spike overlay</h3>
-      {hasPattern ? (
+      <div className="flex items-baseline justify-between mb-3">
+        <h3 className="text-xs uppercase tracking-widest text-gray-400">Spike overlay</h3>
+        {hasPattern && buttonState === 'stale' && (
+          <span className="text-[10px] text-amber-400">changes pending</span>
+        )}
+      </div>
+
+      {!hasPattern && (
+        <p className="text-[10px] text-gray-500">
+          No pattern tile configured — pick one above to add a grip spike layer on top.
+        </p>
+      )}
+
+      {hasPattern && (
         <>
-          <p className="text-[10px] text-gray-500 mb-2">
-            Pattern tile + spacing come from the Geometry tab. Each spike rises from its
-            color region's top to a unified spike-max height. Tweak settings then click
-            <span className="text-blue-400"> Generate preview</span> to render.
-          </p>
-          <div className="grid grid-cols-1 gap-2 text-xs text-gray-400">
+          {/* Primary action lives at the top so it can't get scrolled out of
+              sight behind the settings below — the regenerate cadence is the
+              whole point of this section. */}
+          <button
+            type="button"
+            onClick={onGenerate}
+            disabled={!canGenerate || buttonState === 'fresh'}
+            className={`w-full px-4 py-3 rounded text-sm font-semibold transition-all ${buttonClasses} disabled:opacity-60 disabled:cursor-not-allowed`}
+            title={!canGenerate
+              ? 'Need an image + pattern to generate spikes'
+              : buttonState === 'stale'
+                ? 'Settings changed — click to regenerate the spike preview'
+                : buttonState === 'fresh'
+                  ? 'Preview matches the current settings'
+                  : 'Generate the spike preview'}
+          >
+            {buttonLabel}
+          </button>
+
+          {spikeDiag && (
+            <p className="text-[10px] text-gray-500 mt-2 font-mono">{spikeDiag}</p>
+          )}
+
+          {/* Settings live below the action. They configure WHAT the next
+              generation will produce; the button regenerates with the
+              current values. */}
+          <div className="grid grid-cols-1 gap-2 text-xs text-gray-400 mt-4">
             <label>spike max mm (0 = auto: max color + 1.5mm)
               <input
                 type="number" step={0.1} min={0} max={20}
@@ -70,30 +109,7 @@ export const SpikeControls: React.FC<Props> = ({
           <p className="text-[10px] text-gray-500 mt-2">
             resolved spike top: {effectiveSpikeMaxMm(settings.spikeMaxMm, baseMm, paletteSize, settings.colorLayerMm).toFixed(2)}mm
           </p>
-
-          <button
-            type="button"
-            onClick={onGenerate}
-            disabled={!canGenerate || (!isStale && hasSpikes)}
-            className={`w-full mt-3 px-3 py-2 rounded text-xs font-medium transition-colors ${
-              buttonPrimary
-                ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm'
-                : 'bg-gray-700 text-gray-400 cursor-default'
-            } disabled:opacity-60 disabled:cursor-not-allowed`}
-            title={!canGenerate ? 'Need an image + pattern to generate spikes' : isStale ? 'Inputs changed since last generation' : 'Spikes match current inputs'}
-          >
-            {buttonLabel}
-            {isStale && hasSpikes && <span className="ml-2 inline-block w-1.5 h-1.5 rounded-full bg-yellow-400 align-middle" />}
-          </button>
-
-          {spikeDiag && (
-            <p className="text-[10px] text-blue-400 mt-2 font-mono">{spikeDiag}</p>
-          )}
         </>
-      ) : (
-        <p className="text-[10px] text-gray-500">
-          No pattern tile configured — pick one above to add a grip spike layer on top.
-        </p>
       )}
     </section>
   );
