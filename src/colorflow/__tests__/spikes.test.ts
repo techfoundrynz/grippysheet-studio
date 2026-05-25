@@ -101,13 +101,24 @@ describe('buildSpikeGeometriesForColors', () => {
     expect(result).toEqual([]);
   });
 
-  it('skips tiles outside every color region (colorIndex === -1)', () => {
+  it('grounds unbound tiles (colorIndex === -1) on the base', () => {
+    // -1 tiles come from alpha=0 source pixels (transparent background) that
+    // were excluded from quantization — they have no colour to ground on, so
+    // they sit directly on the pad. Without this, transparent-background
+    // designs lose spike coverage in their open areas.
     const tiles = [
-      { x: 0, y: 0, rotation: 0, scale: 1, colorIndex: -1 }, // gap between regions
+      { x: 0, y: 0, rotation: 0, scale: 1, colorIndex: -1 },
       { x: 5, y: 0, rotation: 0, scale: 1, colorIndex: 0 },
     ];
     const result = buildSpikeGeometriesForColors(tiles, tileShape, 1.0, 0.4, [0, 1], 3.0);
-    // Only color 0 should produce a group; the -1 tile is dropped.
-    expect(result.map((r) => r.centroidIndex)).toEqual([0]);
+    expect(result.map((r) => r.centroidIndex).sort()).toEqual([-1, 0]);
+    // The -1 group should start at z = baseMm (1.0), not at a colour slab top.
+    const unbound = result.find((r) => r.centroidIndex === -1)!;
+    const zs = new Set<number>();
+    for (let i = 2; i < unbound.geom.positions.length; i += 3) {
+      zs.add(+unbound.geom.positions[i].toFixed(3));
+    }
+    expect(zs.has(1.0)).toBe(true);  // base
+    expect(zs.has(3.0)).toBe(true);  // spikeMaxMm
   });
 });

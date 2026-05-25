@@ -212,14 +212,15 @@ export function buildSpikeGeometriesForColors(
 
   // Per-color grounding (preserves the per-LEVEL stair-step topography):
   // each tile rises from the top of its assigned colour's slab. Tiles outside
-  // any colour region (centroidIndex === -1) have no column to ground on —
-  // skip them. Boundary clipping (so tile footprints never overhang into a
-  // shorter adjacent column) happens upstream in `generateSpikes`.
+  // any colour region (centroidIndex === -1) — typically alpha=0 pixels in
+  // the source image, i.e. the user's transparent background — get grounded
+  // on the base itself. Without this, transparent-background designs lose
+  // all their spike coverage. Boundary clipping (so tile footprints never
+  // overhang into a shorter adjacent column) happens upstream in
+  // `generateSpikes`.
   for (const [centroidIndex, tiles] of groups) {
-    if (centroidIndex < 0) continue;
-    const pos = positionByCentroid.get(centroidIndex) ?? -1;
-    if (pos < 0) continue;
-    const bottomZ = baseMm + (pos + 1) * colorLayerMm;
+    const pos = centroidIndex >= 0 ? (positionByCentroid.get(centroidIndex) ?? -1) : -1;
+    const bottomZ = pos >= 0 ? baseMm + (pos + 1) * colorLayerMm : baseMm;
     const topZ = spikeMaxMm;
     if (topZ <= bottomZ + 1e-6) continue;
 
@@ -301,13 +302,12 @@ export function buildSpikesFromMesh(
   const result: Array<{ centroidIndex: number; geom: ExtrudedGeometry }> = [];
 
   // Per-color grounding (see buildSpikeGeometriesForColors). Each spike rises
-  // from the top of its colour's slab. Tiles outside any colour region have
-  // nothing to ground on; skip them. Boundary clipping happens upstream.
+  // from the top of its colour's slab. Tiles in alpha=0 source pixels (no
+  // traced colour) ground on the base itself so transparent-background
+  // designs still get spike coverage. Boundary clipping happens upstream.
   for (const [centroidIndex, tiles] of groups) {
-    if (centroidIndex < 0) continue;
-    const pos = positionByCentroid.get(centroidIndex) ?? -1;
-    if (pos < 0) continue;
-    const bottomZ = baseMm + (pos + 1) * colorLayerMm;
+    const pos = centroidIndex >= 0 ? (positionByCentroid.get(centroidIndex) ?? -1) : -1;
+    const bottomZ = pos >= 0 ? baseMm + (pos + 1) * colorLayerMm : baseMm;
     const spikeHeight = spikeMaxMm - bottomZ;
     if (spikeHeight <= 1e-6) continue;
     const zScale = spikeHeight / naturalH;
@@ -474,7 +474,10 @@ export function generateSpikes(input: {
     polygonsByCentroid.set(cp.centroidIndex, arr);
   }
   const fittedAssignments = tileAssignments.filter((tile) => {
-    if (tile.colorIndex < 0) return false;
+    // Unbound tiles (alpha=0 source pixels with no traced colour) skip the
+    // boundary clip — there's no polygon to fit inside. They'll ground on
+    // the base itself in the builder.
+    if (tile.colorIndex < 0) return true;
     const polys = polygonsByCentroid.get(tile.colorIndex) ?? [];
     for (const poly of polys) {
       if (!pointInPolygon(tile.x, tile.y, poly)) continue;
@@ -493,15 +496,16 @@ export function generateSpikes(input: {
     return false;
   });
 
-  // Fallback: if the strict footprint-fit filter dropped every tile (can
-  // happen on images with very thin colour regions, or a pattern whose
-  // footprint is larger than any region), keep every tile that has at least
-  // a valid colour assignment. Spikes near boundaries may overhang the
-  // shorter adjacent column, but at least the user sees a preview.
+  // Fallback: if the strict footprint-fit filter dropped every colour tile
+  // (can happen on images with very thin colour regions, or a pattern whose
+  // footprint is larger than any region), keep every tile that survived the
+  // unbound pass-through PLUS every dropped colour tile, accepting some
+  // overhang at boundaries. Better an overhanging preview than zero spikes.
   let assignmentsToUse = fittedAssignments;
   let usedFallback = false;
-  if (fittedAssignments.length === 0) {
-    assignmentsToUse = tileAssignments.filter((t) => t.colorIndex >= 0);
+  const fittedColorCount = fittedAssignments.filter((t) => t.colorIndex >= 0).length;
+  if (fittedColorCount === 0 && tileAssignments.some((t) => t.colorIndex >= 0)) {
+    assignmentsToUse = tileAssignments;
     usedFallback = true;
   }
 
