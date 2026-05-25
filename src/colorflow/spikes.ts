@@ -461,55 +461,15 @@ export function generateSpikes(input: {
   const colorPolygons = layersInMm.map((l) => ({ centroidIndex: l.centroidIndex, polygon: l.polygon }));
   const tileAssignments = assignTilesToColors(tilesInOutline, colorPolygons, stackOrder);
 
-  // Boundary clip: drop any tile whose footprint would overhang the colour
-  // region it's grounded on. Without this, a tile sitting near a colour edge
-  // grounds at colour C's top but its corners hang in mid-air over the
-  // adjacent shorter column. We test every footprint vertex against the
-  // specific colour polygon that contains the tile centre — the same polygon
-  // `assignTilesToColors` used for the colour assignment.
-  const polygonsByCentroid = new Map<number, Polygon[]>();
-  for (const cp of colorPolygons) {
-    const arr = polygonsByCentroid.get(cp.centroidIndex) ?? [];
-    arr.push(cp.polygon);
-    polygonsByCentroid.set(cp.centroidIndex, arr);
-  }
-  const fittedAssignments = tileAssignments.filter((tile) => {
-    // Unbound tiles (alpha=0 source pixels with no traced colour) skip the
-    // boundary clip — there's no polygon to fit inside. They'll ground on
-    // the base itself in the builder.
-    if (tile.colorIndex < 0) return true;
-    const polys = polygonsByCentroid.get(tile.colorIndex) ?? [];
-    for (const poly of polys) {
-      if (!pointInPolygon(tile.x, tile.y, poly)) continue;
-      const cos = Math.cos(tile.rotation);
-      const sin = Math.sin(tile.rotation);
-      const s = tile.scale * footprintExtraScale;
-      for (const [lx, ly] of localFootprint) {
-        const sx = lx * s;
-        const sy = ly * s;
-        const wx = sx * cos - sy * sin + tile.x;
-        const wy = sx * sin + sy * cos + tile.y;
-        if (!pointInPolygon(wx, wy, poly)) return false;
-      }
-      return true;
-    }
-    return false;
-  });
-
-  // Fallback: if the strict footprint-fit filter dropped every colour tile
-  // (can happen on images with very thin colour regions, or a pattern whose
-  // footprint is larger than any region), keep every tile that survived the
-  // unbound pass-through PLUS every dropped colour tile, accepting some
-  // overhang at boundaries. Better an overhanging preview than zero spikes.
-  let assignmentsToUse = fittedAssignments;
-  let usedFallback = false;
-  const fittedColorCount = fittedAssignments.filter((t) => t.colorIndex >= 0).length;
-  if (fittedColorCount === 0 && tileAssignments.some((t) => t.colorIndex >= 0)) {
-    assignmentsToUse = tileAssignments;
-    usedFallback = true;
-  }
-
-  const rawGroups = buildForColor(assignmentsToUse);
+  // We deliberately do NOT filter tiles whose footprint overhangs the
+  // adjacent (shorter) column anymore — the user values 3D-density matching
+  // the 2D preview more than they value perfect tile-to-colour containment.
+  // Spikes whose centres land on a tall colour will overhang shorter
+  // neighbours visually, but the alternative (clipping such tiles) loses
+  // significant density on busy designs. The convex-hull footprint helper
+  // above is preserved for future use (e.g. an opt-in "Clip overhang" mode).
+  void localFootprint; void footprintExtraScale;
+  const rawGroups = buildForColor(tileAssignments);
 
   const groups: Array<{ centroidIndex: number; geom: ExtrudedGeometry; color: string }> = [];
   for (const g of rawGroups) {
@@ -520,8 +480,6 @@ export function generateSpikes(input: {
     groups.push({ ...g, color });
   }
 
-  const diag = usedFallback
-    ? `${rawTiles.length} raw / ${tilesInOutline.length} in outline / 0 strict fit (overhang fallback) / ${rawGroups.length} groups`
-    : `${rawTiles.length} raw / ${tilesInOutline.length} in outline / ${fittedAssignments.length} fit color / ${rawGroups.length} groups`;
+  const diag = `${rawTiles.length} raw / ${tilesInOutline.length} in outline / ${tileAssignments.length} assigned / ${rawGroups.length} groups`;
   return { groups, diag };
 }
