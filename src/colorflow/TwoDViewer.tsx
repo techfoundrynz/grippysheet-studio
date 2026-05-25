@@ -99,6 +99,11 @@ export const TwoDViewer: React.FC<Props> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  // Cached static backdrop (background + glows + dot grid + corner brackets).
+  // Repainted only when [W, H, dpr] change; the empty-state RAF loop and
+  // every regular draw blit this instead of redoing ~1500 fillRect calls
+  // and two createRadialGradient allocations every frame.
+  const backdropRef = useRef<{ canvas: HTMLCanvasElement; w: number; h: number; dpr: number } | null>(null);
   // Dimension lines fade in on hover so the canvas reads cleaner at rest.
   const [showDims, setShowDims] = useState(false);
   // Track pad dimensions so the HTML overlay shows the same numbers the
@@ -114,62 +119,27 @@ export const TwoDViewer: React.FC<Props> = ({
     const dpr = window.devicePixelRatio || 1;
     const W = Math.max(200, Math.floor(rect.width));
     const H = Math.max(200, Math.floor(rect.height));
-    canvas.width = Math.round(W * dpr);
-    canvas.height = Math.round(H * dpr);
+    const targetBackingW = Math.round(W * dpr);
+    const targetBackingH = Math.round(H * dpr);
+    // Reassigning canvas.width clears the canvas + resets the transform on
+    // every call. Skip it when the size hasn't changed so the RAF loop in
+    // empty state doesn't take that hit each frame.
+    if (canvas.width !== targetBackingW) canvas.width = targetBackingW;
+    if (canvas.height !== targetBackingH) canvas.height = targetBackingH;
     canvas.style.width = `${W}px`;
     canvas.style.height = `${H}px`;
     const ctx = canvas.getContext('2d')!;
-    ctx.scale(dpr, dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    // Layered background: deep base + warm radial bloom from brand orange in
-    // the upper-left and cool cyan in the lower-right. Gives the canvas the
-    // ambient depth Apple/Onewheel product shots use — surface, not void.
-    ctx.fillStyle = '#07090c';
-    ctx.fillRect(0, 0, W, H);
-
-    const bloom1 = ctx.createRadialGradient(W * 0.18, H * 0.22, 0, W * 0.18, H * 0.22, Math.max(W, H) * 0.55);
-    bloom1.addColorStop(0, 'rgba(255, 107, 26, 0.10)');
-    bloom1.addColorStop(0.6, 'rgba(255, 107, 26, 0.025)');
-    bloom1.addColorStop(1, 'rgba(255, 107, 26, 0)');
-    ctx.fillStyle = bloom1;
-    ctx.fillRect(0, 0, W, H);
-
-    const bloom2 = ctx.createRadialGradient(W * 0.85, H * 0.85, 0, W * 0.85, H * 0.85, Math.max(W, H) * 0.55);
-    bloom2.addColorStop(0, 'rgba(0, 212, 255, 0.06)');
-    bloom2.addColorStop(0.6, 'rgba(0, 212, 255, 0.015)');
-    bloom2.addColorStop(1, 'rgba(0, 212, 255, 0)');
-    ctx.fillStyle = bloom2;
-    ctx.fillRect(0, 0, W, H);
-
-    // Dot grid — more "schematic" than full lines, less noisy at high density.
-    // Major dots every 40px (slightly brighter), minor dots at 20px offsets.
-    ctx.fillStyle = 'rgba(148, 163, 184, 0.12)';
-    const gridStep = 40;
-    for (let x = gridStep / 2; x < W; x += gridStep) {
-      for (let y = gridStep / 2; y < H; y += gridStep) {
-        ctx.fillRect(x, y, 1, 1);
-      }
+    // Blit the cached static backdrop. Build once on first paint + on any
+    // size change; otherwise the empty-state RAF is just a drawImage +
+    // the silhouette redraw, not 1500 fillRect + 2 gradient allocations.
+    let backdrop = backdropRef.current;
+    if (!backdrop || backdrop.w !== W || backdrop.h !== H || backdrop.dpr !== dpr) {
+      backdrop = paintBackdrop(W, H, dpr);
+      backdropRef.current = backdrop;
     }
-    ctx.fillStyle = 'rgba(148, 163, 184, 0.22)';
-    for (let x = 0; x <= W; x += gridStep) {
-      for (let y = 0; y <= H; y += gridStep) {
-        ctx.fillRect(x - 0.5, y - 0.5, 2, 2);
-      }
-    }
-
-    // Corner crosshair brackets — adds the "viewport / instrument" feel.
-    const bracketLen = 14;
-    const bracketInset = 12;
-    ctx.strokeStyle = 'rgba(255, 107, 26, 0.35)';
-    ctx.lineWidth = 1.5;
-    ctx.lineCap = 'square';
-    [[bracketInset, bracketInset, 1, 1], [W - bracketInset, bracketInset, -1, 1], [bracketInset, H - bracketInset, 1, -1], [W - bracketInset, H - bracketInset, -1, -1]].forEach(([cx, cy, sx, sy]) => {
-      ctx.beginPath();
-      ctx.moveTo(cx, cy + sy * bracketLen);
-      ctx.lineTo(cx, cy);
-      ctx.lineTo(cx + sx * bracketLen, cy);
-      ctx.stroke();
-    });
+    ctx.drawImage(backdrop.canvas, 0, 0, W, H);
 
     if (!outlinePolygon || outlinePolygon.outer.length === 0) {
       drawEmptyState(ctx, W, H, performance.now());
@@ -536,6 +506,64 @@ export const TwoDViewer: React.FC<Props> = ({
  *  pulsing dashed border + brand-coloured callout. Reads as "your deck goes
  *  here", not "this app is broken". The silhouette is a stylized Pint-like
  *  outline so users get a hint of what the picker will fill in. */
+/** Paint the static viewer backdrop (deep base + radial blooms + dot grid +
+ *  corner brackets) once into an offscreen canvas keyed by [W, H, dpr].
+ *  The caller blits this every draw, saving ~60% of empty-state CPU
+ *  (those layers used to repaint every animation frame). */
+function paintBackdrop(W: number, H: number, dpr: number): { canvas: HTMLCanvasElement; w: number; h: number; dpr: number } {
+  const off = document.createElement('canvas');
+  off.width = Math.round(W * dpr);
+  off.height = Math.round(H * dpr);
+  const ctx = off.getContext('2d')!;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  ctx.fillStyle = '#07090c';
+  ctx.fillRect(0, 0, W, H);
+
+  const bloom1 = ctx.createRadialGradient(W * 0.18, H * 0.22, 0, W * 0.18, H * 0.22, Math.max(W, H) * 0.55);
+  bloom1.addColorStop(0, 'rgba(255, 107, 26, 0.10)');
+  bloom1.addColorStop(0.6, 'rgba(255, 107, 26, 0.025)');
+  bloom1.addColorStop(1, 'rgba(255, 107, 26, 0)');
+  ctx.fillStyle = bloom1;
+  ctx.fillRect(0, 0, W, H);
+
+  const bloom2 = ctx.createRadialGradient(W * 0.85, H * 0.85, 0, W * 0.85, H * 0.85, Math.max(W, H) * 0.55);
+  bloom2.addColorStop(0, 'rgba(0, 212, 255, 0.06)');
+  bloom2.addColorStop(0.6, 'rgba(0, 212, 255, 0.015)');
+  bloom2.addColorStop(1, 'rgba(0, 212, 255, 0)');
+  ctx.fillStyle = bloom2;
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.fillStyle = 'rgba(148, 163, 184, 0.12)';
+  const gridStep = 40;
+  for (let x = gridStep / 2; x < W; x += gridStep) {
+    for (let y = gridStep / 2; y < H; y += gridStep) {
+      ctx.fillRect(x, y, 1, 1);
+    }
+  }
+  ctx.fillStyle = 'rgba(148, 163, 184, 0.22)';
+  for (let x = 0; x <= W; x += gridStep) {
+    for (let y = 0; y <= H; y += gridStep) {
+      ctx.fillRect(x - 0.5, y - 0.5, 2, 2);
+    }
+  }
+
+  const bracketLen = 14;
+  const bracketInset = 12;
+  ctx.strokeStyle = 'rgba(255, 107, 26, 0.35)';
+  ctx.lineWidth = 1.5;
+  ctx.lineCap = 'square';
+  ([[bracketInset, bracketInset, 1, 1], [W - bracketInset, bracketInset, -1, 1], [bracketInset, H - bracketInset, 1, -1], [W - bracketInset, H - bracketInset, -1, -1]] as const).forEach(([cx, cy, sx, sy]) => {
+    ctx.beginPath();
+    ctx.moveTo(cx, cy + sy * bracketLen);
+    ctx.lineTo(cx, cy);
+    ctx.lineTo(cx + sx * bracketLen, cy);
+    ctx.stroke();
+  });
+
+  return { canvas: off, w: W, h: H, dpr };
+}
+
 function drawEmptyState(ctx: CanvasRenderingContext2D, W: number, H: number, t = 0) {
   const cx = W / 2;
   const cy = H / 2;
