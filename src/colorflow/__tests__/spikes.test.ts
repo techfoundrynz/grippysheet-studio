@@ -34,14 +34,14 @@ describe('pointInPolygon', () => {
 
 describe('effectiveSpikeMaxMm', () => {
   it('returns the auto value when raw is 0', () => {
-    // Auto = baseMm + N*colorLayerMm + 0.4
-    expect(effectiveSpikeMaxMm(0, 1.0, 5, 0.4)).toBeCloseTo(1.0 + 5 * 0.4 + 0.4);
+    // Auto = baseMm + N*colorLayerMm + 1.5  (visible grip rise above topmost)
+    expect(effectiveSpikeMaxMm(0, 1.0, 5, 0.4)).toBeCloseTo(1.0 + 5 * 0.4 + 1.5);
   });
   it('passes a non-zero raw through', () => {
     expect(effectiveSpikeMaxMm(7.5, 1.0, 5, 0.4)).toBeCloseTo(7.5);
   });
-  it('floors at baseMm + N×layer + 0.1 even if raw is too low', () => {
-    expect(effectiveSpikeMaxMm(2.5, 1.0, 5, 0.4)).toBeCloseTo(1.0 + 5 * 0.4 + 0.1);
+  it('floors at baseMm + N×layer + 0.5 even if raw is too low', () => {
+    expect(effectiveSpikeMaxMm(2.5, 1.0, 5, 0.4)).toBeCloseTo(1.0 + 5 * 0.4 + 0.5);
   });
 });
 

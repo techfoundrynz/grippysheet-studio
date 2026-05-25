@@ -112,10 +112,13 @@ export function pointInPolygon(x: number, y: number, polygon: Polygon): boolean 
 
 /**
  * Resolve the auto value (0) of `spikeMaxMm` into a concrete top-Z. Auto is
- * `baseMm + N×colorLayerMm + 0.4` — a subtle 0.4mm of grip relief above the
- * tallest color. Non-zero raw values pass through unchanged. A floor of
- * `+0.1mm` above the tallest color is enforced so non-degenerate extrusions
- * always exist.
+ * `baseMm + N×colorLayerMm + 1.5` — 1.5mm of grip relief above the tallest
+ * color, so the topmost (often largest-coverage) colour still ends up with
+ * a meaningful, feel-it-with-your-foot bump rather than a sub-mm nub.
+ * Shorter colours get correspondingly taller spikes (each grounded on its
+ * own colour's slab, all topping out at the same Z). Non-zero raw values
+ * pass through unchanged. A floor of `+0.5mm` above the tallest color is
+ * enforced so non-degenerate extrusions always exist.
  */
 export function effectiveSpikeMaxMm(
   rawSpikeMaxMm: number,
@@ -123,9 +126,9 @@ export function effectiveSpikeMaxMm(
   numColors: number,
   colorLayerMm: number,
 ): number {
-  const auto = baseMm + numColors * colorLayerMm + 0.4;
+  const auto = baseMm + numColors * colorLayerMm + 1.5;
   const resolved = rawSpikeMaxMm > 0 ? rawSpikeMaxMm : auto;
-  const minTop = baseMm + numColors * colorLayerMm + 0.1;
+  const minTop = baseMm + numColors * colorLayerMm + 0.5;
   return Math.max(resolved, minTop);
 }
 

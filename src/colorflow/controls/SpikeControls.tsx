@@ -47,7 +47,7 @@ export const SpikeControls: React.FC<Props> = ({
             <span className="text-blue-400"> Generate preview</span> to render.
           </p>
           <div className="grid grid-cols-1 gap-2 text-xs text-gray-400">
-            <label>spike max mm (0 = auto: max color + 0.4mm)
+            <label>spike max mm (0 = auto: max color + 1.5mm)
               <input
                 type="number" step={0.1} min={0} max={20}
                 value={settings.spikeMaxMm}
