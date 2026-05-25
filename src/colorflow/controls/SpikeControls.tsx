@@ -37,36 +37,36 @@ export const SpikeControls: React.FC<Props> = ({
       ? '↻  Update spike preview — changes pending'
       : '✓  Spike preview up to date';
   const buttonClasses = buttonState === 'first'
-    ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-md'
+    ? 'bg-gradient-to-br from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white shadow-md ring-1 ring-white/10'
     : buttonState === 'stale'
       ? 'bg-amber-500 hover:bg-amber-600 text-white shadow-md ring-2 ring-amber-300/40 animate-pulse'
-      : 'bg-gray-700 text-gray-400 cursor-default';
+      : 'bg-gray-800 border border-gray-700 text-gray-400 cursor-default';
 
   return (
     <section>
       <div className="flex items-baseline justify-between mb-3">
-        <h3 className="text-sm font-semibold text-gray-100">Spike overlay</h3>
+        <h3 className="flex items-baseline gap-2 text-sm font-semibold text-gray-100">
+          <span className="text-xs font-mono text-gray-500">06</span>
+          <span>Spike overlay</span>
+        </h3>
         {hasPattern && buttonState === 'stale' && (
-          <span className="text-[10px] text-amber-400">changes pending</span>
+          <span className="text-[10px] text-amber-400 font-medium">changes pending</span>
         )}
       </div>
 
       {!hasPattern && (
-        <p className="text-[10px] text-gray-500">
-          No pattern tile configured — pick one above to add a grip spike layer on top.
+        <p className="text-[11px] text-gray-500 leading-relaxed">
+          No pattern tile configured — pick one in the <span className="text-gray-400">Geometry</span> tab to add a grip spike layer on top.
         </p>
       )}
 
       {hasPattern && (
         <>
-          {/* Primary action lives at the top so it can't get scrolled out of
-              sight behind the settings below — the regenerate cadence is the
-              whole point of this section. */}
           <button
             type="button"
             onClick={onGenerate}
             disabled={!canGenerate || buttonState === 'fresh'}
-            className={`w-full px-4 py-3 rounded text-sm font-semibold transition-all ${buttonClasses} disabled:opacity-60 disabled:cursor-not-allowed`}
+            className={`w-full px-4 py-3 rounded-md text-sm font-semibold transition-all ${buttonClasses} disabled:opacity-60 disabled:cursor-not-allowed`}
             title={!canGenerate
               ? 'Need an image + pattern to generate spikes'
               : buttonState === 'stale'
@@ -82,11 +82,14 @@ export const SpikeControls: React.FC<Props> = ({
             <p className="text-[10px] text-gray-500 mt-2 font-mono">{spikeDiag}</p>
           )}
 
-          {/* Settings live below the action. They configure WHAT the next
-              generation will produce; the button regenerates with the
-              current values. */}
-          <div className="grid grid-cols-1 gap-2 text-xs text-gray-400 mt-4">
-            <label>spike max mm (0 = auto: max color + 1.5mm)
+          <div className="grid grid-cols-1 gap-3 mt-4">
+            <label className="block text-xs font-medium text-gray-300">
+              <span className="flex items-baseline justify-between mb-1">
+                <span>spike max</span>
+                <span className="text-[10px] text-gray-500 font-normal">
+                  {settings.spikeMaxMm === 0 ? 'auto: top color + 1.5mm' : 'mm above base'}
+                </span>
+              </span>
               <input
                 type="number" step={0.1} min={0} max={20}
                 value={settings.spikeMaxMm}
@@ -94,20 +97,21 @@ export const SpikeControls: React.FC<Props> = ({
                   const v = Math.max(0, Math.min(20, +e.target.value || 0));
                   setSettings((s) => ({ ...s, spikeMaxMm: v }));
                 }}
-                className="w-full mt-1 bg-gray-900 border border-gray-700 rounded px-2 py-1"
+                className="w-full bg-gray-900 border border-gray-700 rounded-md px-2 py-1.5 text-xs font-mono text-gray-100 focus:outline-none focus:border-purple-500/60 focus:ring-1 focus:ring-purple-500/20"
               />
             </label>
-            <label className="flex items-center gap-2">
+            <label className="flex items-center gap-2 text-xs text-gray-300 select-none cursor-pointer">
               <input
                 type="checkbox"
                 checked={settings.spikeColorMatch}
                 onChange={(e) => setSettings((s) => ({ ...s, spikeColorMatch: e.target.checked }))}
+                className="accent-purple-500"
               />
               color-match spikes to the region below
             </label>
           </div>
-          <p className="text-[10px] text-gray-500 mt-2">
-            resolved spike top: {effectiveSpikeMaxMm(settings.spikeMaxMm, baseMm, paletteSize, settings.colorLayerMm).toFixed(2)}mm
+          <p className="text-[10px] text-gray-500 mt-2 font-mono">
+            resolved top: <span className="text-purple-300 font-semibold">{effectiveSpikeMaxMm(settings.spikeMaxMm, baseMm, paletteSize, settings.colorLayerMm).toFixed(2)}mm</span>
           </p>
         </>
       )}

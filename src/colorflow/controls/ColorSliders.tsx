@@ -28,27 +28,37 @@ export const ColorSliders: React.FC<Props> = ({
       <span>Colors</span>
     </h3>
     <div className="space-y-3">
-      <label className="block text-xs text-gray-400">
-        colors <span className="text-purple-400 font-mono">{colorCountDraft}</span>
+      <label className="block text-xs font-medium text-gray-300">
+        <span className="flex items-baseline justify-between mb-1">
+          <span>colors</span>
+          <span className="text-purple-300 font-mono font-semibold">{colorCountDraft}</span>
+        </span>
         <input type="range" min={2} max={10} value={colorCountDraft}
           onChange={(e) => setColorCountDraft(+e.target.value)}
-          className="w-full mt-1" />
+          className="w-full accent-purple-500" />
       </label>
-      <label className="block text-xs text-gray-400">
-        simplify <span className="text-purple-400 font-mono">{SIMPLIFY_LABELS[simplifyDraft]}</span>
+      <label className="block text-xs font-medium text-gray-300">
+        <span className="flex items-baseline justify-between mb-1">
+          <span>simplify</span>
+          <span className="text-purple-300 font-mono font-semibold">{SIMPLIFY_LABELS[simplifyDraft]}</span>
+        </span>
         <input type="range" min={0} max={4} value={simplifyDraft}
           onChange={(e) => setSimplifyDraft(+e.target.value)}
-          className="w-full mt-1" />
+          className="w-full accent-purple-500" />
       </label>
-      <label className="block text-xs text-gray-400">
-        trace detail <span className="text-purple-400 font-mono">{DETAIL_LABELS[detailDraft]}</span>
+      <label className="block text-xs font-medium text-gray-300">
+        <span className="flex items-baseline justify-between mb-1">
+          <span>trace detail</span>
+          <span className="text-purple-300 font-mono font-semibold">{DETAIL_LABELS[detailDraft]}</span>
+        </span>
         <input type="range" min={0} max={2} value={detailDraft}
           onChange={(e) => setDetailDraft(+e.target.value)}
-          className="w-full mt-1" />
+          className="w-full accent-purple-500" />
       </label>
-      <label className="flex items-center gap-2 text-xs text-gray-400">
+      <label className="flex items-center gap-2 text-xs text-gray-300 select-none cursor-pointer">
         <input type="checkbox" checked={settings.smooth}
-          onChange={(e) => setSettings((s) => ({ ...s, smooth: e.target.checked }))} />
+          onChange={(e) => setSettings((s) => ({ ...s, smooth: e.target.checked }))}
+          className="accent-purple-500" />
         smoothing
       </label>
     </div>

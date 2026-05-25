@@ -40,11 +40,15 @@ export const ImageSection: React.FC<Props> = ({
         }}
         onDragOver={(e) => { e.preventDefault(); }}
         onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) onImageFile(f); }}
-        className="border-2 border-dashed border-gray-700 rounded p-6 text-center text-gray-400 text-sm cursor-pointer hover:border-blue-500 hover:bg-gray-900/50"
+        className={`border-2 border-dashed rounded-lg p-5 text-center text-sm cursor-pointer transition-colors ${
+          hasImage
+            ? 'border-emerald-500/40 bg-emerald-950/20 text-emerald-300 hover:border-emerald-400 hover:bg-emerald-950/30'
+            : 'border-gray-700 text-gray-400 hover:border-purple-500/60 hover:bg-gray-900/40 hover:text-gray-200'
+        }`}
       >
         {hasImage
-          ? <span className="text-green-400">✓ {imageName} · {imageDims?.w}×{imageDims?.h}</span>
-          : <span>drag image / click to browse</span>}
+          ? <span className="font-medium">✓ {imageName} <span className="text-gray-500 font-normal">· {imageDims?.w}×{imageDims?.h}</span></span>
+          : <span>drag an image here, or click to browse</span>}
       </div>
       <ImageTransformPreview
         imageBitmap={imageBitmap}
@@ -54,46 +58,51 @@ export const ImageSection: React.FC<Props> = ({
         onCommit={(offsetMm, scale) => setSettings((s) => ({ ...s, imageOffsetMm: offsetMm, imageScale: scale }))}
       />
       {hasImage && (
-        <div className="mt-3 grid grid-cols-3 gap-2 text-xs text-gray-400">
-          <label>x mm
-            <input
-              type="number" step={1} min={-200} max={200}
-              value={settings.imageOffsetMm.x}
-              onChange={(e) => {
-                const v = Math.max(-200, Math.min(200, +e.target.value || 0));
-                setSettings((s) => ({ ...s, imageOffsetMm: { ...s.imageOffsetMm, x: v } }));
-              }}
-              className="w-full mt-1 bg-gray-900 border border-gray-700 rounded px-2 py-1"
-            />
-          </label>
-          <label>y mm
-            <input
-              type="number" step={1} min={-200} max={200}
-              value={settings.imageOffsetMm.y}
-              onChange={(e) => {
-                const v = Math.max(-200, Math.min(200, +e.target.value || 0));
-                setSettings((s) => ({ ...s, imageOffsetMm: { ...s.imageOffsetMm, y: v } }));
-              }}
-              className="w-full mt-1 bg-gray-900 border border-gray-700 rounded px-2 py-1"
-            />
-          </label>
-          <label>scale
-            <input
-              type="number" step={0.05} min={0.2} max={3}
-              value={settings.imageScale}
-              onChange={(e) => {
-                const v = Math.max(0.2, Math.min(3, +e.target.value || 1));
-                setSettings((s) => ({ ...s, imageScale: v }));
-              }}
-              className="w-full mt-1 bg-gray-900 border border-gray-700 rounded px-2 py-1"
-            />
-          </label>
+        <div className="mt-3 space-y-2">
+          <div className="grid grid-cols-3 gap-2">
+            <label className="block text-[10px] font-medium text-gray-400 uppercase tracking-wide">
+              x · mm
+              <input
+                type="number" step={1} min={-200} max={200}
+                value={settings.imageOffsetMm.x}
+                onChange={(e) => {
+                  const v = Math.max(-200, Math.min(200, +e.target.value || 0));
+                  setSettings((s) => ({ ...s, imageOffsetMm: { ...s.imageOffsetMm, x: v } }));
+                }}
+                className="w-full mt-1 bg-gray-900 border border-gray-700 rounded-md px-2 py-1.5 text-xs font-mono text-gray-100 normal-case tracking-normal focus:outline-none focus:border-purple-500/60 focus:ring-1 focus:ring-purple-500/20"
+              />
+            </label>
+            <label className="block text-[10px] font-medium text-gray-400 uppercase tracking-wide">
+              y · mm
+              <input
+                type="number" step={1} min={-200} max={200}
+                value={settings.imageOffsetMm.y}
+                onChange={(e) => {
+                  const v = Math.max(-200, Math.min(200, +e.target.value || 0));
+                  setSettings((s) => ({ ...s, imageOffsetMm: { ...s.imageOffsetMm, y: v } }));
+                }}
+                className="w-full mt-1 bg-gray-900 border border-gray-700 rounded-md px-2 py-1.5 text-xs font-mono text-gray-100 normal-case tracking-normal focus:outline-none focus:border-purple-500/60 focus:ring-1 focus:ring-purple-500/20"
+              />
+            </label>
+            <label className="block text-[10px] font-medium text-gray-400 uppercase tracking-wide">
+              scale
+              <input
+                type="number" step={0.05} min={0.2} max={3}
+                value={settings.imageScale}
+                onChange={(e) => {
+                  const v = Math.max(0.2, Math.min(3, +e.target.value || 1));
+                  setSettings((s) => ({ ...s, imageScale: v }));
+                }}
+                className="w-full mt-1 bg-gray-900 border border-gray-700 rounded-md px-2 py-1.5 text-xs font-mono text-gray-100 normal-case tracking-normal focus:outline-none focus:border-purple-500/60 focus:ring-1 focus:ring-purple-500/20"
+              />
+            </label>
+          </div>
           <button
             type="button"
             onClick={() => setSettings((s) => ({ ...s, imageOffsetMm: { x: 0, y: 0 }, imageScale: 1.0 }))}
-            className="col-span-3 mt-1 text-[10px] text-blue-400 hover:underline text-left"
+            className="text-[10px] text-purple-300 hover:text-purple-200 hover:underline"
           >
-            Reset to fit-centered
+            ↺ Reset to fit-centered
           </button>
         </div>
       )}
