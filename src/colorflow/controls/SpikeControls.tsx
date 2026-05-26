@@ -1,4 +1,5 @@
 import React from 'react';
+import NumberStepper from '../../components/ui/NumberStepper';
 import { effectiveSpikeMaxMm } from '../spikes';
 import type { GeometrySettings } from '../../types/schemas';
 import type { ColorFlowSettings } from '../schema';
@@ -90,14 +91,15 @@ export const SpikeControls: React.FC<Props> = ({
                   {settings.spikeMaxMm === 0 ? 'auto: top color + 1.5mm' : 'mm above base'}
                 </span>
               </span>
-              <input
-                type="number" step={0.1} min={0} max={20}
+              <NumberStepper
                 value={settings.spikeMaxMm}
-                onChange={(e) => {
-                  const v = Math.max(0, Math.min(20, +e.target.value || 0));
-                  setSettings((s) => ({ ...s, spikeMaxMm: v }));
-                }}
-                className="w-full bg-gray-900 border border-gray-700 rounded-md px-2 py-1.5 text-xs font-mono text-gray-100 focus:outline-none focus:border-brand-500/60 focus:ring-1 focus:ring-brand-500/20"
+                onChange={(v) => setSettings((s) => ({ ...s, spikeMaxMm: v }))}
+                step={0.1}
+                min={0}
+                max={20}
+                unit="mm"
+                precision={1}
+                aria-label="Spike maximum height in millimetres"
               />
             </label>
             <label className="flex items-center gap-2 text-xs text-gray-300 select-none cursor-pointer">

@@ -1,4 +1,5 @@
 import React, { useRef } from 'react';
+import NumberStepper from '../../components/ui/NumberStepper';
 import { ImageTransformPreview } from '../ImageTransformPreview';
 import type { OutlinePolygon } from '../outlineToPolygon';
 import type { ColorFlowSettings } from '../schema';
@@ -68,39 +69,45 @@ export const ImageSection: React.FC<Props> = ({
           <div className="grid grid-cols-3 gap-2">
             <label className="block text-[10px] font-medium text-gray-400 uppercase tracking-wide">
               x · mm
-              <input
-                type="number" step={1} min={-200} max={200}
-                value={settings.imageOffsetMm.x}
-                onChange={(e) => {
-                  const v = Math.max(-200, Math.min(200, +e.target.value || 0));
-                  setSettings((s) => ({ ...s, imageOffsetMm: { ...s.imageOffsetMm, x: v } }));
-                }}
-                className="w-full mt-1 bg-gray-900 border border-gray-700 rounded-md px-2 py-1.5 text-xs font-mono text-gray-100 normal-case tracking-normal focus:outline-none focus:border-brand-500/60 focus:ring-1 focus:ring-brand-500/20"
-              />
+              <div className="mt-1 normal-case tracking-normal">
+                <NumberStepper
+                  value={settings.imageOffsetMm.x}
+                  onChange={(v) => setSettings((s) => ({ ...s, imageOffsetMm: { ...s.imageOffsetMm, x: v } }))}
+                  step={1}
+                  min={-200}
+                  max={200}
+                  unit="mm"
+                  aria-label="Image X offset in millimetres"
+                />
+              </div>
             </label>
             <label className="block text-[10px] font-medium text-gray-400 uppercase tracking-wide">
               y · mm
-              <input
-                type="number" step={1} min={-200} max={200}
-                value={settings.imageOffsetMm.y}
-                onChange={(e) => {
-                  const v = Math.max(-200, Math.min(200, +e.target.value || 0));
-                  setSettings((s) => ({ ...s, imageOffsetMm: { ...s.imageOffsetMm, y: v } }));
-                }}
-                className="w-full mt-1 bg-gray-900 border border-gray-700 rounded-md px-2 py-1.5 text-xs font-mono text-gray-100 normal-case tracking-normal focus:outline-none focus:border-brand-500/60 focus:ring-1 focus:ring-brand-500/20"
-              />
+              <div className="mt-1 normal-case tracking-normal">
+                <NumberStepper
+                  value={settings.imageOffsetMm.y}
+                  onChange={(v) => setSettings((s) => ({ ...s, imageOffsetMm: { ...s.imageOffsetMm, y: v } }))}
+                  step={1}
+                  min={-200}
+                  max={200}
+                  unit="mm"
+                  aria-label="Image Y offset in millimetres"
+                />
+              </div>
             </label>
             <label className="block text-[10px] font-medium text-gray-400 uppercase tracking-wide">
               scale
-              <input
-                type="number" step={0.05} min={0.2} max={3}
-                value={settings.imageScale}
-                onChange={(e) => {
-                  const v = Math.max(0.2, Math.min(3, +e.target.value || 1));
-                  setSettings((s) => ({ ...s, imageScale: v }));
-                }}
-                className="w-full mt-1 bg-gray-900 border border-gray-700 rounded-md px-2 py-1.5 text-xs font-mono text-gray-100 normal-case tracking-normal focus:outline-none focus:border-brand-500/60 focus:ring-1 focus:ring-brand-500/20"
-              />
+              <div className="mt-1 normal-case tracking-normal">
+                <NumberStepper
+                  value={settings.imageScale}
+                  onChange={(v) => setSettings((s) => ({ ...s, imageScale: v }))}
+                  step={0.05}
+                  min={0.2}
+                  max={3}
+                  precision={2}
+                  aria-label="Image scale factor"
+                />
+              </div>
             </label>
           </div>
           <button

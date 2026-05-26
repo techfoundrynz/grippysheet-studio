@@ -1,4 +1,5 @@
 import React from 'react';
+import NumberStepper from '../../components/ui/NumberStepper';
 import type { ColorFlowSettings } from '../schema';
 
 interface Props {
@@ -21,14 +22,15 @@ export const PrintControls: React.FC<Props> = ({ hasLayers, paletteSize, baseMm,
           <span>layer height</span>
           <span className="text-[10px] text-gray-500 font-normal">per colour, above the base</span>
         </span>
-        <input
-          type="number" step={0.05} min={0.05} max={2}
+        <NumberStepper
           value={settings.colorLayerMm}
-          onChange={(e) => {
-            const v = Math.max(0.05, Math.min(2, +e.target.value || 0.4));
-            setSettings((s) => ({ ...s, colorLayerMm: v }));
-          }}
-          className="w-full bg-gray-900 border border-gray-700 rounded-md px-2 py-1.5 text-xs font-mono text-gray-100 focus:outline-none focus:border-brand-500/60 focus:ring-1 focus:ring-brand-500/20"
+          onChange={(v) => setSettings((s) => ({ ...s, colorLayerMm: v }))}
+          step={0.05}
+          min={0.05}
+          max={2}
+          unit="mm"
+          precision={2}
+          aria-label="Layer height per colour in millimetres"
         />
       </label>
     </div>
