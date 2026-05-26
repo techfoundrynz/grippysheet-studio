@@ -14,8 +14,8 @@ import type { Centroid } from './colorflow/pipeline/quantize';
 import type { ExtrudedGeometry } from './colorflow/pipeline/extrude';
 import type { SpikeSource } from './colorflow/ColorFlowControls';
 import { generateSpikes } from './colorflow/spikes';
-import { emitProcessing, eventBus } from './utils/eventBus';
-import { exportProjectBundle, type ProjectAssets } from './utils/projectUtils';
+import { emitProcessing, eventBus, emitToast } from './utils/eventBus';
+import { type ProjectAssets } from './utils/projectUtils';
 
 const App = () => {
   const [baseSettings, setBaseSettings] = useState<BaseSettings>(defaultBaseSettings);
@@ -71,6 +71,26 @@ const App = () => {
     return eventBus.on('set-active-tab', (e: { tab: 'base' | 'inlay' | 'colorflow' | 'geometry' }) => {
       setActiveTab(e.tab);
     });
+  }, []);
+
+  // Canvas-drop project load. ModelViewer parses the .3mf / .zip off the
+  // main thread and emits this once the sidecar is validated. Routing it
+  // through the same handler the Open button uses keeps the two paths
+  // identical (state + assets + toast feedback).
+  React.useEffect(() => {
+    return eventBus.on('project-loaded', (e) => {
+      if (e.data.mode === 'colorflow') {
+        handleProjectImported(e.data, e.assets);
+        setActiveTab('colorflow');
+        setColorFlowGeom(null); // force a re-extrude from restored settings
+      } else {
+        handleProjectImported(e.data, e.assets);
+      }
+      emitToast({ message: 'Project loaded', detail: 'settings + assets restored', tone: 'ready' });
+    });
+    // handleProjectImported is stable (useCallback w/ []). Re-binding on
+    // every render would still be safe, but [] keeps it tight.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleReset = () => {
@@ -247,6 +267,7 @@ const App = () => {
               onOpenWelcome={() => setShowWelcome(true)}
               isCollapsed={isControlsCollapsed}
               onToggleCollapse={() => setIsControlsCollapsed(!isControlsCollapsed)}
+              onProjectAssetsChanged={(mutate) => setProjectAssets((prev) => mutate(prev))}
               exportControls={
                 <OutputPanel
                   meshRef={meshRef}
@@ -256,6 +277,18 @@ const App = () => {
                   colorFlowImageName={projectAssets.image?.name}
                   colorFlowOutlineSlug={baseSettings.outlineSlug}
                   baseColor={baseSettings.color}
+                  getSidecarPayload={() => ({
+                    project: {
+                      version: 2 as const,
+                      timestamp: Date.now(),
+                      mode: viewerMode,
+                      base: { ...baseSettings, cutoutShapes: null },
+                      inlay: { ...inlaySettings },
+                      geometry: { ...geometrySettings, patternShapes: null },
+                      imageMode: colorFlowSettings,
+                    },
+                    assets: projectAssets,
+                  })}
                 />
               }
               colorFlowSpikeDiag={spikeDiag}
@@ -271,7 +304,6 @@ const App = () => {
               onColorFlowImageAssetChanged={handleImageAssetChanged}
               initialColorFlowImageAsset={initialImageAsset}
               onProjectImported={handleProjectImported}
-              onExportProject={() => exportProjectBundle(viewerMode, baseSettings, inlaySettings, geometrySettings, colorFlowSettings, projectAssets)}
             />
           </div>
         </main>

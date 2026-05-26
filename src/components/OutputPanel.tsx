@@ -26,9 +26,14 @@ interface OutputPanelProps {
   /** Hex color for the base mesh, used as the displaycolor in the 3MF
    *  Materials block. e.g. "#333333". */
   baseColor?: string;
+  /** When provided, every exported 3MF embeds the full project (settings +
+   *  original asset bytes) under `Metadata/grippy/` so the same file is
+   *  both printable AND reloadable as an editable project. The callback
+   *  is invoked at export time so the captured snapshot is current. */
+  getSidecarPayload?: () => import('../utils/grippySidecar').GrippySidecarPayload | undefined;
 }
 
-const OutputPanel: React.FC<OutputPanelProps> = ({ meshRef, debugMode = false, className = '', colorFlowGeom, colorFlowImageName, colorFlowOutlineSlug, baseColor = '#888888' }) => {
+const OutputPanel: React.FC<OutputPanelProps> = ({ meshRef, debugMode = false, className = '', colorFlowGeom, colorFlowImageName, colorFlowOutlineSlug, baseColor = '#888888', getSidecarPayload }) => {
   const { showAlert } = useAlert();
 
   const expandInstancedMesh = (instancedMesh: THREE.InstancedMesh): THREE.Group => {
@@ -195,7 +200,11 @@ const OutputPanel: React.FC<OutputPanelProps> = ({ meshRef, debugMode = false, c
             color: spike.color,
           });
         });
-        const blob = await build3MF(parts, 'footpad_assembly');
+        // Embed the full Grippy project under Metadata/grippy/ so the same
+        // .3mf reloads as an editable project. Slicers ignore the sidecar;
+        // the user gets one file that both prints and round-trips.
+        const sidecar = getSidecarPayload?.();
+        const blob = await build3MF(parts, 'footpad_assembly', sidecar);
         const stem = (colorFlowImageName || 'design').replace(/\.[^.]+$/, '');
         const suffix = colorFlowOutlineSlug || 'outline';
         const filename = `${stem}_${suffix}.3mf`;
@@ -222,7 +231,19 @@ const OutputPanel: React.FC<OutputPanelProps> = ({ meshRef, debugMode = false, c
 
       exportGroup.updateMatrixWorld(true);
 
-      const blob = await exportTo3MF(exportGroup, {});
+      let blob = await exportTo3MF(exportGroup, {});
+      // Inject the Grippy sidecar by reopening the writer's blob, adding
+      // our Metadata/grippy/ entries, and regenerating. three-3mf-exporter
+      // doesn't expose a custom-metadata API, so post-process is the only
+      // path. Skipped when no payload is available (e.g. headless tests).
+      const sidecar = getSidecarPayload?.();
+      if (sidecar) {
+        const { default: JSZipMod } = await import('jszip');
+        const { addGrippySidecar } = await import('../utils/grippySidecar');
+        const zip = await JSZipMod.loadAsync(blob);
+        addGrippySidecar(zip, sidecar);
+        blob = await zip.generateAsync({ type: 'blob', mimeType: 'model/3mf' });
+      }
       const filename = 'grippysheet-model.3mf';
       downloadBlob(blob, filename);
       emitToast({ message: '3MF exported', detail: filename, tone: 'ready' });

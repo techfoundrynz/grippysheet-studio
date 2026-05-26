@@ -438,15 +438,31 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
     const lower = file.name.toLowerCase();
     const isDxf = lower.endsWith('.dxf');
     const isSvg = lower.endsWith('.svg');
-    // Success toasts ('Image loaded', 'Outline loaded') are now fired by
-    // the consuming subscriber once the parse + decode actually succeed.
+    const isProject = lower.endsWith('.3mf') || lower.endsWith('.zip');
+    // Success toasts ('Image loaded', 'Outline loaded', 'Project loaded')
+    // fire from the consuming subscriber once the parse actually succeeds.
     // We only emit error toasts here for truly unsupported formats.
-    if (isImage) {
+    if (isProject) {
+      // Project drops route through the same loader as the Open button —
+      // dispatched async so any UI mid-update (drag-leave, tab switch)
+      // settles before the loader runs.
+      void (async () => {
+        try {
+          const { importProjectBundle } = await import('../utils/projectUtils');
+          const { emitProjectLoaded } = await import('../utils/eventBus');
+          const { data, importedAssets } = await importProjectBundle(file);
+          emitProjectLoaded({ data, assets: importedAssets ?? {} });
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          emitToast({ message: 'Project failed to load', detail: msg.slice(0, 120), tone: 'error' });
+        }
+      })();
+    } else if (isImage) {
       emitFileDrop({ file, kind: 'image:colorflow' });
     } else if (isDxf || isSvg) {
       emitFileDrop({ file, kind: 'shape:base' });
     } else {
-      emitToast({ message: 'Unsupported file', detail: `${file.name} · expected image / DXF / SVG`, tone: 'error' });
+      emitToast({ message: 'Unsupported file', detail: `${file.name} · expected image / DXF / SVG / .3mf project`, tone: 'error' });
     }
   };
 

@@ -72,6 +72,15 @@ export interface InlayTransformEvent {
     scale?: number;
 }
 
+/** Fired when the canvas-drop project loader (or future "Open" surfaces)
+ *  has parsed a `.3mf` or legacy `.zip` and is ready to hand the payload
+ *  to App-level state. Decoupled from `file-drop` because project loads
+ *  are async + the parsing happens off the canvas surface. */
+export interface ProjectLoadedEvent {
+    data: import('../types/schemas').ProjectDataV2;
+    assets: import('./projectUtils').ProjectAssets;
+}
+
 /**
  * The central event map. Adding a new event without extending this becomes
  * a TS error at the emit-helper definition site.
@@ -83,6 +92,7 @@ export interface EventMap {
     'open-outline-library': void;
     'set-active-tab': { tab: AppTab };
     'inlay-transform': InlayTransformEvent;
+    'project-loaded': ProjectLoadedEvent;
 }
 
 // ---------------------------------------------------------------------------
@@ -154,6 +164,10 @@ export function emitSetActiveTab(tab: AppTab): void {
 
 export function emitInlayTransform(event: InlayTransformEvent): void {
     eventBus._emit('inlay-transform', event);
+}
+
+export function emitProjectLoaded(event: ProjectLoadedEvent): void {
+    eventBus._emit('project-loaded', event);
 }
 
 // ---------------------------------------------------------------------------

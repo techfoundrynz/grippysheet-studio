@@ -117,8 +117,39 @@ function bundleSizesFromZip(zip: JSZip): { total: number; worstEntry: number; en
 export const importProjectBundle = async (file: File): Promise<ImportResult> => {
     let rawData: any;
     const assets: ProjectAssets = { inlays: {} };
+    const lowerName = file.name.toLowerCase();
 
-    if (file.name.endsWith('.zip')) {
+    // `.3mf` import path. The 3MF is itself a ZIP, so we look for the
+    // `Metadata/grippy/project.json` sidecar inside. Foreign 3MFs (no
+    // sidecar) are rejected — the slicer-produced print files aren't
+    // editable projects, and silently loading their geometry into Base
+    // would surprise the user.
+    if (lowerName.endsWith('.3mf')) {
+        const zip = await JSZip.loadAsync(file);
+        const sizes = bundleSizesFromZip(zip);
+        if (sizes.entryCount > MAX_BUNDLE_ENTRIES) {
+            throw new Error(`3MF has too many entries (${sizes.entryCount} > ${MAX_BUNDLE_ENTRIES}). Refusing to import.`);
+        }
+        if (sizes.total > MAX_BUNDLE_DECOMPRESSED_BYTES) {
+            throw new Error(`3MF is too large when decompressed (${(sizes.total / 1024 / 1024).toFixed(1)} MB). Refusing to import.`);
+        }
+        if (sizes.worstEntry > MAX_BUNDLE_ENTRY_BYTES) {
+            throw new Error(`3MF contains an entry larger than ${MAX_BUNDLE_ENTRY_BYTES / 1024 / 1024} MB. Refusing to import.`);
+        }
+        const { readGrippySidecar } = await import('./grippySidecar');
+        const sidecar = await readGrippySidecar(zip);
+        if (!sidecar) {
+            throw new Error('This 3MF was not made in GrippySheet Studio — it has no editable project metadata. Drop the original .3mf you exported here, or use the Base tab to load just the geometry.');
+        }
+        return {
+            data: sidecar.project,
+            versionMismatch: false,
+            importedVersion: sidecar.project.version,
+            importedAssets: sidecar.assets,
+        };
+    }
+
+    if (lowerName.endsWith('.zip')) {
         const zip = await JSZip.loadAsync(file);
 
         // Bound the bundle before decompressing anything. Rejects zip

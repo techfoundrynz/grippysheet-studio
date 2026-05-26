@@ -1,11 +1,11 @@
 import React from 'react';
 import { Freeze } from 'react-freeze';
-import { exportProjectBundle, importProjectBundle, ProjectAssets } from '../utils/projectUtils';
+import { importProjectBundle, ProjectAssets } from '../utils/projectUtils';
 import { emitToast } from '../utils/eventBus';
 import { BaseSettings, InlaySettings, GeometrySettings, ProjectSchemaV1 } from '../types/schemas';
 import type { ProjectDataV2 } from '../types/schemas';
 import { parseShapeFile } from '../utils/shapeLoader';
-import { RotateCcw, HelpCircle, ChevronDown, Download, Upload } from 'lucide-react';
+import { RotateCcw, HelpCircle, ChevronDown, Download } from 'lucide-react';
 import { useAlert } from '../context/AlertContext';
 import SegmentedControl from './ui/SegmentedControl';
 import Button from './ui/Button';
@@ -55,7 +55,10 @@ interface ControlsProps {
   onColorFlowImageAssetChanged?: (a: { name: string; bytes: ArrayBuffer } | null) => void;
   initialColorFlowImageAsset?: { name: string; bytes: ArrayBuffer } | null;
   onProjectImported?: (data: ProjectDataV2, assets: ProjectAssets) => void;
-  onExportProject?: () => void;
+  /** Pattern-mode asset captures (DXF outline, STL pattern, inlay files)
+   *  bubble up via this callback so the App-level sidecar payload that
+   *  feeds the 3MF round-trip has everything it needs. */
+  onProjectAssetsChanged?: (mutate: (prev: ProjectAssets) => ProjectAssets) => void;
 }
 
 const Controls: React.FC<ControlsProps> = ({
@@ -87,7 +90,7 @@ const Controls: React.FC<ControlsProps> = ({
   onColorFlowImageAssetChanged,
   initialColorFlowImageAsset,
   onProjectImported,
-  onExportProject,
+  onProjectAssetsChanged,
 }) => {
   const { showAlert } = useAlert();
   // Lifted state
@@ -118,7 +121,23 @@ const Controls: React.FC<ControlsProps> = ({
       });
   };
 
+  // Local mirror kept for the legacy `.zip` import-validation flow + the
+  // `setProjectAssets(importedAssets)` reset on project import. Every
+  // mutation also bubbles to App via `onProjectAssetsChanged` so the
+  // 3MF-export sidecar payload sees the full asset picture.
   const [projectAssets, setProjectAssets] = React.useState<ProjectAssets>({ inlays: {} });
+  const updateProjectAssets = React.useCallback((mutate: (prev: ProjectAssets) => ProjectAssets) => {
+    setProjectAssets((prev) => {
+      const next = mutate(prev);
+      onProjectAssetsChanged?.(() => next);
+      return next;
+    });
+  }, [onProjectAssetsChanged]);
+  // `projectAssets` is referenced by the legacy validation logic for
+  // .zip exports, which is currently gone — keep the binding alive via
+  // this no-op read so future re-introductions don't need to thread it
+  // back through the import path.
+  void projectAssets;
 
   // Logic to handle Outline Loading at the top level
   const handleOutlineLoaded = (shapes: any[]) => {
@@ -135,80 +154,38 @@ const Controls: React.FC<ControlsProps> = ({
   };
 
   const handleOutlineAssetChanged = (asset: { name: string, content: string | ArrayBuffer, type: 'dxf' | 'svg' } | null) => {
-      setProjectAssets(prev => ({ ...prev, baseOutline: asset || undefined }));
+      updateProjectAssets((prev) => ({ ...prev, baseOutline: asset || undefined }));
   };
 
   const handlePatternAssetChanged = (asset: { name: string, content: string | ArrayBuffer, type: 'dxf' | 'svg' | 'stl' } | null) => {
-      setProjectAssets(prev => ({ ...prev, pattern: asset || undefined }));
+      updateProjectAssets((prev) => ({ ...prev, pattern: asset || undefined }));
   };
 
   const handleInlayAssetChanged = (id: string, asset: { name: string, content: string | ArrayBuffer, type: 'dxf' | 'svg' | 'stl' } | null) => {
-       setProjectAssets(prev => {
-           const newInlays = { ...(prev.inlays || {}) };
-           if (asset) {
-               newInlays[id] = asset;
-           } else {
-               delete newInlays[id];
-           }
-           return { ...prev, inlays: newInlays };
-       });
+      updateProjectAssets((prev) => {
+          const newInlays = { ...(prev.inlays || {}) };
+          if (asset) {
+              newInlays[id] = asset;
+          } else {
+              delete newInlays[id];
+          }
+          return { ...prev, inlays: newInlays };
+      });
   };
 
-  const handleExportClick = () => {
-      // Delegate to colorflow export handler when colorflow is active
-      if (colorFlowActive && onExportProject) {
-          onExportProject();
-          return;
-      }
-
-      // Validate Assets
-      const missingAssets: string[] = [];
-
-      // Check Base
-      if (baseSettings.cutoutShapes && baseSettings.cutoutShapes.length > 0 && !projectAssets.baseOutline) {
-          missingAssets.push("Base Outline");
-      }
-
-      // Check Pattern
-      if (geometrySettings.patternShapes && geometrySettings.patternShapes.length > 0 && !projectAssets.pattern) {
-          missingAssets.push("Grip Pattern");
-      }
-
-      // Check Inlays
-      if (inlaySettings.items) {
-          inlaySettings.items.forEach(item => {
-              // Only check if item has shapes and is valid
-              if (item.shapes && item.shapes.length > 0) {
-                   if (!projectAssets.inlays || !projectAssets.inlays[item.id]) {
-                       missingAssets.push(`Inlay: ${item.name || 'Unnamed'}`);
-                   }
-              }
-          });
-      }
-
-      if (missingAssets.length > 0) {
-          showAlert({
-              title: "Missing Asset Files",
-              message: `The following original asset files are not currently in memory and won't be included in the export:\n\n• ${missingAssets.join('\n• ')}\n\nPlease re-select or re-upload these files to ensure they are bundled correctly. Do you want to proceed with a partial export?`,
-              type: "warning",
-              confirmText: "Export Anyway",
-              cancelText: "Cancel",
-              onConfirm: () => {
-                  exportProjectBundle('pattern', baseSettings, inlaySettings, geometrySettings, undefined, projectAssets);
-                  emitToast({ message: 'Project saved', detail: 'partial bundle (.zip)', tone: 'ready' });
-              }
-          });
-          return;
-      }
-
-      exportProjectBundle('pattern', baseSettings, inlaySettings, geometrySettings, undefined, projectAssets);
-      emitToast({ message: 'Project saved', detail: 'bundled to .zip', tone: 'ready' });
-  };
+  // `handleExportClick` (the old .zip Save Project flow) was removed
+  // when the .3mf round-trip landed — the Export 3MF CTA below now
+  // produces a file that prints AND reloads as a project. The asset-
+  // completeness validation it performed moved into `OutputPanel`'s
+  // 3MF export so the same "missing original DXF/SVG" warning still
+  // fires before the round-trip file is written.
 
   const handleImportClick = () => {
       const input = document.createElement('input');
       input.type = 'file';
-      input.accept = '.zip';
+      // .3mf is the new project format (sidecar embedded in the print
+      // file); .zip is kept for back-compat with old saves.
+      input.accept = '.3mf,.zip';
       input.onchange = async (e) => {
           const file = (e.target as HTMLInputElement).files?.[0];
           if (!file) return;
@@ -287,7 +264,7 @@ const Controls: React.FC<ControlsProps> = ({
                            });
                        }
                        
-                       setProjectAssets(importedAssets);
+                       updateProjectAssets(() => importedAssets);
                    }
 
                    setBaseSettings(newBase);
@@ -321,10 +298,11 @@ const Controls: React.FC<ControlsProps> = ({
 
   const renderFooter = (className = "p-4 bg-gray-800 space-y-3") => (
       <div className={className}>
-            {/* Project actions row — each button has its own icon block + label
-                so they feel like proper affordances, not invisible chrome.
-                Reset takes the dangerous warm-red treatment on hover only. */}
-            <div className="grid grid-cols-3 gap-2">
+            {/* Project actions row. With 3MF round-trip wired in, the prominent
+                "Export 3MF" CTA below is BOTH the print export AND the project
+                save — one file does both. The separate "Save" button is gone
+                because it would just produce the same .3mf with no benefit. */}
+            <div className="grid grid-cols-2 gap-2">
                 {onReset && (
                     <button
                         type="button"
@@ -340,19 +318,10 @@ const Controls: React.FC<ControlsProps> = ({
                     type="button"
                     onClick={handleImportClick}
                     className="group flex flex-col items-center gap-1 px-2 py-2 rounded-lg border border-gray-700/60 bg-gray-900/40 hover:border-brand-500/50 hover:bg-brand-500/[0.04] text-gray-400 hover:text-brand-300 transition-all"
-                    title="Import a saved project bundle (.zip)"
+                    title="Open a previously exported .3mf or legacy .zip"
                 >
                     <Download size={15} strokeWidth={2.25} />
-                    <span className="text-[10px] font-medium tracking-wide uppercase">Import</span>
-                </button>
-                <button
-                    type="button"
-                    onClick={handleExportClick}
-                    className="group flex flex-col items-center gap-1 px-2 py-2 rounded-lg border border-gray-700/60 bg-gray-900/40 hover:border-brand-500/50 hover:bg-brand-500/[0.04] text-gray-400 hover:text-brand-300 transition-all"
-                    title="Save current project as a bundle (.zip)"
-                >
-                    <Upload size={15} strokeWidth={2.25} />
-                    <span className="text-[10px] font-medium tracking-wide uppercase">Save</span>
+                    <span className="text-[10px] font-medium tracking-wide uppercase">Open</span>
                 </button>
             </div>
 

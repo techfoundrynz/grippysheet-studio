@@ -1,5 +1,6 @@
 import JSZip from 'jszip';
 import type { ExtrudedGeometry } from './pipeline/extrude';
+import { addGrippySidecar, type GrippySidecarPayload } from '../utils/grippySidecar';
 
 export interface MeshPart {
   name: string;
@@ -95,7 +96,11 @@ function buildModelSettingsConfig(parts: MeshPart[]): string {
  * for filament-color hints, plus Bambu's proprietary metadata so
  * "Load filaments from project" can auto-assign extruders.
  */
-export async function build3MF(parts: MeshPart[], assemblyName: string): Promise<Blob> {
+export async function build3MF(
+  parts: MeshPart[],
+  assemblyName: string,
+  sidecar?: GrippySidecarPayload,
+): Promise<Blob> {
   if (parts.length === 0) throw new Error('build3MF: no parts');
   const contentTypes =
     '<?xml version="1.0" encoding="UTF-8"?>\n' +
@@ -116,5 +121,9 @@ export async function build3MF(parts: MeshPart[], assemblyName: string): Promise
   zip.file('_rels/.rels', rels);
   zip.file('3D/3dmodel.model', model);
   zip.file('Metadata/model_settings.config', modelSettings);
+  // Optional Grippy sidecar — embeds full project state so the same
+  // .3mf prints AND reloads as an editable project. Slicers ignore
+  // `Metadata/grippy/` paths.
+  if (sidecar) addGrippySidecar(zip, sidecar);
   return zip.generateAsync({ type: 'blob', mimeType: 'model/3mf' });
 }
