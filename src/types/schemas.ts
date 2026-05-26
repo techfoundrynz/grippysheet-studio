@@ -66,7 +66,41 @@ export const InlaySettingsSchema = z.object({
     }]),
 });
 
+/**
+ * Compound pattern layer. The Geometry tab's flat top-level fields are
+ * "layer 1"; this schema describes layers 2+ that stack on top via
+ * `extraLayers`. Names are simplified (`shapes` not `patternShapes`)
+ * since they're already namespaced inside the layer container.
+ *
+ * `removedTiles` is a sorted array of `"x.xx,y.yy"` quantised position
+ * keys — tiles whose generated origin lands on one of these is dropped
+ * by the construction loop. Enables "thin out a pattern by clicking
+ * tiles to remove them".
+ */
+export const PatternLayerSchema = z.object({
+    id: z.string(),
+    shapes: ThreeObjectsSchema.nullable().optional().default(null),
+    type: z.enum(['dxf', 'svg', 'stl']).nullable().default(null),
+    scale: z.number().default(1),
+    scaleZ: z.union([z.number(), z.string()]).default(""),
+    maxHeight: z.union([z.number(), z.string()]).optional(),
+    isTiled: z.boolean().default(true),
+    tileSpacing: z.number().default(10),
+    margin: z.number().default(3),
+    color: z.string().default(DEFAULT_PATTERN_COLOR),
+    distribution: z.enum(['grid', 'offset', 'hex', 'radial', 'random', 'wave', 'zigzag', 'warped-grid']).default('offset'),
+    direction: z.enum(['horizontal', 'vertical']).default('horizontal'),
+    orientation: z.enum(['none', 'alternate', 'random', 'aligned']).default('none'),
+    rotation: z.number().default(0),
+    rotationClamp: z.number().optional(),
+    removedTiles: z.array(z.string()).default([]),
+    /** Per-layer asset filename — referenced by the 3MF sidecar so
+     *  each extra layer's source bytes round-trip on save. */
+    assetName: z.string().optional(),
+});
+
 export const GeometrySettingsSchema = z.object({
+    // --- Layer 1 (legacy flat fields, kept for back-compat) ----------
     patternShapes: ThreeObjectsSchema.nullable().optional().default(null),
     patternType: z.enum(['dxf', 'svg', 'stl']).nullable().default(null),
     patternHeight: z.union([z.number(), z.string()]).default(""), // number or ''
@@ -76,14 +110,23 @@ export const GeometrySettingsSchema = z.object({
     isTiled: z.boolean().default(true),
     tileSpacing: z.number().default(10),
     patternMargin: z.number().default(3),
-    holeMode: z.enum(['default', 'margin', 'avoid']).default('default'),
     patternColor: z.string().default(DEFAULT_PATTERN_COLOR),
-    clipToOutline: z.boolean().default(true),
     tilingDistribution: z.enum(['grid', 'offset', 'hex', 'radial', 'random', 'wave', 'zigzag', 'warped-grid']).default('offset'),
     tilingDirection: z.enum(['horizontal', 'vertical']).default('horizontal'),
     tilingOrientation: z.enum(['none', 'alternate', 'random', 'aligned']).default('none'),
     baseRotation: z.number().default(0),
     rotationClamp: z.number().optional(),
+    /** Per-tile removal for the primary layer — same shape as
+     *  `PatternLayer.removedTiles`. Enables thinning out the radial /
+     *  grid via direct canvas clicks. */
+    removedTiles: z.array(z.string()).default([]),
+
+    // --- Additional layers (compound patterns, opt-in) ---------------
+    extraLayers: z.array(PatternLayerSchema).default([]),
+
+    // --- Global -----------------------------------------------------
+    holeMode: z.enum(['default', 'margin', 'avoid']).default('default'),
+    clipToOutline: z.boolean().default(true),
     debugMode: z.boolean().optional().default(false),
 });
 
@@ -125,3 +168,37 @@ export type ProjectData = z.infer<typeof ProjectSchema>;
 export type BaseSettings = z.infer<typeof BaseSettingsSchema>;
 export type InlaySettings = z.infer<typeof InlaySettingsSchema>;
 export type GeometrySettings = z.infer<typeof GeometrySettingsSchema>;
+export type PatternLayer = z.infer<typeof PatternLayerSchema>;
+
+/**
+ * Uniform view of every pattern layer in play, including the primary one
+ * synthesized from `GeometrySettings`'s flat fields. Construction loops
+ * iterate this rather than special-casing layer 1.
+ *
+ * Layer 0 corresponds to the primary (flat-field) layer; index 1+ map to
+ * `extraLayers`. Layers whose `shapes` are empty/null are filtered out so
+ * an "empty extra layer" placeholder in the UI doesn't add a hidden empty
+ * tile pass.
+ */
+export function getPatternLayers(g: GeometrySettings): PatternLayer[] {
+    const primary: PatternLayer = {
+        id: '__primary__',
+        shapes: g.patternShapes ?? null,
+        type: g.patternType,
+        scale: g.patternScale,
+        scaleZ: g.patternScaleZ,
+        maxHeight: g.patternMaxHeight,
+        isTiled: g.isTiled,
+        tileSpacing: g.tileSpacing,
+        margin: g.patternMargin,
+        color: g.patternColor,
+        distribution: g.tilingDistribution,
+        direction: g.tilingDirection,
+        orientation: g.tilingOrientation,
+        rotation: g.baseRotation,
+        rotationClamp: g.rotationClamp,
+        removedTiles: g.removedTiles ?? [],
+    };
+    const all = [primary, ...(g.extraLayers ?? [])];
+    return all.filter((l) => l.shapes && l.shapes.length > 0);
+}

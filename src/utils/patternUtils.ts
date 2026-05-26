@@ -7,6 +7,35 @@ export interface TileInstance {
 }
 
 /**
+ * Stable, settings-deterministic key for a tile origin. Used by the
+ * "selective tile removal" feature so a removed tile stays removed when
+ * the user tweaks unrelated settings (scale, color, etc.) — the same
+ * tile generator with the same spacing produces the same key.
+ *
+ * Quantised to 0.01 mm so floating-point jitter inside `generateTilePositions`
+ * doesn't desync the key between the generator pass and the click-to-toggle
+ * pass.
+ */
+export function tileKey(x: number, y: number): string {
+    return `${x.toFixed(2)},${y.toFixed(2)}`;
+}
+
+/**
+ * Drop any tile whose origin's `tileKey` is present in `removed`. The
+ * generator is unaware of the removal set; this filter sits between
+ * tile generation and rendering. Empty `removed` returns the input
+ * unmodified (no allocation).
+ */
+export function filterRemovedTiles<T extends { position: THREE.Vector2 }>(
+    tiles: T[],
+    removed: string[] | undefined | null,
+): T[] {
+    if (!removed || removed.length === 0) return tiles;
+    const set = new Set(removed);
+    return tiles.filter((t) => !set.has(tileKey(t.position.x, t.position.y)));
+}
+
+/**
  * Calculates the bounding box of a set of shapes.
  */
 export const getShapesBounds = (shapes: THREE.Shape[]) => {

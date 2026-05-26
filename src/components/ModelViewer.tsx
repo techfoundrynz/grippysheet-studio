@@ -3,7 +3,8 @@ import { Canvas } from '@react-three/fiber';
 import { OrbitControls, OrthographicCamera, PerspectiveCamera, Line, ContactShadows } from '@react-three/drei';
 import { InlayInteractionHandles } from './interaction/InlayInteractionHandles';
 import { InlayHoverHint } from './interaction/InlayHoverHint';
-import { Box, Layers, ScanLine, Activity, Ghost, Camera as CameraIcon, Palette, Scissors } from 'lucide-react';
+import { TileRemovalHint } from './interaction/TileRemovalHint';
+import { Box, Layers, ScanLine, Activity, Ghost, Camera as CameraIcon, Palette, Scissors, Eraser } from 'lucide-react';
 import * as THREE from 'three';
 import ScreenshotModal from './ScreenshotModal';
 import { ErrorBoundary } from './ErrorBoundary';
@@ -28,6 +29,7 @@ interface ModelViewerProps {
   baseSettings: BaseSettings;
   inlaySettings: InlaySettings;
   geometrySettings: GeometrySettings;
+  setGeometrySettings?: React.Dispatch<React.SetStateAction<GeometrySettings>>;
   meshRef: React.RefObject<THREE.Group | null>;
   onInlayChange?: (settings: InlaySettings) => void;
   selectedInlayId?: string | null;
@@ -53,6 +55,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
   baseSettings,
   inlaySettings,
   geometrySettings,
+  setGeometrySettings,
   meshRef,
   onInlayChange,
   activeTab = 'base',
@@ -72,10 +75,12 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
 
   const {
       patternShapes, patternType, patternScale, patternScaleZ,
-      isTiled, tileSpacing, patternMargin, 
+      isTiled, tileSpacing, patternMargin,
       tilingDistribution, tilingDirection, tilingOrientation,
       clipToOutline, debugMode, patternColor: geomPatternColor, rotationClamp,
-      holeMode
+      holeMode,
+      removedTiles: geomRemovedTiles,
+      extraLayers: geomExtraLayers,
   } = geometrySettings;
 
   // Default to the lightweight 2D top-down preview. Users opt into 3D when
@@ -106,6 +111,12 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
   const [showDebugMenu, setShowDebugMenu] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [canvasReady, setCanvasReady] = useState(false);
+  // Viewer-local "tile removal mode". When ON, hovering a pattern tile in
+  // either 2D or 3D paints a red hint; clicking removes that tile from the
+  // owning layer's `removedTiles` set. Mutually exclusive with normal
+  // orbit/drag — OrbitControls remains enabled (so the user can still pan),
+  // but the tile-click handler intercepts mouseups on the canvas first.
+  const [tileRemovalMode, setTileRemovalMode] = useState(false);
   // Global processing keys → label. UI shows spinner if non-empty.
   const [processingMap, setProcessingMap] = useState<Map<string, string>>(() => new Map());
 
@@ -686,6 +697,22 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
               <Activity size={20} />
           </button>
         </IconTooltip>
+        {/* Tile removal mode — pattern-mode only. The toggle is hidden in
+            ColorFlow (no pattern tiles to remove there) and when the parent
+            didn't pass setGeometrySettings (defensive — should never happen
+            in practice but keeps the prop-optional contract intact). */}
+        {mode === 'pattern' && setGeometrySettings && (
+          <IconTooltip label="Tile removal mode" shortcut="click tiles to delete">
+            <button
+                onClick={() => setTileRemovalMode((v) => !v)}
+                className={`p-2 rounded hover:bg-gray-700 transition-colors ${tileRemovalMode ? 'bg-signal-error/15 text-signal-error ring-1 ring-signal-error/40' : 'text-gray-400'}`}
+                aria-label="Toggle tile removal mode"
+                aria-pressed={tileRemovalMode}
+            >
+                <Eraser size={20} />
+            </button>
+          </IconTooltip>
+        )}
         <div className="relative" ref={opacityMenuRef}>
             <IconTooltip label="Opacity">
               <button
@@ -915,6 +942,8 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
           geometrySettings={geometrySettings}
           baseColor={color}
           spikeColorMatch={colorFlowSettings.spikeColorMatch}
+          tileRemovalMode={mode === 'pattern' && tileRemovalMode}
+          onGeometryChange={setGeometrySettings}
         />
       )}
 
@@ -1011,6 +1040,8 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
                 baseRotation={geometrySettings.baseRotation}
                 rotationClamp={rotationClamp}
                 patternMaxHeight={geometrySettings.patternMaxHeight === '' ? undefined : Number(geometrySettings.patternMaxHeight)}
+                removedTiles={geomRemovedTiles}
+                extraLayers={geomExtraLayers}
                 clipToOutline={clipToOutline}
                 holeMode={holeMode}
 
@@ -1058,6 +1089,17 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
                 selectedInlayId={selectedInlayId || null}
                 setSelectedInlayId={setSelectedInlayId}
                 isDragging={isDragging}
+            />
+        )}
+
+        {/* Tile removal hover hint + click handler. Pattern-mode only.
+            Lives inside the Canvas so it can raycast against the imperative
+            pattern meshes and overlay an outline at the hovered tile. */}
+        {mode === 'pattern' && setGeometrySettings && (
+            <TileRemovalHint
+                meshRef={meshRef}
+                enabled={tileRemovalMode}
+                onGeometryChange={setGeometrySettings}
             />
         )}
         

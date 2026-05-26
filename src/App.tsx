@@ -301,6 +301,7 @@ const App = () => {
                 inlaySettings={inlaySettings}
                 onInlayChange={setInlaySettings}
                 geometrySettings={geometrySettings}
+                setGeometrySettings={setGeometrySettings}
                 meshRef={meshRef}
                 activeTab={activeTab}
                 selectedInlayId={selectedInlayId}

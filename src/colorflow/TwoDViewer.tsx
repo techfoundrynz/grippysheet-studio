@@ -1,11 +1,11 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { type OutlinePolygon } from './outlineToPolygon';
-import { generateTilePositions } from '../utils/patternUtils';
+import { generateTilePositions, tileKey, filterRemovedTiles } from '../utils/patternUtils';
 import { pointInPolygon, assignTilesToColors, type TileAssignment } from './spikes';
 import type { Centroid } from './pipeline/quantize';
 import type { TracedLayerEntry } from './workerProtocol';
-import type { GeometrySettings, InlayItem } from '../types/schemas';
+import { getPatternLayers, type GeometrySettings, type InlayItem } from '../types/schemas';
 
 interface Props {
   outlinePolygon: OutlinePolygon | null;
@@ -20,6 +20,22 @@ interface Props {
   baseColor: string;
   /** True = tint tile dots to the color underneath; false = pattern color. */
   spikeColorMatch: boolean;
+  /** When true, hovering paints a red outline and clicking removes the tile. */
+  tileRemovalMode?: boolean;
+  /** Settings dispatcher — required when tileRemovalMode is true. */
+  onGeometryChange?: React.Dispatch<React.SetStateAction<GeometrySettings>>;
+}
+
+/**
+ * Hit-testable record persisted at the end of each tile paint so click +
+ * mousemove handlers can resolve "what tile is under the cursor?" without
+ * re-running `generateTilePositions`. Layer 0 = primary (top-level
+ * removedTiles); layer ≥ 1 maps to `extraLayers[layerIdx - 1]`.
+ */
+interface DrawnTile {
+  layerIdx: number;
+  key: string;
+  path: Path2D;
 }
 
 const PAD_PX = 40; // canvas inset
@@ -96,6 +112,7 @@ function polygonRingArea(ring: Array<[number, number]>): number {
 export const TwoDViewer: React.FC<Props> = ({
   outlinePolygon, layersInMm, palette, stackOrder, inlayItems,
   geometrySettings, baseColor, spikeColorMatch,
+  tileRemovalMode = false, onGeometryChange,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -109,6 +126,15 @@ export const TwoDViewer: React.FC<Props> = ({
   // Track pad dimensions so the HTML overlay shows the same numbers the
   // canvas-drawn lines do when toggled in.
   const [padDimsMm, setPadDimsMm] = useState<{ w: number; h: number } | null>(null);
+  // Painted-tiles registry. Populated at the end of every draw — the click
+  // handler iterates these in reverse-paint-order (last layer painted is
+  // hit-tested first) using `ctx.isPointInPath` so the top-most visible
+  // tile claims the click.
+  const drawnTilesRef = useRef<DrawnTile[]>([]);
+  // Cursor-anchored hover state for the in-canvas red outline. Stored as
+  // the index into `drawnTilesRef.current` so we don't have to clone the
+  // Path2D when the cursor moves between tiles.
+  const [hoverTileIdx, setHoverTileIdx] = useState<number | null>(null);
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -312,70 +338,115 @@ export const TwoDViewer: React.FC<Props> = ({
     //    flat dots — the user sees the actual bump shape: hex / square / dome
     //    outline. Tinted by the color region below when in ColorFlow mode +
     //    color-matched, otherwise patternColor.
-    const patternShape = geometrySettings.patternShapes?.[0];
-    const footprint = patternFootprint2D(patternShape);
-    if (footprint && footprint.length >= 3) {
-      const patternScale = geometrySettings.patternScale ?? 1;
-      let tileW = 0, tileH = 0;
+    //
+    //    Iterates `getPatternLayers(geometrySettings)` so each compound
+    //    pattern layer (primary + any extras) paints its own tile footprints
+    //    in its own color. Paint order matches z-order: layer 0 first, then
+    //    1, 2, … so later layers visually overlap earlier ones — same as the
+    //    3D viewer's mesh order.
+    //
+    //    Side-effect: every painted tile is recorded in `drawnTilesRef` so
+    //    the click + hover handlers can resolve which tile the cursor is
+    //    on without re-running `generateTilePositions`. Stored in paint
+    //    order — last-painted = top-most = hit-tested first. `layerIdx`
+    //    maps back to `getPatternLayers`'s index, which the click handler
+    //    translates to either `removedTiles` (layer 0) or
+    //    `extraLayers[layerIdx-1].removedTiles`.
+    const drawnTiles: DrawnTile[] = [];
+    const patternLayers = getPatternLayers(geometrySettings);
+    const tileBounds = new THREE.Box2(
+      new THREE.Vector2(outlinePolygon.minX, outlinePolygon.minY),
+      new THREE.Vector2(outlinePolygon.maxX, outlinePolygon.maxY),
+    );
+    const outlineForBounds = outlinePolygonToShape(outlinePolygon);
+    const outlinePoly = { outer: outlinePolygon.outer, holes: outlinePolygon.holes };
+    const colorPolygons = layersInMm.map((l) => ({ centroidIndex: l.centroidIndex, polygon: l.polygon }));
+
+    patternLayers.forEach((layer, layerIdx) => {
+      const layerShape = layer.shapes?.[0];
+      const footprint = patternFootprint2D(layerShape);
+      if (!footprint || footprint.length < 3) return;
+
+      const layerScale = layer.scale ?? 1;
       let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
       for (const [px, py] of footprint) {
         if (px < minX) minX = px; if (px > maxX) maxX = px;
         if (py < minY) minY = py; if (py > maxY) maxY = py;
       }
-      tileW = (maxX - minX) * patternScale;
-      tileH = (maxY - minY) * patternScale;
+      const tileW = (maxX - minX) * layerScale;
+      const tileH = (maxY - minY) * layerScale;
+      if (tileW <= 0.05 || tileH <= 0.05) return;
 
-      if (tileW > 0.05 && tileH > 0.05) {
-        const tileBounds = new THREE.Box2(
-          new THREE.Vector2(outlinePolygon.minX, outlinePolygon.minY),
-          new THREE.Vector2(outlinePolygon.maxX, outlinePolygon.maxY),
-        );
-        const outlineForBounds = outlinePolygonToShape(outlinePolygon);
-        const rawTiles = generateTilePositions(
-          tileBounds, tileW, tileH, geometrySettings.tileSpacing,
-          [outlineForBounds], geometrySettings.patternMargin, false,
-          geometrySettings.tilingDistribution,
-          geometrySettings.tilingOrientation,
-          geometrySettings.tilingDirection,
-        );
-        const outlinePoly = { outer: outlinePolygon.outer, holes: outlinePolygon.holes };
-        const tilesIn = rawTiles
-          .filter((t) => pointInPolygon(t.position.x, t.position.y, outlinePoly))
-          .map((t) => ({ x: t.position.x, y: t.position.y, rotation: t.rotation, scale: t.scale ?? 1 }));
-        const colorPolygons = layersInMm.map((l) => ({ centroidIndex: l.centroidIndex, polygon: l.polygon }));
-        const assignments: TileAssignment[] = assignTilesToColors(tilesIn, colorPolygons, stackOrder);
+      const rawTiles = generateTilePositions(
+        tileBounds, tileW, tileH, layer.tileSpacing,
+        [outlineForBounds], layer.margin, false,
+        layer.distribution,
+        layer.orientation,
+        layer.direction,
+      );
+      // Apply user-removed-tile filter PER LAYER before color assignment
+      // so the displayed dots match what the 3D pipeline builds for this
+      // specific layer.
+      const tilesIn = filterRemovedTiles(
+        rawTiles.filter((t) => pointInPolygon(t.position.x, t.position.y, outlinePoly)),
+        layer.removedTiles,
+      ).map((t) => ({ x: t.position.x, y: t.position.y, rotation: t.rotation, scale: t.scale ?? 1 }));
 
-        const fallbackColor = geometrySettings.patternColor;
+      const assignments: TileAssignment[] = assignTilesToColors(tilesIn, colorPolygons, stackOrder);
+      const fallbackColor = layer.color;
 
-        for (const tile of assignments) {
-          let fill = fallbackColor;
-          if (spikeColorMatch && tile.colorIndex >= 0) {
-            const c = palette[tile.colorIndex];
-            if (c) {
-              fill = `rgb(${Math.max(0, c.r - 40)}, ${Math.max(0, c.g - 40)}, ${Math.max(0, c.b - 40)})`;
-            }
+      for (const tile of assignments) {
+        let fill = fallbackColor;
+        if (spikeColorMatch && tile.colorIndex >= 0) {
+          const c = palette[tile.colorIndex];
+          if (c) {
+            fill = `rgb(${Math.max(0, c.r - 40)}, ${Math.max(0, c.g - 40)}, ${Math.max(0, c.b - 40)})`;
           }
-          const cos = Math.cos(tile.rotation);
-          const sin = Math.sin(tile.rotation);
-          const sx = tile.scale * patternScale;
-          const path = new Path2D();
-          for (let i = 0; i < footprint.length; i++) {
-            const [px, py] = footprint[i];
-            const lx = px * sx;
-            const ly = py * sx;
-            const rx = lx * cos - ly * sin + tile.x;
-            const ry = lx * sin + ly * cos + tile.y;
-            if (i === 0) path.moveTo(wx(rx), wy(ry));
-            else path.lineTo(wx(rx), wy(ry));
-          }
-          path.closePath();
-          ctx.fillStyle = fill;
-          ctx.fill(path);
-          ctx.strokeStyle = 'rgba(0, 0, 0, 0.4)';
-          ctx.lineWidth = 0.6;
-          ctx.stroke(path);
         }
+        const cos = Math.cos(tile.rotation);
+        const sin = Math.sin(tile.rotation);
+        const sx = tile.scale * layerScale;
+        const path = new Path2D();
+        for (let i = 0; i < footprint.length; i++) {
+          const [px, py] = footprint[i];
+          const lx = px * sx;
+          const ly = py * sx;
+          const rx = lx * cos - ly * sin + tile.x;
+          const ry = lx * sin + ly * cos + tile.y;
+          if (i === 0) path.moveTo(wx(rx), wy(ry));
+          else path.lineTo(wx(rx), wy(ry));
+        }
+        path.closePath();
+        ctx.fillStyle = fill;
+        ctx.fill(path);
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.4)';
+        ctx.lineWidth = 0.6;
+        ctx.stroke(path);
+
+        // Record for click + hover hit-testing. `layerIdx` tracks the
+        // index in the compound layer view so the click handler routes
+        // the removal to the right `removedTiles` array.
+        drawnTiles.push({
+          layerIdx,
+          key: tileKey(tile.x, tile.y),
+          path,
+        });
       }
+    });
+    drawnTilesRef.current = drawnTiles;
+
+    // 3b. Hover outline for tile removal mode — drawn after the tile paint
+    //     so it sits on top. signal-error red so the destructive intent
+    //     reads instantly even on the busiest pattern.
+    if (tileRemovalMode && hoverTileIdx !== null && drawnTiles[hoverTileIdx]) {
+      const t = drawnTiles[hoverTileIdx];
+      ctx.save();
+      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = '#ef4444';
+      ctx.shadowColor = 'rgba(239, 68, 68, 0.65)';
+      ctx.shadowBlur = 8;
+      ctx.stroke(t.path);
+      ctx.restore();
     }
 
     // 4. Layer-number annotations at each polygon centroid. Drawn after the
@@ -406,7 +477,7 @@ export const TwoDViewer: React.FC<Props> = ({
     if (showDims) {
       drawDimensionLines(ctx, outlinePolygon, offsetX, offsetY, renderW, renderH, scale);
     }
-  }, [outlinePolygon, layersInMm, palette, stackOrder, inlayItems, geometrySettings, baseColor, spikeColorMatch, showDims]);
+  }, [outlinePolygon, layersInMm, palette, stackOrder, inlayItems, geometrySettings, baseColor, spikeColorMatch, showDims, tileRemovalMode, hoverTileIdx]);
 
   // Repaint when any draw input changes.
   useEffect(() => {
@@ -470,12 +541,82 @@ export const TwoDViewer: React.FC<Props> = ({
     })
     .filter((x): x is { displayIdx: number; hex: string; rgb: string } => x !== null);
 
+  // Resolve which painted tile the cursor sits on. Iterates in reverse
+  // so the most-recently-drawn (top-most) tile wins ties — same convention
+  // a 3D raycaster would use. Returns -1 when no tile is under the cursor
+  // (clicks here are no-ops; the user is in tile-removal mode but pointing
+  // at empty pad / a color region / outside the canvas).
+  const findTileAt = useCallback((evtX: number, evtY: number): number => {
+    const canvas = canvasRef.current;
+    if (!canvas) return -1;
+    const tiles = drawnTilesRef.current;
+    if (tiles.length === 0) return -1;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return -1;
+    // Canvas backing-store uses a DPR transform — `isPointInPath` accepts
+    // user-space coords once we pre-divide by DPR. The transform set by
+    // `draw()` is `setTransform(dpr, 0, 0, dpr, 0, 0)`, so a user-space hit
+    // at (evtX, evtY) maps to the backing-store at (evtX*dpr, evtY*dpr).
+    // `isPointInPath(path, x, y)` uses the *current transform*, so we pass
+    // user-space coords directly — the same coords paths were built with.
+    for (let i = tiles.length - 1; i >= 0; i--) {
+      if (ctx.isPointInPath(tiles[i].path, evtX, evtY)) return i;
+    }
+    return -1;
+  }, []);
+
+  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (!tileRemovalMode) {
+      if (hoverTileIdx !== null) setHoverTileIdx(null);
+      return;
+    }
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const idx = findTileAt(x, y);
+    if (idx !== hoverTileIdx) setHoverTileIdx(idx === -1 ? null : idx);
+  }, [tileRemovalMode, hoverTileIdx, findTileAt]);
+
+  const handleClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (!tileRemovalMode || !onGeometryChange) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const idx = findTileAt(x, y);
+    if (idx === -1) return; // empty space — no-op, matches 3D behavior
+    const hit = drawnTilesRef.current[idx];
+    if (!hit) return;
+    onGeometryChange((prev) => {
+      if (hit.layerIdx === 0) {
+        const existing = prev.removedTiles ?? [];
+        if (existing.includes(hit.key)) return prev;
+        return { ...prev, removedTiles: [...existing, hit.key] };
+      }
+      const extras = prev.extraLayers ?? [];
+      const targetIdx = hit.layerIdx - 1;
+      if (targetIdx < 0 || targetIdx >= extras.length) return prev;
+      const target = extras[targetIdx];
+      const existing = target.removedTiles ?? [];
+      if (existing.includes(hit.key)) return prev;
+      const nextExtras = extras.slice();
+      nextExtras[targetIdx] = { ...target, removedTiles: [...existing, hit.key] };
+      return { ...prev, extraLayers: nextExtras };
+    });
+  }, [tileRemovalMode, onGeometryChange, findTileAt]);
+
   return (
     <div
       ref={containerRef}
       className="absolute inset-0 bg-slate-900"
+      style={tileRemovalMode ? { cursor: 'crosshair' } : undefined}
       onMouseEnter={() => setShowDims(true)}
-      onMouseLeave={() => setShowDims(false)}
+      onMouseLeave={() => { setShowDims(false); if (hoverTileIdx !== null) setHoverTileIdx(null); }}
+      onMouseMove={handleMouseMove}
+      onClick={handleClick}
     >
       <canvas ref={canvasRef} className="block" />
 
