@@ -287,6 +287,31 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
   // own click-outside / Escape handling.
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
 
+  // Hidden file inputs that back the "Upload Outline…" / "Upload Image…"
+  // context-menu items. Drag-drop is keyboard-inaccessible, so this is the
+  // keyboard-friendly path to the same emitFileDrop pipeline the canvas
+  // drag handler uses.
+  const outlineInputRef = React.useRef<HTMLInputElement>(null);
+  const imageInputRef = React.useRef<HTMLInputElement>(null);
+
+  const handleOutlineFilePick = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    // Reset before any early return so the user can pick the same file
+    // again later (browsers suppress the change event if the value matches).
+    e.target.value = '';
+    if (!file) return;
+    emitFileDrop({ file, kind: 'shape:base' });
+    emitSetActiveTab('base');
+  };
+
+  const handleImageFilePick = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    emitFileDrop({ file, kind: 'image:colorflow' });
+    emitSetActiveTab('colorflow');
+  };
+
   const handleContextMenu = (e: React.MouseEvent) => {
     // Only intercept right-clicks on the empty canvas — let native menus
     // through on inputs / contenteditables that might land here later.
@@ -331,6 +356,19 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
       });
     }
     items.push({ separator: true });
+    // Keyboard-accessible equivalents to drag-drop. Routes through the same
+    // emitFileDrop pipeline so subscribers (BaseControls / ColorFlowControls)
+    // handle parse + toast identically — no duplicate success notifications
+    // here. We do emit a `set-active-tab` so the relevant tab is open by the
+    // time the parse completes.
+    items.push({
+      label: 'Upload Outline…',
+      onClick: () => outlineInputRef.current?.click(),
+    });
+    items.push({
+      label: 'Upload Image…',
+      onClick: () => imageInputRef.current?.click(),
+    });
     items.push({
       label: 'Open Library',
       onClick: () => {
@@ -1090,6 +1128,24 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
         y={contextMenu?.y ?? 0}
         items={contextMenuItems}
         onClose={() => setContextMenu(null)}
+      />
+      {/* Hidden file inputs backing the right-click "Upload Outline…" /
+          "Upload Image…" menu items. Kept here (not inside the menu) so the
+          inputs persist across menu open/close cycles and so the `.click()`
+          call from the menu item's onClick targets a live DOM node. */}
+      <input
+        ref={outlineInputRef}
+        type="file"
+        accept=".dxf,.svg"
+        hidden
+        onChange={handleOutlineFilePick}
+      />
+      <input
+        ref={imageInputRef}
+        type="file"
+        accept="image/*"
+        hidden
+        onChange={handleImageFilePick}
       />
     </div>
   );

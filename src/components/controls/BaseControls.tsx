@@ -283,32 +283,101 @@ const BaseControls: React.FC<BaseControlsProps> = ({
              );
            })()}
          </div>
-         <div className="grid grid-cols-7 gap-1.5 p-2.5 bg-gray-900/60 rounded-lg border border-gray-800 w-full justify-items-center">
-            {Object.entries(COLORS).map(([name, value]) => {
-              const isActive = color === value;
-              return (
-                <button
-                  key={value}
-                  onClick={() => updateSettings({ color: value })}
-                  onMouseEnter={() => setHoverColorName(name)}
-                  onMouseLeave={() => setHoverColorName(null)}
-                  onFocus={() => setHoverColorName(name)}
-                  onBlur={() => setHoverColorName(null)}
-                  className={`relative w-7 h-7 rounded-md transition-all hover:scale-110 active:scale-95 ${
-                    isActive
-                      ? 'ring-2 ring-signal-ready ring-offset-2 ring-offset-gray-900 shadow-glow-ready'
-                      : 'ring-1 ring-white/10 hover:ring-2 hover:ring-white/40'
-                  }`}
-                  style={{ backgroundColor: value }}
-                  title={name}
-                >
-                  {isActive && (
-                    <span className="absolute inset-0 flex items-center justify-center text-[11px] font-bold text-white mix-blend-difference">✓</span>
-                  )}
-                </button>
-              );
-            })}
-         </div>
+         {(() => {
+           // Roving-tabindex radiogroup for the color swatches. We pre-compute
+           // the entries array so the keyboard handler can index into it
+           // identically to how the visual grid renders.
+           const entries = Object.entries(COLORS);
+           const COLS = 7;
+           const activeIndex = Math.max(0, entries.findIndex(([, v]) => v === color));
+           const focusAt = (idx: number) => {
+             // Wrap around at both ends — clamping would feel like a dead
+             // arrow key once the active swatch is at an edge.
+             const n = entries.length;
+             const wrapped = ((idx % n) + n) % n;
+             const [name, value] = entries[wrapped];
+             setHoverColorName(name);
+             updateSettings({ color: value });
+             // Defer focus to next tick so the re-render lands first and the
+             // tabIndex=0 swatch exists before we ask it to focus.
+             requestAnimationFrame(() => {
+               const el = document.querySelector<HTMLButtonElement>(
+                 `[data-color-swatch="${wrapped}"]`
+               );
+               el?.focus();
+             });
+           };
+           const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+             switch (e.key) {
+               case 'ArrowRight':
+                 e.preventDefault();
+                 focusAt(activeIndex + 1);
+                 break;
+               case 'ArrowLeft':
+                 e.preventDefault();
+                 focusAt(activeIndex - 1);
+                 break;
+               case 'ArrowDown':
+                 e.preventDefault();
+                 // +7 with wrap. When the last row isn't full (21 entries =
+                 // exactly 3 full rows here, but if the palette ever grows
+                 // past a multiple of 7, ArrowDown from the bottom row will
+                 // wrap into the top row's same column via the modulo above).
+                 focusAt(activeIndex + COLS);
+                 break;
+               case 'ArrowUp':
+                 e.preventDefault();
+                 focusAt(activeIndex - COLS);
+                 break;
+               case 'Home':
+                 e.preventDefault();
+                 focusAt(0);
+                 break;
+               case 'End':
+                 e.preventDefault();
+                 focusAt(entries.length - 1);
+                 break;
+             }
+           };
+           return (
+             <div
+               role="radiogroup"
+               aria-label="Base color"
+               onKeyDown={onKeyDown}
+               className="grid grid-cols-7 gap-1.5 p-2.5 bg-gray-900/60 rounded-lg border border-gray-800 w-full justify-items-center"
+             >
+               {entries.map(([name, value], idx) => {
+                 const isActive = color === value;
+                 return (
+                   <button
+                     key={value}
+                     type="button"
+                     role="radio"
+                     aria-checked={isActive}
+                     aria-label={name}
+                     tabIndex={isActive ? 0 : -1}
+                     data-color-swatch={idx}
+                     onClick={() => updateSettings({ color: value })}
+                     onMouseEnter={() => setHoverColorName(name)}
+                     onMouseLeave={() => setHoverColorName(null)}
+                     onFocus={() => setHoverColorName(name)}
+                     onBlur={() => setHoverColorName(null)}
+                     className={`relative w-7 h-7 rounded-md transition-all hover:scale-110 active:scale-95 ${
+                       isActive
+                         ? 'ring-2 ring-signal-ready ring-offset-2 ring-offset-gray-900 shadow-glow-ready'
+                         : 'ring-1 ring-white/10 hover:ring-2 hover:ring-white/40'
+                     }`}
+                     style={{ backgroundColor: value }}
+                   >
+                     {isActive && (
+                       <span className="absolute inset-0 flex items-center justify-center text-[11px] font-bold text-white mix-blend-difference">✓</span>
+                     )}
+                   </button>
+                 );
+               })}
+             </div>
+           );
+         })()}
          {/* Mini pad preview — silhouette tinted with the swatch the user
              is hovering. Lets them audition a colour without committing. */}
          <div className="flex items-center justify-center h-16 mt-1 bg-gray-950/40 rounded-md border border-gray-800/60">

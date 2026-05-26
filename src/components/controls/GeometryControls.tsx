@@ -12,6 +12,7 @@ import { COLORS } from "../../constants/colors";
 import ShapeUploader from "../ShapeUploader";
 import ControlField from "../ui/ControlField";
 import DebouncedInput from "../DebouncedInput";
+import NumberStepper from "../ui/NumberStepper";
 import SegmentedControl from "../ui/SegmentedControl";
 import { emitProcessing } from "../../utils/eventBus";
 import ToggleButton from "../ui/ToggleButton";
@@ -293,11 +294,10 @@ const GeometryControls: React.FC<GeometryControlsProps> = ({
                   )
                 }
               >
-                <DebouncedInput
-                  type="number"
+                <NumberStepper
                   value={patternScale}
                   onChange={(val) => {
-                    const newScale = Number(val);
+                    const newScale = val;
                     // Proportional Z Scaling
                     let updateObject: Partial<GeometrySettings> = {
                       patternScale: newScale,
@@ -310,8 +310,10 @@ const GeometryControls: React.FC<GeometryControlsProps> = ({
                     }
                     updateSettings(updateObject);
                   }}
-                  step="0.1"
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-brand-500/40 focus:border-transparent transition-all outline-none"
+                  step={0.1}
+                  precision={2}
+                  min={0.01}
+                  aria-label="Scale X/Y"
                 />
               </ControlField>
             </div>
@@ -339,14 +341,12 @@ const GeometryControls: React.FC<GeometryControlsProps> = ({
 
             <div className="space-y-2 flex-1 min-w-0">
               <ControlField label="Rotate" tooltip="Base rotation in degrees">
-                <DebouncedInput
-                  type="number"
+                <NumberStepper
                   value={baseRotation ?? 0}
-                  onChange={(val) =>
-                    updateSettings({ baseRotation: Number(val) })
-                  }
-                  step="15"
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-brand-500/40 focus:border-transparent transition-all outline-none"
+                  onChange={(val) => updateSettings({ baseRotation: val })}
+                  step={15}
+                  unit="°"
+                  aria-label="Rotate"
                 />
               </ControlField>
             </div>
@@ -381,13 +381,13 @@ const GeometryControls: React.FC<GeometryControlsProps> = ({
                 label="Spacing"
                 tooltip="Distance between tiled patterns"
               >
-                <DebouncedInput
-                  type="number"
-                  value={tileSpacing}
-                  onChange={(val) =>
-                    updateSettings({ tileSpacing: Number(val) })
-                  }
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-brand-500/40 focus:border-transparent transition-all outline-none"
+                <NumberStepper
+                  value={tileSpacing ?? 10}
+                  onChange={(val) => updateSettings({ tileSpacing: val })}
+                  step={1}
+                  min={0}
+                  unit="mm"
+                  aria-label="Spacing"
                 />
               </ControlField>
             </div>
@@ -501,15 +501,13 @@ const GeometryControls: React.FC<GeometryControlsProps> = ({
           {/* Margin */}
           <div className="pt-2 border-t border-gray-800">
             <ControlField label="Margin" tooltip="Safety margin from edge">
-              <DebouncedInput
-                type="number"
+              <NumberStepper
                 value={patternMargin}
-                onChange={(val) =>
-                  updateSettings({ patternMargin: Number(val) })
-                }
-                step="0.5"
-                min="0"
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-brand-500/40 focus:border-transparent transition-all outline-none"
+                onChange={(val) => updateSettings({ patternMargin: val })}
+                step={0.5}
+                min={0}
+                unit="mm"
+                aria-label="Margin"
               />
             </ControlField>
           </div>
