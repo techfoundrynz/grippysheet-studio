@@ -303,8 +303,16 @@ const Controls: React.FC<ControlsProps> = ({
       input.click();
   };
 
-  const renderFooter = (className = "p-4 bg-gray-800 space-y-3") => (
-      <div className={className}>
+  // Single-instance footer JSX. Previously this lived inside a
+  // `renderFooter()` helper that was called twice (once for mobile, once
+  // for desktop), which double-mounted the `exportControls` (an
+  // `OutputPanel` instance with its own bus subscriptions/effects).
+  // Now it's rendered once below the scroll wrapper — on desktop it
+  // stays pinned because the inner content scrolls and the footer
+  // doesn't; on mobile the OUTER container scrolls so the footer flows
+  // into the scroll naturally as the last child of the column.
+  const footer = (
+      <div className="p-6 border-t border-gray-700/50 space-y-4 bg-gray-800 md:z-10">
             {/* Project actions row. With 3MF round-trip wired in, the prominent
                 "Export 3MF" CTA below is BOTH the print export AND the project
                 save — one file does both. The separate "Save" button is gone
@@ -346,7 +354,7 @@ const Controls: React.FC<ControlsProps> = ({
         ref={containerRef}
         className={`bg-gray-800 md:rounded-lg md:border border-gray-700 shadow-lg flex-1 min-h-0 flex flex-col transition-all relative rounded-t-xl border-t ${isCollapsed ? 'overflow-hidden' : 'overflow-y-auto md:overflow-hidden'}`}
     >
-      <div className="md:sticky md:top-0 z-10 bg-gray-800 p-6 pb-2 border-b border-gray-700/50 mb-0">
+      <div className="md:sticky md:top-0 z-10 bg-gray-800 p-4 pb-2 md:p-6 md:pb-2 border-b border-gray-700/50 mb-0">
         <div className="flex items-center justify-between mb-1">
           <div className="flex items-center gap-3">
              {onToggleCollapse && (
@@ -378,7 +386,11 @@ const Controls: React.FC<ControlsProps> = ({
           </div>
         </div>
           
-        <div className="flex flex-col -mt-1 mb-4 gap-0.25">
+        {/* Subtitle block — hidden on mobile to save ~24px of vertical
+            chrome at 375px viewports. The author credit + build stamp
+            remain visible on md+; on mobile they're surfaced via the
+            help/welcome modal instead. */}
+        <div className="hidden md:flex flex-col -mt-1 mb-4 gap-0.25">
              <p className="text-[12px] text-gray-300 font-mono font-bold">
                Built by Siwoz
              </p>
@@ -543,10 +555,15 @@ const Controls: React.FC<ControlsProps> = ({
                 </div>
             </Freeze>
 
-            {renderFooter("md:hidden pt-6 border-t border-gray-700/50 space-y-4")}
             </div>
 
-            {renderFooter("hidden md:block p-6 border-t border-gray-700/50 space-y-4 bg-gray-800 z-10")}
+            {/* Single-instance footer. Lives outside the inner scroll
+                wrapper so the OutputPanel (stateful, bus-subscribed)
+                mounts exactly once across both responsive layouts. On
+                desktop the inner div above scrolls and this footer
+                stays pinned; on mobile the OUTER container scrolls so
+                the footer flows in as the last child of the column. */}
+            {footer}
       </div>
     </div>
   );

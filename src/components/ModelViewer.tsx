@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, OrthographicCamera, PerspectiveCamera, Line, ContactShadows } from '@react-three/drei';
 import { InlayInteractionHandles } from './interaction/InlayInteractionHandles';
+import { InlayHoverHint } from './interaction/InlayHoverHint';
 import { Box, Layers, ScanLine, Activity, Ghost, Camera as CameraIcon, Palette, Scissors } from 'lucide-react';
 import * as THREE from 'three';
 import ScreenshotModal from './ScreenshotModal';
@@ -1043,6 +1044,20 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
                 setSelectedInlayId={setSelectedInlayId}
                 setPreviewInlay={setPreviewInlay}
                 cutoutShapes={cutoutShapes}
+            />
+        )}
+
+        {/* Hover discoverability for inlays. Only mounts in pattern-mode + on
+            the Inlay tab — same gating as InlayInteractionHandles — so users
+            see the orange outline + pointer cursor where clicking actually
+            leads somewhere (a selection that then surfaces the green handles).
+            Suppresses internally when an inlay is selected or mid-drag. */}
+        {mode === 'pattern' && activeTab === 'inlay' && setSelectedInlayId && (
+            <InlayHoverHint
+                meshRef={meshRef}
+                selectedInlayId={selectedInlayId || null}
+                setSelectedInlayId={setSelectedInlayId}
+                isDragging={isDragging}
             />
         )}
         

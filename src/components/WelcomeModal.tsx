@@ -1,23 +1,30 @@
 import React, { useState } from 'react';
 import { SiGithub } from '@icons-pack/react-simple-icons';
-import { Box, X, ExternalLink, ChevronDown, HelpCircle } from 'lucide-react';
+import { Box, X, ExternalLink, ChevronDown, HelpCircle, Sparkles } from 'lucide-react';
 import Button from './ui/Button';
 
 interface WelcomeModalProps {
     onClose: () => void;
 }
 
+// Dismissal key is versioned so we can re-surface the modal once when shipping
+// a batch of user-visible features. Bumping the suffix forces returning users
+// who previously dismissed v1 to see the new "What's new" section a single
+// time. The old `welcome_modal_dismissed` key is left in place — no migration
+// toast/banner; it just stops being read.
+const DISMISSAL_KEY = 'welcome_modal_dismissed_v2';
+
 const WelcomeModal: React.FC<WelcomeModalProps> = ({ onClose }) => {
     const [dontShowAgain, setDontShowAgain] = useState(() => {
-        return !!localStorage.getItem('welcome_modal_dismissed');
+        return !!localStorage.getItem(DISMISSAL_KEY);
     });
     const [showHelp, setShowHelp] = useState(false);
 
     const handleClose = () => {
         if (dontShowAgain) {
-            localStorage.setItem('welcome_modal_dismissed', 'true');
+            localStorage.setItem(DISMISSAL_KEY, 'true');
         } else {
-            localStorage.removeItem('welcome_modal_dismissed');
+            localStorage.removeItem(DISMISSAL_KEY);
         }
         onClose();
     };
@@ -71,6 +78,34 @@ const WelcomeModal: React.FC<WelcomeModalProps> = ({ onClose }) => {
                                 Drop an image — quantize it into <span className="text-signal-ready">stacked color layers</span> for multi-filament print.
                             </p>
                         </div>
+                    </div>
+
+                    {/* "What's new" — secondary callout. No card chrome, just a
+                        subtle cyan-tinted gradient strip so it reads as
+                        telemetry/recent rather than a primary mode card. */}
+                    <div className="rounded-xl bg-gradient-to-r from-signal-info/10 via-signal-info/[0.04] to-transparent border border-signal-info/20 px-3.5 py-3">
+                        <div className="flex items-center gap-1.5 mb-2">
+                            <Sparkles size={11} className="text-signal-info" />
+                            <span className="text-[10px] font-mono text-signal-info tracking-widest font-semibold">WHAT'S NEW</span>
+                        </div>
+                        <ul className="space-y-1.5 text-[11px] text-gray-300 leading-snug">
+                            <li className="flex items-center gap-2">
+                                <span className="text-sm leading-none" aria-hidden>📥</span>
+                                <span>Drop image/DXF/3MF anywhere to load it</span>
+                            </li>
+                            <li className="flex items-center gap-2">
+                                <span className="text-sm leading-none" aria-hidden>💾</span>
+                                <span>Auto-save: refresh-safe with Resume banner</span>
+                            </li>
+                            <li className="flex items-center gap-2">
+                                <span className="text-sm leading-none" aria-hidden>♻</span>
+                                <span>3MF round-trip — print AND edit later</span>
+                            </li>
+                            <li className="flex items-center gap-2">
+                                <kbd className="font-mono text-[9px] text-gray-300 bg-gray-800 border border-gray-700 rounded px-1 py-px leading-none">⌘</kbd>
+                                <span>Shortcuts: <span className="font-mono text-gray-200">2</span>/<span className="font-mono text-gray-200">3</span> mode · <span className="font-mono text-gray-200">O</span>/<span className="font-mono text-gray-200">I</span> cam · <span className="font-mono text-gray-200">F</span> FPS</span>
+                            </li>
+                        </ul>
                     </div>
 
                     <div className="grid gap-2.5">

@@ -34,7 +34,7 @@ const App = () => {
   const [selectedInlayId, setSelectedInlayId] = useState<string | null>(null);
   const [previewInlay, setPreviewInlay] = useState<InlayItem | null>(null);
 
-  const [showWelcome, setShowWelcome] = useState(() => !localStorage.getItem('welcome_modal_dismissed'));
+  const [showWelcome, setShowWelcome] = useState(() => !localStorage.getItem('welcome_modal_dismissed_v2'));
   const [isControlsCollapsed, setIsControlsCollapsed] = useState(false);
   const [activeTab, setActiveTab] = useState<'base' | 'inlay' | 'colorflow' | 'geometry'>('base');
 
