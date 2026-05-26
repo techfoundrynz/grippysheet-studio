@@ -415,9 +415,18 @@ export const TwoDViewer: React.FC<Props> = ({
 
   // When the canvas is in empty-state mode, run a soft RAF loop so the
   // pulsing dashed border breathes. We tear it down the moment an outline
-  // shows up — no idle work while a deck is loaded.
+  // shows up — no idle work while a deck is loaded. Users with
+  // prefers-reduced-motion get a single static paint instead of the
+  // continuous pulse, since the pulsing is the entire motion.
   useEffect(() => {
     if (outlinePolygon && outlinePolygon.outer.length > 0) return;
+    const reduceMotion = typeof window !== 'undefined' && window.matchMedia
+      ? window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      : false;
+    if (reduceMotion) {
+      draw();
+      return;
+    }
     let raf = 0;
     const loop = () => {
       draw();

@@ -4,7 +4,7 @@ import { useThree, ThreeEvent, useFrame } from '@react-three/fiber';
 import { Line } from '@react-three/drei';
 import { BaseSettings, InlaySettings } from '../../types/schemas';
 import { getShapesBounds, calculateInlayOffset } from '../../utils/patternUtils';
-import { eventBus } from "../../utils/eventBus";
+import { emitInlayTransform } from "../../utils/eventBus";
 
 interface InlayInteractionHandlesProps {
     baseSettings: BaseSettings;
@@ -270,7 +270,13 @@ export const InlayInteractionHandles: React.FC<InlayInteractionHandlesProps> = (
             latestPreviewRef.current = newItem;
             
             // Emit event for live preview in ImperativeModel (High Performance)
-            eventBus.emit('INLAY_TRANSFORM', newItem);
+            emitInlayTransform({
+                id: newItem.id,
+                x: newItem.x ?? 0,
+                y: newItem.y ?? 0,
+                rotation: newItem.rotation ?? 0,
+                scale: newItem.scale,
+            });
         }
 
     }).current;

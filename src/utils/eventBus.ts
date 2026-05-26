@@ -1,28 +1,18 @@
-type Listener = (data: any) => void;
+/**
+ * Strongly-typed event bus. Adding a new event is a two-step process:
+ *   1. Extend `EventMap` below with the event name → payload type.
+ *   2. Add an `emit*` helper next to the payload's interface.
+ *
+ * Subscribers go through `eventBus.on(name, cb)` and get the payload type
+ * automatically narrowed from `EventMap` — no inline casts, no shape
+ * duplication. `emit` is private to the bus instance so all publishes must
+ * route through the typed `emit*` helpers exported below, keeping ad-hoc
+ * `eventBus.emit('whatever', { ... })` calls out of the codebase.
+ */
 
-class EventBus {
-    private listeners: { [key: string]: Listener[] } = {};
-
-    on(event: string, callback: Listener) {
-        if (!this.listeners[event]) {
-            this.listeners[event] = [];
-        }
-        this.listeners[event].push(callback);
-        return () => this.off(event, callback);
-    }
-
-    off(event: string, callback: Listener) {
-        if (!this.listeners[event]) return;
-        this.listeners[event] = this.listeners[event].filter(cb => cb !== callback);
-    }
-
-    emit(event: string, data: any) {
-        if (!this.listeners[event]) return;
-        this.listeners[event].forEach(cb => cb(data));
-    }
-}
-
-export const eventBus = new EventBus();
+// ---------------------------------------------------------------------------
+// Event payloads
+// ---------------------------------------------------------------------------
 
 /**
  * Processing-state protocol. Any heavy async/sync work in the app should emit
@@ -35,14 +25,14 @@ export interface ProcessingEvent {
     label?: string;
 }
 
-export function emitProcessing(event: ProcessingEvent) {
-    eventBus.emit('processing', event);
-}
-
 /**
  * Toast-feedback protocol. Lightweight ephemeral confirmation for actions
  * that don't open a modal but the user still benefits from "I did the thing"
  * acknowledgement — reset, project save, screenshot capture, etc.
+ *
+ * `tone` defaults to `'ready'` if the emitter omits it; the helper below
+ * resolves the default so subscribers always see a concrete tone and don't
+ * have to branch on `undefined`.
  */
 export interface ToastEvent {
     /** Headline displayed in the toast pill. */
@@ -50,11 +40,7 @@ export interface ToastEvent {
     /** Optional second line — file name, count, etc. */
     detail?: string;
     /** Visual treatment. `ready` = neon-green confirm; `info` = cyan; `error` = red. */
-    tone?: 'ready' | 'info' | 'error';
-}
-
-export function emitToast(event: ToastEvent) {
-    eventBus.emit('toast', event);
+    tone: 'ready' | 'info' | 'error';
 }
 
 /**
@@ -65,32 +51,118 @@ export function emitToast(event: ToastEvent) {
  *   `image:colorflow`  → ColorFlowControls hydrates it as the trace source
  *   `shape:base`       → BaseControls hydrates it as the deck outline
  *
- * App-level state is also responsible for switching the active tab when
- * the kind tells us which surface should now be focused.
+ * Discriminated by `kind` so consumers can `switch` and the type narrows
+ * to the right arm.
  */
-export interface FileDropEvent {
-    file: File;
-    kind: 'image:colorflow' | 'shape:base';
+export type FileDropEvent =
+    | { kind: 'image:colorflow'; file: File }
+    | { kind: 'shape:base'; file: File };
+
+/** Right-panel tab identifier — also used by `set-active-tab` payloads. */
+export type AppTab = 'base' | 'inlay' | 'colorflow' | 'geometry';
+
+/** Inlay direct-manipulation handles broadcast their drag state via the bus
+ *  so `ImperativeModel` can render a live preview without committing to
+ *  state every frame. Promoted out of the historic untyped ad-hoc emit. */
+export interface InlayTransformEvent {
+    id: string;
+    x: number;
+    y: number;
+    rotation?: number;
+    scale?: number;
 }
 
-// Tab panels are wrapped in <Freeze> so an inactive panel hasn't mounted
-// its `file-drop` subscriber yet. When the very first drop on a fresh page
-// fires, the relevant subscriber hasn't run its useEffect. We buffer the
-// latest drop here so the subscriber can replay it on mount via
-// `consumePendingFileDrop`. The buffer auto-expires so a stale drop doesn't
-// re-fire much later from an unrelated tab switch.
-let pendingFileDrop: FileDropEvent | null = null;
-let pendingFileDropTimer: number | null = null;
+/**
+ * The central event map. Adding a new event without extending this becomes
+ * a TS error at the emit-helper definition site.
+ */
+export interface EventMap {
+    'processing': ProcessingEvent;
+    'toast': ToastEvent;
+    'file-drop': FileDropEvent;
+    'open-outline-library': void;
+    'set-active-tab': { tab: AppTab };
+    'inlay-transform': InlayTransformEvent;
+}
 
-export function emitFileDrop(event: FileDropEvent) {
+// ---------------------------------------------------------------------------
+// Bus implementation
+// ---------------------------------------------------------------------------
+
+type Listener<K extends keyof EventMap> = (data: EventMap[K]) => void;
+
+class EventBus {
+    // Internal storage stays loosely-typed for the listener cast at dispatch
+    // time, but the public surface (on/emit) is parameterized by EventMap.
+    private listeners: { [K in keyof EventMap]?: Listener<K>[] } = {};
+
+    on<K extends keyof EventMap>(event: K, callback: Listener<K>): () => void {
+        const arr = (this.listeners[event] ?? []) as Listener<K>[];
+        arr.push(callback);
+        this.listeners[event] = arr as never;
+        return () => this.off(event, callback);
+    }
+
+    off<K extends keyof EventMap>(event: K, callback: Listener<K>): void {
+        const arr = this.listeners[event] as Listener<K>[] | undefined;
+        if (!arr) return;
+        this.listeners[event] = arr.filter((cb) => cb !== callback) as never;
+    }
+
+    /** @internal — module-private; do not call directly. Use the `emit*`
+     *  helpers below so every publish goes through a typed entry point. */
+    _emit<K extends keyof EventMap>(event: K, data: EventMap[K]): void {
+        const arr = this.listeners[event] as Listener<K>[] | undefined;
+        if (!arr) return;
+        // Copy before iterating in case a listener subscribes/unsubscribes.
+        [...arr].forEach((cb) => cb(data));
+    }
+}
+
+export const eventBus = new EventBus();
+
+// ---------------------------------------------------------------------------
+// Typed emitters — the only sanctioned way to publish
+// ---------------------------------------------------------------------------
+
+export function emitProcessing(event: ProcessingEvent): void {
+    eventBus._emit('processing', event);
+}
+
+/** Emit a toast. `tone` defaults to `'ready'` when omitted. */
+export function emitToast(event: { message: string; detail?: string; tone?: ToastEvent['tone'] }): void {
+    eventBus._emit('toast', { tone: 'ready', ...event });
+}
+
+export function emitFileDrop(event: FileDropEvent): void {
     pendingFileDrop = event;
     if (pendingFileDropTimer !== null) window.clearTimeout(pendingFileDropTimer);
     pendingFileDropTimer = window.setTimeout(() => {
         if (pendingFileDrop === event) pendingFileDrop = null;
         pendingFileDropTimer = null;
     }, 1500);
-    eventBus.emit('file-drop', event);
+    eventBus._emit('file-drop', event);
 }
+
+export function emitOpenOutlineLibrary(): void {
+    eventBus._emit('open-outline-library', undefined);
+}
+
+export function emitSetActiveTab(tab: AppTab): void {
+    eventBus._emit('set-active-tab', { tab });
+}
+
+export function emitInlayTransform(event: InlayTransformEvent): void {
+    eventBus._emit('inlay-transform', event);
+}
+
+// ---------------------------------------------------------------------------
+// File-drop replay buffer — see the `<Freeze>` race discussion in
+// `BaseControls.tsx` / `ColorFlowControls.tsx` drop subscribers.
+// ---------------------------------------------------------------------------
+
+let pendingFileDrop: FileDropEvent | null = null;
+let pendingFileDropTimer: number | null = null;
 
 /**
  * Subscribers call this on mount to claim any in-flight drop that fired
@@ -111,25 +183,4 @@ export function consumePendingFileDrop(expectedKind?: FileDropEvent['kind']): Fi
         pendingFileDropTimer = null;
     }
     return e;
-}
-
-/**
- * Viewer-to-controls bridge: opens the Outline Library picker on the
- * Base tab. Emitted by the viewer's right-click context menu so the
- * user can jump straight from the 3D canvas to picking a deck shape
- * without hunting for the tab. BaseControls subscribes to flip its
- * own `showLibrary` state; App subscribes to switch the active tab.
- */
-export function emitOpenOutlineLibrary() {
-    eventBus.emit('open-outline-library', {});
-}
-
-/**
- * Imperatively switch the right-panel active tab from anywhere in the
- * tree. Used by the viewer context menu's "Open Library" item so the
- * user lands on the Base tab as the library modal opens.
- */
-export type AppTab = 'base' | 'inlay' | 'colorflow' | 'geometry';
-export function emitSetActiveTab(tab: AppTab) {
-    eventBus.emit('set-active-tab', { tab });
 }

@@ -123,7 +123,7 @@ const BaseControls: React.FC<BaseControlsProps> = ({
           <div className="flex items-center justify-between gap-2 bg-signal-ready/[0.06] border border-signal-ready/30 rounded-md px-3 py-2 text-xs">
             <span className="text-signal-ready font-medium">
               ✓ {currentLibraryEntry.name}
-              <span className="text-signal-ready/70 font-mono ml-1.5 text-[10px]">
+              <span className="text-signal-ready font-mono ml-1.5 text-[10px]">
                 {currentLibraryEntry.widthMm}×{currentLibraryEntry.heightMm}mm
               </span>
             </span>

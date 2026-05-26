@@ -28,7 +28,16 @@ const ToastHost: React.FC = () => {
   if (toasts.length === 0) return null;
 
   return (
-    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] flex flex-col gap-2 items-center pointer-events-none">
+    // role=status + aria-live="polite" announces non-critical toasts to
+    // screen readers; the per-toast wrapper escalates to role=alert /
+    // assertive when the tone signals an error so users hear failures
+    // immediately even if a softer announcement is mid-flight.
+    <div
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+      className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] flex flex-col gap-2 items-center pointer-events-none"
+    >
       {toasts.map((t) => {
         const tone = t.tone ?? 'ready';
         const palette = tone === 'error'
@@ -41,9 +50,14 @@ const ToastHost: React.FC = () => {
         return (
           <div
             key={t.id}
+            // Error toasts escalate to role=alert + assertive so screen
+            // readers interrupt their current speech and announce the
+            // failure right away.
+            role={tone === 'error' ? 'alert' : undefined}
+            aria-live={tone === 'error' ? 'assertive' : undefined}
             className={`flex items-center gap-2.5 px-3.5 py-2 rounded-lg border ${palette} backdrop-blur-md shadow-xl ring-1 ring-black/30 animate-in fade-in slide-in-from-bottom-2 duration-200`}
           >
-            <span className={`inline-block w-2 h-2 rounded-full ${dot}`} style={{ boxShadow: glow }} />
+            <span aria-hidden="true" className={`inline-block w-2 h-2 rounded-full ${dot}`} style={{ boxShadow: glow }} />
             <span className="text-xs font-display font-semibold tracking-wide">{t.message}</span>
             {t.detail && <span className="text-[10px] font-mono opacity-75">{t.detail}</span>}
           </div>

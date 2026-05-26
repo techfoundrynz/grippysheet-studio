@@ -738,9 +738,9 @@ const ImperativeModel = React.forwardRef((props: ImperativeModelProps, ref: Reac
     // Subscribe to Event Bus for high-performance live preview updates
     // This allows us to move meshes during drag without React re-renders or regenerating geometry
     useEffect(() => {
-        const handleInlayTransform = (newItem: any) => {
+        const handleInlayTransform = (newItem: import('../utils/eventBus').InlayTransformEvent) => {
             if (!newItem || !newItem.id) return;
-            
+
             // Need to find inlayGroup dynamically because it's managed by another effect
             const group = localGroupRef.current;
             if (!group) return;
@@ -768,8 +768,8 @@ const ImperativeModel = React.forwardRef((props: ImperativeModelProps, ref: Reac
                         new THREE.Vector3(origScale, origScale, 1)
                     );
 
-                    const targetScale = newItem.scale;
-                    const targetRot = (newItem.rotation || 0) * (Math.PI / 180);
+                    const targetScale = newItem.scale ?? originalItem.scale;
+                    const targetRot = (newItem.rotation ?? 0) * (Math.PI / 180);
                     const targetX = newItem.x || 0;
                     const targetY = newItem.y || 0;
 
@@ -790,7 +790,7 @@ const ImperativeModel = React.forwardRef((props: ImperativeModelProps, ref: Reac
             });
         }
 
-        const cleanup = eventBus.on('INLAY_TRANSFORM', handleInlayTransform);
+        const cleanup = eventBus.on('inlay-transform', handleInlayTransform);
         return () => cleanup();
     }, [inlayItems]); // Re-subscribe if items change
 

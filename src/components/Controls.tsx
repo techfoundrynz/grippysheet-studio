@@ -431,6 +431,7 @@ const Controls: React.FC<ControlsProps> = ({
             );
             return (
               <SegmentedControl
+                aria-label="Right panel section"
                 value={activeTab}
                 onChange={(val) => setActiveTab(val as any)}
                 options={[

@@ -33,6 +33,19 @@ body {
   100% { background-position:  200%  200%; }
 }
 
+/* Respect users with prefers-reduced-motion. Kills the continuous canvas
+ * pulses, the processing shimmer, and the tween-style transitions that
+ * matter most for vestibular triggers. Keeps the UI usable — focus rings
+ * and color transitions still fire, just with no perceptible duration. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 /* Custom slider treatment. Replaces the OS-native `accent-color` (which
  * renders a flat dot) with a chunky pill thumb that glows on hover/drag.
  * Applied to every `input[type=range]` on the page — every place the brand

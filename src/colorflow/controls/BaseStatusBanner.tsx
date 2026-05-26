@@ -16,7 +16,7 @@ export const BaseStatusBanner: React.FC<Props> = ({ hasOutline, outlineEntry, on
     {hasOutline ? (
       <div className="flex items-center justify-between gap-2 text-xs bg-signal-ready/[0.06] border border-signal-ready/30 rounded-md px-3 py-2">
         <span className="text-signal-ready font-medium">
-          ✓ {outlineEntry ? <>{outlineEntry.name} <span className="text-signal-ready/70 font-normal">· {outlineEntry.widthMm}×{outlineEntry.heightMm}mm</span></> : 'custom outline loaded'}
+          ✓ {outlineEntry ? <>{outlineEntry.name} <span className="text-signal-ready font-normal">· {outlineEntry.widthMm}×{outlineEntry.heightMm}mm</span></> : 'custom outline loaded'}
         </span>
         {onSwitchToBase && (
           <button
