@@ -673,7 +673,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
             <IconTooltip label="Opacity">
               <button
                 onClick={() => setShowOpacityMenu(!showOpacityMenu)}
-                className={`flex items-center gap-2 p-2 rounded hover:bg-gray-700 transition-colors ${patternOpacity < 1 ? 'bg-indigo-500/20 text-indigo-400' : 'text-gray-400'}`}
+                className={`flex items-center gap-2 p-2 rounded hover:bg-gray-700 transition-colors ${patternOpacity < 1 ? 'bg-brand-500/15 text-brand-400' : 'text-gray-400'}`}
                 aria-label="Grip Geometry Opacity"
               >
                 <Ghost size={20} />
@@ -693,7 +693,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
                             max="100" 
                             value={baseOpacity * 100} 
                             onChange={(e) => setBaseOpacity(parseInt(e.target.value) / 100)}
-                            className="w-full accent-indigo-500 bg-gray-700 rounded-lg appearance-none h-2 cursor-pointer"
+                            className="w-full "
                         />
                     </div>
                     <div className="flex flex-col gap-2">
@@ -707,7 +707,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
                             max="100" 
                             value={inlayOpacity * 100} 
                             onChange={(e) => setInlayOpacity(parseInt(e.target.value) / 100)}
-                            className="w-full accent-indigo-500 bg-gray-700 rounded-lg appearance-none h-2 cursor-pointer"
+                            className="w-full "
                         />
                     </div>
                     <div className="flex flex-col gap-2">
@@ -721,7 +721,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
                             max="100" 
                             value={patternOpacity * 100} 
                             onChange={(e) => setPatternOpacity(parseInt(e.target.value) / 100)}
-                            className="w-full accent-indigo-500 bg-gray-700 rounded-lg appearance-none h-2 cursor-pointer"
+                            className="w-full "
                         />
                     </div>
                 </div>

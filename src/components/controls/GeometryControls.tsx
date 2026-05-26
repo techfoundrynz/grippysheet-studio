@@ -123,13 +123,9 @@ const GeometryControls: React.FC<GeometryControlsProps> = ({
       patternMargin
     );
 
-    console.log("[GeometryControls] Pattern Loaded:", {
-      type,
-      isTiled,
-      newScale,
-      shapeCount: shapes.length,
-      name
-    });
+    if (import.meta.env.DEV) {
+      console.log("[GeometryControls] Pattern Loaded:", { type, isTiled, newScale, shapeCount: shapes.length, name });
+    }
 
     updateSettings({
       patternShapes: shapes,

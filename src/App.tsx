@@ -4,7 +4,7 @@ import Controls from "./components/Controls";
 import OutputPanel from "./components/OutputPanel";
 import * as THREE from 'three';
 import { AlertProvider } from './context/AlertContext';
-import { BaseSettings, InlaySettings, GeometrySettings } from './types/schemas';
+import { BaseSettings, InlaySettings, GeometrySettings, InlayItem } from './types/schemas';
 import type { ProjectDataV2 } from './types/schemas';
 import { defaultBaseSettings, defaultInlaySettings, defaultGeometrySettings } from './utils/schemaDefaults';
 import WelcomeModal from "./components/WelcomeModal";
@@ -30,7 +30,7 @@ const App = () => {
   const [projectAssets, setProjectAssets] = useState<ProjectAssets>({ inlays: {} });
 
   const [selectedInlayId, setSelectedInlayId] = useState<string | null>(null);
-  const [previewInlay, setPreviewInlay] = useState<any>(null);
+  const [previewInlay, setPreviewInlay] = useState<InlayItem | null>(null);
 
   const [showWelcome, setShowWelcome] = useState(() => !localStorage.getItem('welcome_modal_dismissed'));
   const [isControlsCollapsed, setIsControlsCollapsed] = useState(false);

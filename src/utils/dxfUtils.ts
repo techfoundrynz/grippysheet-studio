@@ -53,12 +53,12 @@ const MAX_DXF_ENTITIES = 20_000;
 const MAX_DXF_SPLINE_KNOTS = 1_000;
 
 export const parseDxfToShapes = (dxfString: string): THREE.Shape[] => {
-    console.log('Starting DXF parse...');
+    if (import.meta.env.DEV) console.log('Starting DXF parse...');
     const parser = new DxfParser();
     let dxf;
     try {
         dxf = parser.parseSync(dxfString);
-        console.log('DXF parsed successfully');
+        if (import.meta.env.DEV) console.log('DXF parsed successfully');
     } catch (err) {
         console.error('Error parsing DXF:', err);
         return [];
@@ -215,7 +215,7 @@ export const parseDxfToShapes = (dxfString: string): THREE.Shape[] => {
         }
     });
 
-    console.log(`Extracted ${segments.length} segments.`);
+    if (import.meta.env.DEV) console.log(`Extracted ${segments.length} segments.`);
     if (segments.length === 0) return [];
 
     const bMin = new THREE.Vector2(Infinity, Infinity);
@@ -263,7 +263,7 @@ export const parseDxfToShapes = (dxfString: string): THREE.Shape[] => {
         }
         if (!isBridge && !usedIndices.has(i)) activeSegments.push(s);
     }
-    console.log(`Bridges Removed: ${unique.length - activeSegments.length} segments.`);
+    if (import.meta.env.DEV) console.log(`Bridges Removed: ${unique.length - activeSegments.length} segments.`);
 
     // 3. Multi-Pass Stitching with Double-Ended Traversal
     const stitchChains = (poolIndices: number[], epsilon: number) => {
@@ -375,15 +375,15 @@ export const parseDxfToShapes = (dxfString: string): THREE.Shape[] => {
         return { closed: closedChains, open: openChains };
     };
 
-    console.log(`Starting Stitch (Segments: ${activeSegments.length})`);
+    if (import.meta.env.DEV) console.log(`Starting Stitch (Segments: ${activeSegments.length})`);
     const p1 = stitchChains(activeSegments.map((_, i) => i), 0.1);
-    console.log(`Pass 1: ${p1.closed.length} Closed, ${p1.open.length} Open`);
+    if (import.meta.env.DEV) console.log(`Pass 1: ${p1.closed.length} Closed, ${p1.open.length} Open`);
 
     let finalClosed = p1.closed;
     let finalOpen = p1.open;
     if (p1.open.length > 0) {
         const p2 = stitchChains(p1.open.flatMap(c => c.indices), 1.0);
-        console.log(`Pass 2: ${p2.closed.length} Closed, ${p2.open.length} Open`);
+        if (import.meta.env.DEV) console.log(`Pass 2: ${p2.closed.length} Closed, ${p2.open.length} Open`);
         finalClosed = [...finalClosed, ...p2.closed];
         finalOpen = p2.open;
     }
@@ -405,7 +405,7 @@ export const parseDxfToShapes = (dxfString: string): THREE.Shape[] => {
     finalClosed.forEach(c => build(c, true));
     finalOpen.forEach(c => build(c, true));
 
-    console.log(`Generated ${shapes.length} Shapes.`);
+    if (import.meta.env.DEV) console.log(`Generated ${shapes.length} Shapes.`);
 
     const shapeInfos = shapes.map((shape, index) => {
         const points = shape.getPoints();
