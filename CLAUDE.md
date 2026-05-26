@@ -57,6 +57,12 @@ Tabbed (Base / Inlay / ColorFlow / Geometry) with `react-freeze` pausing inactiv
 
 `ModelViewer` also owns a **`renderMode: '2d' | '3d'`** toggle in the top toolbar; **2D is the default** for performance on modest devices. When in 2D, the Three.js Canvas is hidden inside a `display:none` wrapper (kept mounted so 3D state survives mode swaps) and `TwoDViewer` paints a top-down summary (outline silhouette, color regions or inlays, pattern-tile footprints, dimension lines, layer-order legend). Many of the 3D-only toolbar buttons (ortho/iso, opacity, display mode, debug) are disabled while in 2D.
 
+The whole viewer area is also a **drop target** (`ModelViewer.tsx` ~L280+): images route to ColorFlow via `emitFileDrop({ kind: 'image:colorflow', file })`, DXF/SVG/STL files route to Base via `emitFileDrop({ kind: 'shape:base', file })`, and `.3mf` / `.zip` drops go through `importProjectBundle` and emit `project-loaded`. A nested enter/leave counter avoids overlay flicker over child elements.
+
+**Right-click anywhere on the viewer** opens a `ContextMenu` (toggle 2D↔3D, Reset View, Save Screenshot, Open Outline Library, Upload Outline…, Upload Image…). The "Upload" items wire to hidden `<input type="file">` refs and reuse the same `emitFileDrop` pipeline as the canvas drag handler, so the keyboard path and the drag path stay equivalent.
+
+**Keyboard shortcuts** (suppressed while a text input / contenteditable is focused or any modifier is held): `2` / `3` swap render mode, `O` orthographic, `I` isometric (both 3D-only), `F` toggles the FPS counter. `Ctrl+Shift+D` (separate handler) toggles `geometrySettings.debugMode`.
+
 The Canvas wraps in `<ErrorBoundary>` so a crash in geometry construction (CSG, earcut, ImperativeModel) doesn't take the whole studio down.
 
 `ImperativeModel.tsx` (~1500 lines) is the **3D model factory**. It's intentionally imperative — instead of rendering JSX children, each `useEffect` reacts to a slice of props and mutates the shared `THREE.Group` (`meshRef`) directly. Building the model involves:
@@ -74,6 +80,20 @@ CSG uses **three-bvh-csg** (`SUBTRACTION`, `INTERSECTION`). 2D polygon offsettin
 
 **ColorFlow path**: when `colorFlowGeom` is non-null, the 3MF export uses the explicit assembly in `src/colorflow/threeMfWriter.ts`. Parts emitted: `base` + one per color **level** + one per spike group. The naming convention is `color_<pos+1>_<hex>` / `spikes_c<centroidIndex>` so the Bambu slicer's "Load filaments from project" picks them up in stack order.
 
+#### 3MF round-trip (`src/utils/grippySidecar.ts`, `src/colorflow/threeMfWriter.ts`, `src/utils/projectUtils.ts`)
+
+Every exported `.3mf` carries the editable project alongside the printable geometry. `addGrippySidecar` writes the full `ProjectDataV2` (runtime shapes stripped to `null`) + the original uploaded asset bytes under a private `Metadata/grippy/` namespace:
+
+```
+Metadata/grippy/project.json
+Metadata/grippy/assets/{base,pattern,image}/<filename>
+Metadata/grippy/assets/inlays/<id>/<filename>
+```
+
+Bambu/Orca/Cura ignore unknown `Metadata/` paths, so the same file slices cleanly AND re-opens in the studio. `importProjectBundle` in `projectUtils.ts` accepts both `.3mf` and legacy `.zip` — `.3mf` is unzipped via JSZip and `readGrippySidecar` looks for `Metadata/grippy/project.json`. Foreign 3MFs (slicer output, third-party files) have no sidecar and are **rejected with a clear toast** rather than silently importing geometry.
+
+The sidecar reader runs the v1→v2 migrator on legacy bundles and validates path-safe inlay ids (`/^[A-Za-z0-9_-]{1,64}$/`) before keying them into `assets.inlays`.
+
 ### Asset I/O
 
 - `src/utils/shapeLoader.ts` — entry point: parses DXF/SVG/STL `ArrayBuffer`/string into shapes, with content sniffing to fix wrong file extensions and optional color extraction for SVGs.
@@ -87,11 +107,29 @@ CSG uses **three-bvh-csg** (`SUBTRACTION`, `INTERSECTION`). 2D polygon offsettin
 
 `src/components/interaction/InlayInteractionHandles.tsx` lets the user drag/scale/rotate inlays directly inside the 3D scene. While dragging it disables `OrbitControls` (via `orbitRef.current.enabled`) and broadcasts a `previewInlay` to `ImperativeModel` so the inlay can be shown without committing to state every frame.
 
-`src/utils/eventBus.ts` is a tiny pub/sub used to decouple cross-component events from prop drilling.
+`src/components/interaction/InlayHoverHint.tsx` is the in-scene affordance that makes inlays look interactive **before** the user clicks. It raycasts each frame against the `InlayGroup` descendants, parses the hovered mesh's `Inlay_<id>_<tileIdx>_<shapeIdx>` name back to an id, overlays an orange `EdgesGeometry` outline (30° silhouette threshold, brand-500), and sets `cursor: pointer` on the Canvas DOM element. It also installs a `click` listener on the canvas — this is the first click-to-select path in 3D; previously selection only worked from the right panel. Suppressed when an inlay is already selected (handles take over), mid-drag, or in 2D mode.
+
+### Typed event bus (`src/utils/eventBus.ts`)
+
+A strongly-typed pub/sub that decouples cross-component signals from prop drilling. The central `EventMap` interface parameterises `on/emit`, so subscribers get the payload narrowed automatically and a new event without a map entry is a TS error at the publish site.
+
+Internal dispatch (`_emit`) is module-private and JSDoc-marked `@internal`; all publishes go through typed helpers (`emitProcessing`, `emitToast`, `emitFileDrop`, `emitOpenOutlineLibrary`, `emitSetActiveTab`, `emitInlayTransform`, `emitProjectLoaded`). This keeps ad-hoc `eventBus.emit('whatever', …)` calls out of the codebase.
+
+Events currently on the bus:
+
+- `processing` — `{ key, busy, label? }`. Spinner-overlay protocol (see below).
+- `toast` — `{ message, detail?, tone: 'ready' | 'info' | 'error' }`. Rendered by `ToastHost`; `emitToast` defaults `tone` to `'ready'`.
+- `file-drop` — discriminated `{ kind: 'image:colorflow' | 'shape:base'; file }`. Canvas-to-control bridge.
+- `open-outline-library` — `void`. Asks `BaseControls` to open the library picker (e.g. from the viewer's right-click menu).
+- `set-active-tab` — `{ tab: 'base' | 'inlay' | 'colorflow' | 'geometry' }`. Programmatic right-panel navigation.
+- `inlay-transform` — `{ id, x, y, rotation?, scale? }`. Live drag preview from `InlayInteractionHandles` to `ImperativeModel`.
+- `project-loaded` — `{ data: ProjectDataV2, assets }`. Fired after a canvas-dropped `.3mf` / `.zip` parses successfully.
+
+**File-drop replay buffer.** `emitFileDrop` also writes the event to a module-local `pendingFileDrop` slot with a 1.5s TTL. Tab panels gated by `<Freeze>` aren't mounted when the drop fires, so they miss the live event; on mount they call `consumePendingFileDrop(expectedKind)` to claim any in-flight drop matching their kind. The buffer is single-consume so two subscribers can't both grab the same file.
 
 ### Processing overlay protocol
 
-Any source of non-trivial async/sync work broadcasts via:
+Heavy async/sync work broadcasts on the `processing` channel of the bus:
 
 ```ts
 emitProcessing({ key: 'colorflow:worker', busy: true, label: 'tracing' });
@@ -110,11 +148,23 @@ emitProcessing({ key: 'colorflow:worker', busy: false });
 - **Coordinate convention**: scene is Z-up. Cameras have `up={[0,0,1]}`; `gridHelper` is rotated `[π/2, 0, 0]` to lie on XY. 2D shapes (DXF/SVG) live in XY; thickness extrudes along +Z.
 - **`cutoutShapes` is the base outline, not a hole list.** When `null`, `ImperativeModel` falls back to a centered `size × size` square so inlays/patterns still render. "Holes" (in the `THREE.Shape.holes` sense) on the cutout shape become subtracted regions.
 - **Imported projects may lose live shapes.** If a user exports without the original asset in memory, `projectUtils` warns about "Missing Asset Files"; on import, the settings load but `*Shapes` remain null until they re-upload. Don't add code paths that assume shapes are always present alongside their settings.
+- **Auto-save (`src/utils/autoSave.ts` + `src/components/ResumeBanner.tsx`).** `saveAutoSnapshot({ project })` debounces 500ms and writes a stripped `ProjectDataV2` (runtime shapes nulled) to `localStorage['grippy_autosave_v1']`. **Asset bytes are intentionally not persisted** (quota), so a restore loads settings only and prompts re-upload — same contract as the 3MF sidecar writer. On mount, `loadAutoSnapshot` reads + Zod-validates the snapshot; if it survives, App seeds state from it and renders `ResumeBanner` when the user still has default mount-state. **Auto-save is suppressed while the banner is visible** so the default values that App boots with can't clobber the snapshot before the user decides. Schema/JSON corruption clears the snapshot; quota/IO errors warn-and-skip without crashing.
+- **Brand tokens (`tailwind.config.js`).** Custom palette: `brand-50…900` (Onewheel orange, primary identity, `brand-500` = `#ff6b1a`), `accent-500/600` (neon pink `#ff2dd1`, secondary punch), `signal-{ready, ready-dim, pending, error, info}` (VESC neon-green telemetry channels). Font stacks: `font-display` = Space Grotesk, `font-mono` = JetBrains Mono, `font-sans` = Inter. Custom shadows: `shadow-glow-brand` (orange halo) and `shadow-glow-ready` (green halo) for active/ready states. Prefer these over inline hex — the palette is intentional brand identity.
 - **Build timestamp** is injected via Vite `define` as `__BUILD_TIMESTAMP__`; it's referenced in `Controls.tsx` (`import.meta.env.DEV ? 'DEV' : __BUILD_TIMESTAMP__`). Declared in `src/vite-env.d.ts`.
 - **Deployment**: `pnpm deploy:gh` publishes whatever is in `dist/`. Custom domain is set via `public/CNAME` (also: `homepage` in `package.json` for the gh-pages base URL). If you change the domain, update both.
 - **Strict TS settings**: `noUnusedLocals` and `noUnusedParameters` are on. Prefix intentionally-unused params with `_` rather than disabling. `tsc --noEmit -p tsconfig.app.json` is the way to surface errors in `src/`; the root `tsconfig.json` has `files: []` and won't check anything.
 - **Context value stability**: contexts (e.g. `AlertContext`) MUST `useCallback` their handlers and `useMemo` the value object — a fresh function/object on every provider render cascades into effect-dep churn in consumers and has caused infinite render loops in the past.
 - **`colorFlowGeom?.source` is keyed by content for change detection**, not by reference. App-level `useEffect`s that respond to "source changed" should depend on a stringified shape (palette length + stackOrder + baseMm + colorLayerMm), not on `colorFlowGeom.source` directly — the extrude pipeline produces a fresh source object every run with the same content.
+
+### UI primitives (`src/components/ui/`)
+
+Small, focused, app-wide controls. Prefer these over hand-rolled `<input>` / menu / tooltip shells — they handle the a11y + edge cases consistently.
+
+- **`NumberStepper.tsx`** — instrument-dial numeric input with `−` / `+` buttons, arrow-key nudging (Shift = `bigStep`, defaults to `step × 10`), scroll-wheel, and accelerating long-press repeat. Controlled (`value` / `onChange`); **commits only on blur or Enter** so typing `-12.5` doesn't blast intermediate `-` / `-1` values through the parent. Optional `unit` suffix (mm/deg/%) renders muted; `precision` inferred from `step` if omitted.
+- **`IconTooltip.tsx`** — `<IconTooltip label="…" shortcut="O">{child}</IconTooltip>`. Portals to `<body>` so it escapes `overflow:hidden` toolbar parents; ~300ms hover delay; clones the child with `aria-describedby` wired to a `useId`-stable tooltip id, and projects the shortcut into the accessible name (`"label, shortcut O"`) for SR users while sighted users see a `<kbd>` chip.
+- **`ToastHost.tsx`** — single global subscriber to the bus `toast` event. Bottom-center stack, **caps at 4 visible toasts**, **dedupes identical content within 600ms** by refreshing the existing toast's expiry, 2.4s lifetime. Three tones (`ready` neon-green / `info` cyan / `error` red); uses `aria-live="polite"` for ready/info and escalates to `role="alert"` + `assertive` for `error`. Mount once near the app root.
+- **`ContextMenu.tsx`** — generic right-click menu used by the viewer (and reusable elsewhere). Portals to `<body>`, clamps to the viewport, full keyboard nav (arrows / Home / End / Enter / Escape), and **restores focus to the previously-focused element on close** so a11y isn't broken. Items support `label`, optional `shortcut` kbd chip, `onClick`, `separator`, `disabled`; falsy entries in the items array are filtered.
+- **`SegmentedControl.tsx`** — generic mutually-exclusive pill group. The `semantics` prop picks the ARIA pattern: `'radio'` (default — `role="radiogroup"` + `aria-checked`, used by the 2D/3D pill, Place/Tile, Layout Mode) or `'tab'` (`role="tablist"` + `aria-selected`, roving tabindex, ArrowLeft/Right wrap, wires `id="tab-<value>"` / `aria-controls="tabpanel-<value>"`). Single-action activation in both modes — panels are pre-mounted via `react-freeze`, so no perf reason to defer.
 
 ### ColorFlow mode (`src/colorflow/`)
 

@@ -1,7 +1,7 @@
 import React, { useState, useRef, useCallback, useMemo } from "react";
 import ModelViewer from "./components/ModelViewer";
 import Controls from "./components/Controls";
-import OutputPanel from "./components/OutputPanel";
+const OutputPanel = React.lazy(() => import("./components/OutputPanel"));
 import * as THREE from 'three';
 import { AlertProvider } from './context/AlertContext';
 import { BaseSettings, InlaySettings, GeometrySettings, InlayItem } from './types/schemas';
@@ -339,27 +339,34 @@ const App = () => {
               onToggleCollapse={() => setIsControlsCollapsed(!isControlsCollapsed)}
               onProjectAssetsChanged={(mutate) => setProjectAssets((prev) => mutate(prev))}
               exportControls={
-                <OutputPanel
-                  meshRef={meshRef}
-                  debugMode={geometrySettings.debugMode ?? false}
-                  className="bg-transparent border-0 shadow-none p-0 !p-0"
-                  colorFlowGeom={colorFlowGeomWithSpikes}
-                  colorFlowImageName={projectAssets.image?.name}
-                  colorFlowOutlineSlug={baseSettings.outlineSlug}
-                  baseColor={baseSettings.color}
-                  getSidecarPayload={() => ({
-                    project: {
-                      version: 2 as const,
-                      timestamp: Date.now(),
-                      mode: viewerMode,
-                      base: { ...baseSettings, cutoutShapes: null },
-                      inlay: { ...inlaySettings },
-                      geometry: { ...geometrySettings, patternShapes: null },
-                      imageMode: colorFlowSettings,
-                    },
-                    assets: projectAssets,
-                  })}
-                />
+                <React.Suspense fallback={
+                  <div className="space-y-2 animate-pulse">
+                    <div className="h-9 rounded-lg bg-gray-900 border border-gray-800" />
+                    <div className="h-11 rounded-lg bg-gradient-to-br from-brand-500/30 to-accent-500/30" />
+                  </div>
+                }>
+                  <OutputPanel
+                    meshRef={meshRef}
+                    debugMode={geometrySettings.debugMode ?? false}
+                    className="bg-transparent border-0 shadow-none p-0 !p-0"
+                    colorFlowGeom={colorFlowGeomWithSpikes}
+                    colorFlowImageName={projectAssets.image?.name}
+                    colorFlowOutlineSlug={baseSettings.outlineSlug}
+                    baseColor={baseSettings.color}
+                    getSidecarPayload={() => ({
+                      project: {
+                        version: 2 as const,
+                        timestamp: Date.now(),
+                        mode: viewerMode,
+                        base: { ...baseSettings, cutoutShapes: null },
+                        inlay: { ...inlaySettings },
+                        geometry: { ...geometrySettings, patternShapes: null },
+                        imageMode: colorFlowSettings,
+                      },
+                      assets: projectAssets,
+                    })}
+                  />
+                </React.Suspense>
               }
               colorFlowSpikeDiag={spikeDiag}
               colorFlowCanGenerateSpikes={canGenerateSpikes}

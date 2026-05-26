@@ -19,7 +19,7 @@ import NumberStepper from "../ui/NumberStepper";
 import SegmentedControl from "../ui/SegmentedControl";
 import ToggleButton from "../ui/ToggleButton";
 import PatternLibraryModal from "../PatternLibraryModal";
-import SVGPaintModal from "../SVGPaintModal";
+const SVGPaintModal = React.lazy(() => import("../SVGPaintModal"));
 import { useAlert } from "../../context/AlertContext";
 import { centerShapes, calculateInlayScale, calculateInlayOffset } from "../../utils/patternUtils";
 import { parseShapeFile } from "../../utils/shapeLoader";
@@ -352,22 +352,24 @@ const InlayControls: React.FC<InlayControlsProps> = ({
         }}
       />
 
-      <SVGPaintModal
-        isOpen={showPaintModal}
-        onClose={() => setShowPaintModal(false)}
-        shapes={selectedItem?.shapes || []}
-        baseColor={baseColor}
-        onSave={(newShapes) => {
-          // newShapes is array of objects { shape, color }
-          const rawShapes = newShapes.map((s: any) => s.shape || s);
-          const centered = centerShapes(rawShapes, false);
-          const finalShapes = newShapes.map((s: any, i: number) => ({
-            ...s,
-            shape: centered[i],
-          }));
-          handleShapeUpload(finalShapes, selectedItem?.name ?? "Painted Inlay");
-        }}
-      />
+      <React.Suspense fallback={null}>
+        <SVGPaintModal
+          isOpen={showPaintModal}
+          onClose={() => setShowPaintModal(false)}
+          shapes={selectedItem?.shapes || []}
+          baseColor={baseColor}
+          onSave={(newShapes) => {
+            // newShapes is array of objects { shape, color }
+            const rawShapes = newShapes.map((s: any) => s.shape || s);
+            const centered = centerShapes(rawShapes, false);
+            const finalShapes = newShapes.map((s: any, i: number) => ({
+              ...s,
+              shape: centered[i],
+            }));
+            handleShapeUpload(finalShapes, selectedItem?.name ?? "Painted Inlay");
+          }}
+        />
+      </React.Suspense>
 
       {selectedItem && (
         <>
