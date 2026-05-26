@@ -146,14 +146,17 @@ const OutputPanel: React.FC<OutputPanelProps> = ({ meshRef, debugMode = false, c
     const link = document.createElement('a');
     link.style.display = 'none';
     document.body.appendChild(link);
-    
+
     const url = URL.createObjectURL(blob);
     link.href = url;
     link.download = filename;
     link.click();
 
     document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    // Delay-revoke matches `downloadBlob` below — synchronous revoke can
+    // abort the download read on slower devices before the browser's
+    // file-save flow has had a chance to claim the blob.
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
     emitToast({ message: 'STL exported', detail: filename, tone: 'ready' });
   };
 

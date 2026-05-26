@@ -89,12 +89,51 @@ export interface ImportResult {
     importedAssets?: ProjectAssets;
 }
 
+// Zip-bomb defence: bound a single bundle's footprint so a tiny .zip
+// can't expand into gigabytes of decompressed content and freeze the tab
+// (or get the worker OOM-killed on mobile). Numbers are generous for a
+// legit project (~50 colors × few-MB inlays) but reject pathological input.
+const MAX_BUNDLE_ENTRIES = 256;
+const MAX_BUNDLE_DECOMPRESSED_BYTES = 200 * 1024 * 1024; // 200 MB
+const MAX_BUNDLE_ENTRY_BYTES = 50 * 1024 * 1024;        // 50 MB per file
+
+// JSZip stores per-entry compressed/decompressed sizes in `_data` on the
+// internal `JSZipObject`. Public typings hide it, hence the structural cast.
+type SizedJSZipObject = JSZip.JSZipObject & { _data?: { uncompressedSize?: number } };
+function bundleSizesFromZip(zip: JSZip): { total: number; worstEntry: number; entryCount: number } {
+    let total = 0;
+    let worstEntry = 0;
+    let entryCount = 0;
+    Object.values(zip.files).forEach((entry) => {
+        if (entry.dir) return;
+        entryCount += 1;
+        const size = (entry as SizedJSZipObject)._data?.uncompressedSize ?? 0;
+        if (size > worstEntry) worstEntry = size;
+        total += size;
+    });
+    return { total, worstEntry, entryCount };
+}
+
 export const importProjectBundle = async (file: File): Promise<ImportResult> => {
     let rawData: any;
     const assets: ProjectAssets = { inlays: {} };
 
     if (file.name.endsWith('.zip')) {
         const zip = await JSZip.loadAsync(file);
+
+        // Bound the bundle before decompressing anything. Rejects zip
+        // bombs (tiny compressed → enormous decompressed) before they can
+        // allocate.
+        const sizes = bundleSizesFromZip(zip);
+        if (sizes.entryCount > MAX_BUNDLE_ENTRIES) {
+            throw new Error(`Bundle has too many entries (${sizes.entryCount} > ${MAX_BUNDLE_ENTRIES}). Suspected zip bomb — refusing to import.`);
+        }
+        if (sizes.total > MAX_BUNDLE_DECOMPRESSED_BYTES) {
+            throw new Error(`Bundle is too large when decompressed (${(sizes.total / 1024 / 1024).toFixed(1)} MB > ${MAX_BUNDLE_DECOMPRESSED_BYTES / 1024 / 1024} MB). Suspected zip bomb — refusing to import.`);
+        }
+        if (sizes.worstEntry > MAX_BUNDLE_ENTRY_BYTES) {
+            throw new Error(`Bundle contains an entry larger than ${MAX_BUNDLE_ENTRY_BYTES / 1024 / 1024} MB. Refusing to import.`);
+        }
 
         // Read project.json
         const projectFile = zip.file("project.json");
@@ -143,13 +182,21 @@ export const importProjectBundle = async (file: File): Promise<ImportResult> => 
             }
         }
 
-        // Inlays
+        // Inlays. `id` is keyed into a plain object, so we have to reject
+        // path-traversal-y segments before they pollute `assets.inlays`
+        // with attacker-chosen keys ('..', '__proto__', etc.). The id
+        // pattern from our exporter is a uuid-ish ASCII slug.
+        const isSafeInlayId = (id: string) => /^[A-Za-z0-9_-]{1,64}$/.test(id);
         const inlayEntries = Object.keys(zip.files).filter(path => path.startsWith('assets/inlays/') && !zip.files[path].dir);
         for (const path of inlayEntries) {
             const parts = path.split('/');
             // assets/inlays/<id>/<filename>
             if (parts.length === 4) {
                 const id = parts[2];
+                if (!isSafeInlayId(id)) {
+                    console.warn(`[importProjectBundle] skipping inlay with unsafe id: ${JSON.stringify(id)}`);
+                    continue;
+                }
                 const entry = zip.files[path];
 
                 const asset = await processEntry(entry, 'inlay');

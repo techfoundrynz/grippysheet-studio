@@ -43,6 +43,15 @@ const transformPointToWCS = (x: number, y: number, z: number, basis: { Ax: THREE
     return p;
 };
 
+// Hard caps for the DXF parser. The stitcher (`stitchChains`) is O(N²) in
+// segment count and the spline path explodes a 100k-knot SPLINE into
+// 2M interpolated points before stitching even starts. A pathological
+// (or just very large) DXF without these caps freezes the tab. Numbers
+// are intentionally generous — any plausible grip-tape deck outline is
+// well under 5k entities.
+const MAX_DXF_ENTITIES = 20_000;
+const MAX_DXF_SPLINE_KNOTS = 1_000;
+
 export const parseDxfToShapes = (dxfString: string): THREE.Shape[] => {
     console.log('Starting DXF parse...');
     const parser = new DxfParser();
@@ -55,6 +64,11 @@ export const parseDxfToShapes = (dxfString: string): THREE.Shape[] => {
         return [];
     }
     if (!dxf || !dxf.entities || dxf.entities.length === 0) return [];
+
+    if (dxf.entities.length > MAX_DXF_ENTITIES) {
+        console.error(`[parseDxfToShapes] DXF too complex: ${dxf.entities.length} entities exceeds cap of ${MAX_DXF_ENTITIES}. Refusing to parse.`);
+        throw new Error(`DXF has too many entities (${dxf.entities.length}). Please simplify the drawing or split it across multiple files.`);
+    }
 
     let scaleFactor = 1.0;
     const insUnits = dxf.header?.['$INSUNITS'];
@@ -146,6 +160,10 @@ export const parseDxfToShapes = (dxfString: string): THREE.Shape[] => {
             const knots = spline.knotValues;
             const degree = spline.degreeOfSplineCurve || 3;
             if (controlPoints && controlPoints.length > degree && knots && knots.length > 0) {
+                if (knots.length > MAX_DXF_SPLINE_KNOTS) {
+                    console.error(`[parseDxfToShapes] SPLINE knot count ${knots.length} exceeds cap ${MAX_DXF_SPLINE_KNOTS}. Skipping this entity.`);
+                    return; // skip this entity — inside dxf.entities.forEach
+                }
                 const scaledCP = controlPoints.map((p: any) => ({ x: p.x * scaleFactor, y: p.y * scaleFactor }));
                 const pts = interpolateBSpline(scaledCP, degree, knots, 20);
                 if (pts.length > 1) {

@@ -71,6 +71,43 @@ interface Props {
 }
 
 const MAX_IMG_DIM = 1500;
+// Hard caps applied BEFORE `createImageBitmap` decodes the source bytes.
+// `MAX_IMG_DIM` only kicks in after the full-resolution decode allocation,
+// which is too late — a 100k×1 PNG with a tiny encoded footprint would
+// still allocate ~400 MB of RGBA pixels in the decode buffer. The
+// pre-decode header sniff bails out before that ever happens.
+const MAX_FILE_BYTES = 25 * 1024 * 1024;     // 25 MB encoded
+const MAX_DECODED_PIXELS = 4096 * 4096;      // ~67 MP, ~256 MB at 4 bytes/pixel
+
+/**
+ * Peek at an image file's header to learn its dimensions without decoding
+ * the pixel buffer. PNG width/height live at bytes 16-23; JPEG SOF markers
+ * carry them in the first ~few KB; WebP VP8/VP8L/VP8X carries them in the
+ * RIFF chunk at bytes 26+. For anything we can't quickly probe we fall back
+ * to a HEAD-only decode via `Image()` element (the browser parses just
+ * enough to expose `naturalWidth`/`naturalHeight`).
+ */
+async function probeImageDimensions(file: File): Promise<{ w: number; h: number } | null> {
+  // PNG fast path: magic 0x89 P N G 0D 0A 1A 0A, then IHDR with w/h at 16-23.
+  const head = new Uint8Array(await file.slice(0, 32).arrayBuffer());
+  const isPng = head[0] === 0x89 && head[1] === 0x50 && head[2] === 0x4e && head[3] === 0x47;
+  if (isPng && head.length >= 24) {
+    const dv = new DataView(head.buffer);
+    return { w: dv.getUint32(16), h: dv.getUint32(20) };
+  }
+  // Fallback: let the browser parse only the header to get dimensions.
+  const url = URL.createObjectURL(file);
+  try {
+    return await new Promise<{ w: number; h: number } | null>((resolve) => {
+      const img = new Image();
+      img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
+      img.onerror = () => resolve(null);
+      img.src = url;
+    });
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
 
 export const ColorFlowControls: React.FC<Props> = ({
   baseSettings, settings, setSettings,
@@ -99,7 +136,18 @@ export const ColorFlowControls: React.FC<Props> = ({
     let cancelled = false;
     (async () => {
       try {
+        // Same pre-decode pixel cap as the live drop path. A bundle import
+        // can carry an image that the original user happily approved on
+        // their machine, but we still don't want to allocate hundreds of
+        // megabytes on the receiver.
+        if (initialImageAsset.bytes.byteLength > MAX_FILE_BYTES) {
+          throw new Error(`saved image is ${(initialImageAsset.bytes.byteLength / 1024 / 1024).toFixed(1)} MB > ${MAX_FILE_BYTES / 1024 / 1024} MB cap`);
+        }
         const blob = new Blob([initialImageAsset.bytes]);
+        const dims = await probeImageDimensions(new File([blob], initialImageAsset.name));
+        if (dims && dims.w * dims.h > MAX_DECODED_PIXELS) {
+          throw new Error(`saved image is ${dims.w}×${dims.h} > ${(MAX_DECODED_PIXELS / 1_000_000).toFixed(0)} MP cap`);
+        }
         const bitmap = await createImageBitmap(blob);
         if (cancelled) { bitmap.close(); return; }
         setImageBitmap((prev) => { prev?.close(); return bitmap; });
@@ -153,6 +201,31 @@ export const ColorFlowControls: React.FC<Props> = ({
     if (!file.type.startsWith('image/')) {
       showAlert({ title: 'Not an image', message: 'Drop a PNG, JPG, or WebP file.', type: 'error' });
       emitToast({ message: 'Unsupported image', detail: file.name, tone: 'error' });
+      return;
+    }
+    // Cap encoded file size before we even read the bytes — a 25 MB PNG
+    // is plenty for any realistic deck design.
+    if (file.size > MAX_FILE_BYTES) {
+      showAlert({
+        title: 'Image too large',
+        message: `${file.name} is ${(file.size / 1024 / 1024).toFixed(1)} MB; max is ${MAX_FILE_BYTES / 1024 / 1024} MB.`,
+        type: 'error',
+      });
+      emitToast({ message: 'Image too large', detail: file.name, tone: 'error' });
+      return;
+    }
+    // Pre-decode dimension probe: a pathological 100000×1 PNG would
+    // allocate ~400 MB of RGBA pixels inside `createImageBitmap` *before*
+    // the MAX_IMG_DIM downscale runs. Reject anything with more than
+    // MAX_DECODED_PIXELS total pixels.
+    const dims = await probeImageDimensions(file);
+    if (dims && dims.w * dims.h > MAX_DECODED_PIXELS) {
+      showAlert({
+        title: 'Image too large',
+        message: `${file.name} is ${dims.w}×${dims.h} (${((dims.w * dims.h) / 1_000_000).toFixed(1)} MP); max is ${(MAX_DECODED_PIXELS / 1_000_000).toFixed(0)} MP.`,
+        type: 'error',
+      });
+      emitToast({ message: 'Image too large', detail: `${dims.w}×${dims.h}`, tone: 'error' });
       return;
     }
     // Decode + downsize can throw on corrupt/partial bytes; we wrap the

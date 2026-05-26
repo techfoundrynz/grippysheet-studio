@@ -1016,21 +1016,14 @@ function ImageTracer(){
 		return 'fill="rgb('+c.r+','+c.g+','+c.b+')" stroke="rgb('+c.r+','+c.g+','+c.b+')" stroke-width="'+options.strokewidth+'" opacity="'+c.a/255.0+'" ';
 	},
 	
-	// Helper function: Appending an <svg> element to a container from an svgstring
-	this.appendSVGString = function(svgstr,parentid){
-		var div;
-		if(parentid){
-			div = document.getElementById(parentid);
-			if(!div){
-				div = document.createElement('div');
-				div.id = parentid;
-				document.body.appendChild(div);
-			}
-		}else{
-			div = document.createElement('div');
-			document.body.appendChild(div);
-		}
-		div.innerHTML += svgstr;
+	// SECURITY: the upstream `appendSVGString` helper used
+	// `div.innerHTML += svgstr` — a textbook XSS sink. We never call this
+	// (SVG paths render through React JSX with auto-escaped attributes),
+	// but leaving a working sink in vendored code is a future-regression
+	// trap. Throwing here means any reintroduction crashes immediately
+	// instead of silently parsing attacker-controlled markup.
+	this.appendSVGString = function(){
+		throw new Error('appendSVGString is disabled — render SVG paths through React JSX, not innerHTML.');
 	},
 	
 	////////////////////////////////////////////////////////////
