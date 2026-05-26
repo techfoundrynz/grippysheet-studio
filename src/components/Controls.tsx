@@ -5,6 +5,7 @@ import { emitToast } from '../utils/eventBus';
 import { BaseSettings, InlaySettings, GeometrySettings, ProjectSchemaV1 } from '../types/schemas';
 import type { ProjectDataV2 } from '../types/schemas';
 import { parseShapeFile } from '../utils/shapeLoader';
+import { getOutlineBySlug } from '../colorflow/outlineLibrary';
 import { RotateCcw, HelpCircle, ChevronDown, Download } from 'lucide-react';
 import { useAlert } from '../context/AlertContext';
 import SegmentedControl from './ui/SegmentedControl';
@@ -108,11 +109,17 @@ const Controls: React.FC<ControlsProps> = ({
   const updateInlay = (updates: Partial<InlaySettings>) => setInlaySettings(prev => ({ ...prev, ...updates }));
 
   const handleResetClick = () => {
+      // When colorflow is active, Reset is also the *only* path back to
+      // Pattern mode (see CLAUDE.md "Mode detection"). Surface that so a
+      // user looking to switch modes knows where the door is.
+      const message = colorFlowActive
+        ? "Reset clears your ColorFlow image, color palette, and all design settings. This is also the only way to switch back to Pattern mode."
+        : "Are you sure you want to reset all settings to their defaults? This action cannot be undone and your current design will be lost.";
       showAlert({
           title: "Reset Settings?",
-          message: "Are you sure you want to reset all settings to their defaults? This action cannot be undone and your current design will be lost.",
+          message,
           type: "warning",
-          confirmText: "Confirm Reset",
+          confirmText: colorFlowActive ? "Reset · switch to Pattern" : "Confirm Reset",
           cancelText: "Cancel",
           onConfirm: () => {
               if (onReset) onReset();
@@ -379,6 +386,33 @@ const Controls: React.FC<ControlsProps> = ({
                Build: {import.meta.env.DEV ? 'DEV' : __BUILD_TIMESTAMP__}
              </p>
         </div>
+
+        {/* Live project-state chip — anchors the brand bar with what the
+            user is currently working on (deck name · color count · mode).
+            Suppressed entirely when nothing's loaded so the header doesn't
+            read as "broken default state". */}
+        {(() => {
+          const outlineEntry = baseSettings.outlineSlug ? getOutlineBySlug(baseSettings.outlineSlug) : null;
+          const hasCustomOutline = !outlineEntry && (baseSettings.cutoutShapes?.length ?? 0) > 0;
+          const outlineLabel = outlineEntry?.name ?? (hasCustomOutline ? 'Custom outline' : null);
+          if (!outlineLabel) return null;
+          const mode = colorFlowActive ? 'ColorFlow' : 'Pattern';
+          return (
+            <div className="flex items-center gap-2 mb-3 px-2.5 py-1.5 rounded-md bg-gray-900/50 border border-gray-800 text-[10px] font-mono">
+              <span className="inline-block w-1.5 h-1.5 rounded-full bg-signal-ready shadow-[0_0_6px_rgba(0,255,136,0.7)]" aria-hidden="true" />
+              <span className="text-gray-200 truncate">{outlineLabel}</span>
+              {colorFlowActive && colorFlowPaletteSize > 0 && (
+                <>
+                  <span className="text-gray-700">·</span>
+                  <span className="text-signal-ready">{colorFlowPaletteSize}</span>
+                  <span className="text-gray-500">{colorFlowPaletteSize === 1 ? 'color' : 'colors'}</span>
+                </>
+              )}
+              <span className="text-gray-700">·</span>
+              <span className={colorFlowActive ? 'text-accent-500' : 'text-brand-400'}>{mode}</span>
+            </div>
+          );
+        })()}
 
         <div className={`transition-all duration-300 ease-in-out overflow-hidden ${isCollapsed ? 'max-h-0 opacity-0 md:max-h-[500px] md:opacity-100 m-0' : 'max-h-[500px] opacity-100'}`}>
           {(() => {

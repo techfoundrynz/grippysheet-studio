@@ -39,48 +39,36 @@ const AlertModal: React.FC<AlertModalProps> = ({
 
     if (!isOpen) return null;
 
-    const getIcon = () => {
+    // Brand-aligned tone palette — matches the signal-* tokens used by the
+    // status footer + toast pills so the alert reads as part of the same
+    // visual system rather than a generic Tailwind dialog.
+    const tone = (() => {
         switch (type) {
-            case 'warning': return <AlertTriangle size={24} className="text-amber-400" />;
-            case 'error': return <XCircle size={24} className="text-red-400" />;
-            default: return <Info size={24} className="text-blue-400" />;
+            case 'warning': return { icon: <AlertTriangle size={22} className="text-signal-pending" />, halo: 'bg-signal-pending/15 ring-1 ring-signal-pending/30', confirm: 'bg-signal-pending/90 hover:bg-signal-pending text-gray-950' };
+            case 'error':   return { icon: <XCircle size={22} className="text-signal-error" />, halo: 'bg-signal-error/15 ring-1 ring-signal-error/30', confirm: 'bg-signal-error hover:bg-signal-error/90 text-white' };
+            default:        return { icon: <Info size={22} className="text-signal-info" />, halo: 'bg-signal-info/15 ring-1 ring-signal-info/30', confirm: 'bg-gradient-to-br from-brand-500 to-accent-500 hover:from-brand-400 hover:to-accent-500 text-white shadow-glow-brand ring-1 ring-white/15' };
         }
-    };
-
-    const getBgColor = () => {
-        switch (type) {
-            case 'warning': return 'bg-amber-400/10';
-            case 'error': return 'bg-red-400/10';
-            default: return 'bg-blue-400/10';
-        }
-    };
-
-    const getConfirmBtnColor = () => {
-         switch (type) {
-            case 'warning': return 'bg-amber-600 hover:bg-amber-700';
-            case 'error': return 'bg-red-500 hover:bg-red-600';
-            default: return 'bg-blue-600 hover:bg-blue-700';
-        }
-    };
+    })();
 
     return (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
-            <div className="bg-gray-800 border border-gray-700 rounded-xl shadow-2xl max-w-sm w-full p-6 space-y-4 animate-in zoom-in-95 duration-200">
-                <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-3">
-                         <div className={`p-2 rounded-lg ${getBgColor()}`}>
-                            {getIcon()}
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
+            <div className="bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl ring-1 ring-black/40 max-w-sm w-full p-5 space-y-4 animate-in zoom-in-95 duration-200">
+                <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                         <div className={`p-2 rounded-lg ${tone.halo}`}>
+                            {tone.icon}
                          </div>
-                         <h3 className="text-lg font-bold text-white leading-tight">{title}</h3>
+                         <h3 className="font-display text-lg font-bold tracking-tight text-white leading-tight truncate">{title}</h3>
                     </div>
-                    <button 
+                    <button
                         onClick={onClose}
-                        className="text-gray-400 hover:text-white transition-colors"
+                        className="text-gray-500 hover:text-white hover:bg-gray-800 rounded-md p-1 transition-colors"
+                        aria-label="Close"
                     >
-                        <X size={20} />
+                        <X size={18} />
                     </button>
                 </div>
-                
+
                 <p className="text-gray-300 text-sm leading-relaxed whitespace-pre-wrap">
                     {message}
                 </p>
@@ -91,7 +79,7 @@ const AlertModal: React.FC<AlertModalProps> = ({
                         value={inputValue}
                         onChange={(e) => setInputValue(e.target.value)}
                         placeholder={inputPlaceholder}
-                        className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-brand-500/40/50 focus:border-brand-500 placeholder-gray-500 text-sm"
+                        className="w-full px-3 py-2 bg-gray-950 border border-gray-700 rounded-lg text-gray-100 font-mono text-sm focus:outline-none focus:border-brand-500/60 focus:ring-1 focus:ring-brand-500/20 placeholder-gray-500"
                         autoFocus
                         onKeyDown={(e) => {
                             if (e.key === 'Enter') {
@@ -101,12 +89,12 @@ const AlertModal: React.FC<AlertModalProps> = ({
                         }}
                     />
                 )}
-                
-                <div className="flex items-center gap-3 pt-2">
+
+                <div className="flex items-center gap-2 pt-1">
                     {cancelText && (
                         <button
                             onClick={onClose}
-                            className="flex-1 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg font-medium transition-colors"
+                            className="flex-1 px-4 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 hover:border-gray-600 text-gray-200 rounded-lg font-medium transition-all"
                         >
                             {cancelText}
                         </button>
@@ -116,7 +104,7 @@ const AlertModal: React.FC<AlertModalProps> = ({
                             if (onConfirm) onConfirm(inputType ? inputValue : undefined);
                             onClose();
                         }}
-                        className={`flex-1 px-4 py-2 text-white rounded-lg font-medium transition-colors ${getConfirmBtnColor()}`}
+                        className={`flex-1 px-4 py-2 rounded-lg font-display font-bold tracking-wide transition-all ${tone.confirm}`}
                     >
                         {confirmText}
                     </button>

@@ -12,16 +12,43 @@ interface ActiveToast extends ToastEvent {
  *
  * Mount once near the app root.
  */
+// Cap the visible stack so spam-clicks (e.g. rapid Export → Reset → Open)
+// don't push toasts past the viewport bottom. Same-content toasts that
+// arrive within DEDUPE_WINDOW_MS just refresh the existing toast's expiry
+// instead of stacking a duplicate.
+const MAX_VISIBLE_TOASTS = 4;
+const DEDUPE_WINDOW_MS = 600;
+const TOAST_LIFETIME_MS = 2400;
+
 const ToastHost: React.FC = () => {
   const [toasts, setToasts] = useState<ActiveToast[]>([]);
 
   useEffect(() => {
     return eventBus.on('toast', (e: ToastEvent) => {
       const id = Date.now() + Math.random();
-      setToasts((cur) => [...cur, { ...e, id }]);
+      setToasts((cur) => {
+        // Dedupe against the most-recent toast with the same content. Stops
+        // chains of identical "Project saved" / "Export failed" toasts from
+        // piling on top of each other.
+        const last = cur[cur.length - 1];
+        if (last && last.message === e.message && last.detail === e.detail && last.tone === e.tone) {
+          const sinceLast = Date.now() - Math.floor(last.id);
+          if (sinceLast < DEDUPE_WINDOW_MS) {
+            // Refresh the existing toast's lifetime by rotating its id +
+            // re-arming its timer. Keeps the visible count flat.
+            window.setTimeout(() => {
+              setToasts((c) => c.filter((t) => t.id !== id));
+            }, TOAST_LIFETIME_MS);
+            return [...cur.slice(0, -1), { ...last, id }];
+          }
+        }
+        // Otherwise append + truncate to the cap. Last-N kept so the most
+        // recent feedback is always visible.
+        return [...cur, { ...e, id }].slice(-MAX_VISIBLE_TOASTS);
+      });
       window.setTimeout(() => {
         setToasts((cur) => cur.filter((t) => t.id !== id));
-      }, 2400);
+      }, TOAST_LIFETIME_MS);
     });
   }, []);
 

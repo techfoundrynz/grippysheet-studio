@@ -72,17 +72,50 @@ interface PatternLibraryModalProps {
 const PatternLibraryModal: React.FC<PatternLibraryModalProps> = ({ isOpen, onClose, onSelect, category = 'patterns' }) => {
     // State for interactive mode (single item at a time)
     const [interactiveFile, setInteractiveFile] = useState<string | null>(null);
-    
+
     // State for thumbnail generation queue
     const [generationQueue, setGenerationQueue] = useState<string[]>([]);
     const [generatingFile, setGeneratingFile] = useState<string | null>(null);
     const [thumbnails, setThumbnails] = useState<Record<string, string>>({});
 
+    // Search query — case-insensitive substring filter against `name`. The
+    // library grows with each new outline/preset; without search, scanning
+    // gets painful fast.
+    const [query, setQuery] = useState('');
+    const searchInputRef = React.useRef<HTMLInputElement>(null);
+
     // Track pointer down position to distinguish clicks from drags
     const pointerDownPos = React.useRef({ x: 0, y: 0 });
 
-    const filteredPresets = PRESETS.filter(p => p.category === category);
+    const categoryPresets = PRESETS.filter(p => p.category === category);
+    const filteredPresets = query
+        ? categoryPresets.filter(p => p.name.toLowerCase().includes(query.toLowerCase().trim()))
+        : categoryPresets;
     const title = category === 'inlays' ? 'Inlay Library' : (category === 'outlines' ? 'Outline Library' : 'Pattern Library');
+
+    // Reset search + focus the input each time the modal opens.
+    useEffect(() => {
+        if (isOpen) {
+            setQuery('');
+            // Defer the focus until after the modal paints, otherwise the
+            // search input doesn't yet exist in the DOM.
+            requestAnimationFrame(() => searchInputRef.current?.focus());
+        }
+    }, [isOpen]);
+
+    // Escape closes the modal — standard dialog dismissal pattern that the
+    // earlier audit flagged as missing.
+    useEffect(() => {
+        if (!isOpen) return;
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                onClose();
+            }
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [isOpen, onClose]);
 
     // Reset/Initialize queue when modal opens or category changes
     useEffect(() => {
@@ -143,16 +176,34 @@ const PatternLibraryModal: React.FC<PatternLibraryModalProps> = ({ isOpen, onClo
             : 'Tactile grip patterns — pyramids, hex, domes, custom';
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
-            <div className="bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl ring-1 ring-black/40 w-full max-w-3xl flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-200">
-                <div className="flex items-center justify-between p-5 border-b border-gray-800 bg-gradient-to-b from-gray-900 to-gray-900/60 rounded-t-2xl">
-                    <div className="flex items-baseline gap-3">
-                        <h3 className="font-display text-lg font-bold tracking-wide text-white">{title}</h3>
-                        <span className="text-[11px] font-mono text-gray-500">
-                            <span className="text-signal-ready">{filteredPresets.length}</span> presets
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200" onClick={onClose}>
+            <div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="pattern-library-title"
+                onClick={(e) => e.stopPropagation()}
+                className="bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl ring-1 ring-black/40 w-full max-w-3xl flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-200"
+            >
+                <div className="flex items-center justify-between p-5 border-b border-gray-800 bg-gradient-to-b from-gray-900 to-gray-900/60 rounded-t-2xl gap-3">
+                    <div className="flex items-baseline gap-3 min-w-0">
+                        <h3 id="pattern-library-title" className="font-display text-lg font-bold tracking-wide text-white">{title}</h3>
+                        <span className="text-[11px] font-mono text-gray-500 whitespace-nowrap">
+                            <span className="text-signal-ready">{filteredPresets.length}</span>
+                            {query && <span className="text-gray-600">/{categoryPresets.length}</span>}
                         </span>
-                        <span className="hidden sm:inline text-xs text-gray-500">— {subtitle}</span>
+                        <span className="hidden sm:inline text-xs text-gray-500 truncate">— {subtitle}</span>
                     </div>
+                    {/* Search filter. Always visible — the library grows over
+                        time and scrolling for one specific deck shape gets old. */}
+                    <input
+                        ref={searchInputRef}
+                        type="search"
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                        placeholder="Search…"
+                        aria-label="Search library"
+                        className="hidden sm:block w-32 px-2.5 py-1 text-xs font-mono bg-gray-950 border border-gray-700 rounded-md text-gray-100 placeholder-gray-600 focus:outline-none focus:border-brand-500/60 focus:ring-1 focus:ring-brand-500/20"
+                    />
                     <Button
                         onClick={onClose}
                         variant="ghost"
@@ -163,6 +214,15 @@ const PatternLibraryModal: React.FC<PatternLibraryModalProps> = ({ isOpen, onClo
                     </Button>
                 </div>
 
+                {filteredPresets.length === 0 ? (
+                    <div className="p-10 text-center">
+                        <div className="text-3xl mb-2 opacity-50">🔍</div>
+                        <div className="font-display font-semibold text-gray-300">No matches</div>
+                        <div className="text-xs font-mono text-gray-500 mt-1">
+                            Nothing here for <span className="text-brand-400">"{query}"</span>. Try a shorter term.
+                        </div>
+                    </div>
+                ) : (
                 <div className="p-5 overflow-y-auto grid grid-cols-2 sm:grid-cols-3 gap-3">
                     {filteredPresets.map((preset) => (
                         <div
@@ -245,6 +305,7 @@ const PatternLibraryModal: React.FC<PatternLibraryModalProps> = ({ isOpen, onClo
                         </div>
                     ))}
                 </div>
+                )}
 
                 {/* Single Context Generator - only for patterns which use STLs */}
                 {isOpen && category === 'patterns' && (
