@@ -400,6 +400,7 @@ const Controls: React.FC<ControlsProps> = ({
             );
             return (
               <SegmentedControl
+                semantics="tab"
                 aria-label="Right panel section"
                 value={activeTab}
                 onChange={(val) => setActiveTab(val as any)}
@@ -419,9 +420,15 @@ const Controls: React.FC<ControlsProps> = ({
         <div className="flex-1 md:overflow-y-auto overflow-visible custom-scrollbar p-6 flex flex-col gap-6">
             
             <Freeze freeze={activeTab !== 'base'}>
-                <div className={activeTab === 'base' ? 'block' : 'hidden'}>
-                    <BaseControls 
-                        settings={baseSettings} 
+                <div
+                    role="tabpanel"
+                    id="tabpanel-base"
+                    aria-labelledby="tab-base"
+                    tabIndex={0}
+                    className={activeTab === 'base' ? 'block' : 'hidden'}
+                >
+                    <BaseControls
+                        settings={baseSettings}
                         updateSettings={updateBase}
                         onOutlineLoaded={handleOutlineLoaded}
                         onOutlineAssetChanged={handleOutlineAssetChanged}
@@ -430,8 +437,14 @@ const Controls: React.FC<ControlsProps> = ({
             </Freeze>
 
             <Freeze freeze={activeTab !== 'inlay'}>
-                <div className={activeTab === 'inlay' ? 'block' : 'hidden'}>
-                    <InlayControls 
+                <div
+                    role="tabpanel"
+                    id="tabpanel-inlay"
+                    aria-labelledby="tab-inlay"
+                    tabIndex={0}
+                    className={activeTab === 'inlay' ? 'block' : 'hidden'}
+                >
+                    <InlayControls
                         settings={inlaySettings}
                         updateSettings={updateInlay}
                         cutoutShapes={baseSettings.cutoutShapes}
@@ -446,7 +459,13 @@ const Controls: React.FC<ControlsProps> = ({
             </Freeze>
 
             <Freeze freeze={activeTab !== 'geometry'}>
-                <div className={activeTab === 'geometry' ? 'block space-y-6' : 'hidden'}>
+                <div
+                    role="tabpanel"
+                    id="tabpanel-geometry"
+                    aria-labelledby="tab-geometry"
+                    tabIndex={0}
+                    className={activeTab === 'geometry' ? 'block space-y-6' : 'hidden'}
+                >
                     <GeometryControls
                         settings={geometrySettings}
                         updateSettings={updateGeom}
@@ -471,7 +490,13 @@ const Controls: React.FC<ControlsProps> = ({
             </Freeze>
 
             <Freeze freeze={activeTab !== 'colorflow'}>
-                <div className={activeTab === 'colorflow' ? 'block' : 'hidden'}>
+                <div
+                    role="tabpanel"
+                    id="tabpanel-colorflow"
+                    aria-labelledby="tab-colorflow"
+                    tabIndex={0}
+                    className={activeTab === 'colorflow' ? 'block' : 'hidden'}
+                >
                     <ColorFlowControls
                         baseSettings={baseSettings}
                         settings={colorFlowSettings}

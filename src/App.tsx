@@ -16,6 +16,8 @@ import type { SpikeSource } from './colorflow/ColorFlowControls';
 import { generateSpikes } from './colorflow/spikes';
 import { emitProcessing, eventBus, emitToast } from './utils/eventBus';
 import { type ProjectAssets } from './utils/projectUtils';
+import { saveAutoSnapshot, loadAutoSnapshot, clearAutoSnapshot, type AutoSaveSnapshot } from './utils/autoSave';
+import ResumeBanner from './components/ResumeBanner';
 
 const App = () => {
   const [baseSettings, setBaseSettings] = useState<BaseSettings>(defaultBaseSettings);
@@ -36,6 +38,12 @@ const App = () => {
   const [isControlsCollapsed, setIsControlsCollapsed] = useState(false);
   const [activeTab, setActiveTab] = useState<'base' | 'inlay' | 'colorflow' | 'geometry'>('base');
 
+  // Resume banner — seed from localStorage exactly once on mount. We only
+  // load the snapshot here; the "user has live work already" check happens
+  // below against the App's actual initial state (which is just defaults
+  // at this point — the snapshot can't have been applied yet).
+  const [resumeSnapshot, setResumeSnapshot] = useState<AutoSaveSnapshot | null>(() => loadAutoSnapshot());
+
   const meshRef = useRef<THREE.Group>(null);
 
   // Derive viewer mode from colorFlowGeom presence
@@ -52,6 +60,28 @@ const App = () => {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
+
+  // Auto-save settings into localStorage so a tab refresh / accidental
+  // close doesn't lose the user's work. Debounced inside `saveAutoSnapshot`
+  // so rapid slider drags coalesce into a single write. Runtime-only fields
+  // (THREE.Shape arrays) are stripped here, same contract as the 3MF sidecar.
+  //
+  // While the Resume banner is showing we suppress auto-save — otherwise the
+  // default settings we mount with would clobber the very snapshot the user
+  // is being asked to restore, before they've had a chance to click Open.
+  React.useEffect(() => {
+    if (resumeSnapshot) return;
+    const project: ProjectDataV2 = {
+      version: 2,
+      timestamp: Date.now(),
+      mode: viewerMode,
+      base: { ...baseSettings, cutoutShapes: null },
+      inlay: { ...inlaySettings },
+      geometry: { ...geometrySettings, patternShapes: null },
+      imageMode: colorFlowSettings,
+    };
+    saveAutoSnapshot({ project });
+  }, [baseSettings, inlaySettings, geometrySettings, colorFlowSettings, viewerMode, resumeSnapshot]);
 
   // Canvas drag-drop bridge — when ModelViewer emits a file-drop event,
   // switch to the relevant tab so the user sees what just happened. The
@@ -109,6 +139,38 @@ const App = () => {
     if (data.imageMode) setColorFlowSettings(data.imageMode);
     setProjectAssets(assets);
   }, []);
+
+  // Resume-banner actions. "Open" applies the snapshot, drops the banner,
+  // and prompts the user to re-upload assets (we don't persist bytes — see
+  // `autoSave.ts`). "Start fresh" wipes the snapshot. "Dismiss" leaves the
+  // snapshot in place so a later refresh can still resume.
+  const handleResumeOpen = useCallback(() => {
+    if (!resumeSnapshot) return;
+    handleProjectImported(resumeSnapshot.project, {});
+    setResumeSnapshot(null);
+    emitToast({
+      message: 'Session restored',
+      detail: 'upload your image / outline again if needed',
+      tone: 'info',
+    });
+  }, [resumeSnapshot, handleProjectImported]);
+
+  const handleResumeDiscard = useCallback(() => {
+    clearAutoSnapshot();
+    setResumeSnapshot(null);
+  }, []);
+
+  const handleResumeDismiss = useCallback(() => {
+    setResumeSnapshot(null);
+  }, []);
+
+  // Suppress the banner when the user already has meaningful work in flight
+  // — re-showing the prompt after a hot-reload or after they've started a
+  // new design would be confusing. Heuristic per the spec: any cutoutShapes
+  // present OR ColorFlow geometry resolved.
+  const userHasLiveWork =
+    (baseSettings.cutoutShapes && baseSettings.cutoutShapes.length > 0) || colorFlowGeom !== null;
+  const showResumeBanner = !!resumeSnapshot && !userHasLiveWork;
 
   const handleImageAssetChanged = useCallback((a: { name: string; bytes: ArrayBuffer } | null) => {
     setProjectAssets((p) => ({
@@ -248,6 +310,14 @@ const App = () => {
                 colorFlowGeom={colorFlowGeomWithSpikes}
                 colorFlowSettings={colorFlowSettings}
               />
+              {showResumeBanner && resumeSnapshot && (
+                <ResumeBanner
+                  snapshot={resumeSnapshot}
+                  onResume={handleResumeOpen}
+                  onDiscard={handleResumeDiscard}
+                  onDismiss={handleResumeDismiss}
+                />
+              )}
             </div>
           </div>
 
