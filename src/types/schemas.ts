@@ -244,10 +244,15 @@ export const RESERVED_LAYER_IDS = new Set(['__primary__']);
 
 /**
  * Replace ids in `extraLayers` that are reserved or that collide with
- * another layer's id. Returns the (possibly rewritten) array plus a
- * `Map<oldId, newId>` of any rewrites the caller might need to apply to
- * a parallel asset bundle. Untouched layers map to themselves so callers
- * can blindly look up new ids.
+ * another layer's id. Returns the (possibly rewritten) array plus an
+ * `idMap` of `oldId → newId` for the FIRST occurrence of each original
+ * id, which the caller uses to rekey a parallel asset bundle.
+ *
+ * **First-occurrence semantics for duplicates.** When `extras = [A, A, A]`
+ * the asset bundle can only carry one set of bytes for id `A`, so the
+ * first layer with that id keeps the asset and subsequent duplicates
+ * get fresh uuids with no asset (they'll show empty in the UI and the
+ * import surfaces a per-layer warning via `rehydrationFailures`).
  *
  * Conservative — never drops a layer. Just hands it a fresh uuid when
  * its old id is unusable.
@@ -260,11 +265,19 @@ export function normalizeExtraLayerIds(
     const layers = extras.map((l) => {
         const original = l.id;
         let next = original;
+        // Reserved id hijacks the synthesized-primary slot; collision
+        // with an earlier (already-seen) id steals its asset bytes.
         if (RESERVED_LAYER_IDS.has(next) || seen.has(next)) {
             next = crypto.randomUUID();
         }
         seen.add(next);
-        idMap.set(original, next);
+        // Only record the mapping for the FIRST occurrence of each
+        // original id. Subsequent duplicates intentionally drop out
+        // of the asset rekey path — there's only one set of bytes in
+        // the bundle for that id, and we already gave them to layer 1.
+        if (!idMap.has(original)) {
+            idMap.set(original, next);
+        }
         return next === original ? l : { ...l, id: next };
     });
     return { layers, idMap };

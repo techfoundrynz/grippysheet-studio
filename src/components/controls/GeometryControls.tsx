@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { GeometrySettings, PatternLayer, PatternLayerSchema } from "../../types/schemas";
+import { GeometrySettings, PatternLayer, PatternLayerSchema, getPatternLayers, isLayerRenderable } from "../../types/schemas";
 import {
   BookOpen,
   Grid3x3,
@@ -238,7 +238,10 @@ const GeometryControls: React.FC<GeometryControlsProps> = ({
         }}
       />
 
-      {patternShapes && patternShapes.length > 0 && setTileRemovalMode && (
+      {/* Show whenever ANY layer (primary OR any extra) has shapes — with
+          compound layers, the user might leave the primary empty and only
+          tile with extras, and they still need to be able to remove tiles. */}
+      {setTileRemovalMode && getPatternLayers(settings).some(isLayerRenderable) && (
         <div className={`mt-2 rounded-lg border transition-all ${tileRemovalMode
             ? 'bg-signal-error/[0.06] border-signal-error/40 shadow-[0_0_18px_rgba(255,56,96,0.18)]'
             : 'bg-gray-900/40 border-gray-800'}`}>

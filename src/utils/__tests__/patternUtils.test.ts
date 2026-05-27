@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { tileKey, filterRemovedTiles, generateTilePositions } from '../patternUtils';
+import { normalizeExtraLayerIds, PatternLayerSchema } from '../../types/schemas';
 
 describe('tileKey', () => {
     it('quantises to 0.01 mm precision', () => {
@@ -106,4 +107,48 @@ describe('generateTilePositions × tileKey — round-trip across distributions',
             expect(rotKeys).toEqual(refKeys);
         },
     );
+});
+
+describe('normalizeExtraLayerIds', () => {
+    const mk = (id: string) => PatternLayerSchema.parse({ id });
+
+    it('passes through layers with already-unique ids', () => {
+        const layers = [mk('aaa'), mk('bbb'), mk('ccc')];
+        const { layers: out, idMap } = normalizeExtraLayerIds(layers);
+        expect(out).toEqual(layers);
+        expect([...idMap.entries()]).toEqual([['aaa', 'aaa'], ['bbb', 'bbb'], ['ccc', 'ccc']]);
+    });
+
+    it('rewrites the reserved __primary__ id', () => {
+        const layers = [mk('__primary__'), mk('safe')];
+        const { layers: out, idMap } = normalizeExtraLayerIds(layers);
+        expect(out[0].id).not.toBe('__primary__');
+        expect(out[0].id).toMatch(/^[0-9a-f-]{36}$/);
+        expect(out[1].id).toBe('safe');
+        expect(idMap.get('__primary__')).toBe(out[0].id);
+    });
+
+    it('rewrites duplicate ids and keeps the first occurrence as the asset-bundle anchor', () => {
+        // [A, A, A] — the asset bundle can only carry one set of bytes for
+        // id "A", so the first layer KEEPS id "A" and the bundle's bytes
+        // stay attached to it. The 2nd and 3rd duplicates each get fresh
+        // uuids but no asset; they'll show up empty in the UI.
+        const layers = [mk('dup'), mk('dup'), mk('dup')];
+        const { layers: out, idMap } = normalizeExtraLayerIds(layers);
+        const ids = out.map((l) => l.id);
+        expect(ids[0]).toBe('dup');
+        expect(ids[1]).not.toBe('dup');
+        expect(ids[2]).not.toBe('dup');
+        expect(ids[1]).not.toBe(ids[2]);
+        // Critical: idMap.get('dup') resolves to the first occurrence's id
+        // so the asset rekey loop attaches the bundled bytes to layer 0,
+        // not layer 2 (which was the prior buggy behaviour).
+        expect(idMap.get('dup')).toBe('dup');
+    });
+
+    it('handles an empty extras array', () => {
+        const { layers, idMap } = normalizeExtraLayerIds([]);
+        expect(layers).toEqual([]);
+        expect(idMap.size).toBe(0);
+    });
 });

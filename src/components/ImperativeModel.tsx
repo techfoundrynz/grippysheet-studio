@@ -6,7 +6,7 @@ import { mergeGeometries, mergeVertices } from 'three/examples/jsm/utils/BufferG
 import { generateTilePositions, getShapesBounds, TileInstance, filterRemovedTiles } from '../utils/patternUtils';
 import { offsetShape, unionShapes } from '../utils/offsetUtils';
 
-import { InlayItem, PatternLayer } from '../types/schemas';
+import { InlayItem, PatternLayer, isLayerRenderable } from '../types/schemas';
 
 interface ImperativeModelProps {
   size: number;
@@ -908,7 +908,7 @@ const ImperativeModel = React.forwardRef((props: ImperativeModelProps, ref: Reac
     // here. See `getPatternLayers` in schemas.ts for the matching contract.
     const allLayers: ResolvedLayer[] = [primaryLayer, ...(extraLayers ?? [])];
 
-    if (!allLayers.some((l) => l.shapes && l.shapes.length > 0)) return;
+    if (!allLayers.some(isLayerRenderable)) return;
 
     // ---------------------------------------------------------
     // 1. Shared infrastructure (cutters, masks, bounds) — built ONCE,
