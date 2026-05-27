@@ -4,7 +4,7 @@ import Controls from "./components/Controls";
 const OutputPanel = React.lazy(() => import("./components/OutputPanel"));
 import * as THREE from 'three';
 import { AlertProvider } from './context/AlertContext';
-import { BaseSettings, InlaySettings, GeometrySettings, InlayItem } from './types/schemas';
+import { BaseSettings, InlaySettings, GeometrySettings, InlayItem, stripGeometryRuntime } from './types/schemas';
 import type { ProjectDataV2 } from './types/schemas';
 import { defaultBaseSettings, defaultInlaySettings, defaultGeometrySettings } from './utils/schemaDefaults';
 import WelcomeModal from "./components/WelcomeModal";
@@ -77,7 +77,7 @@ const App = () => {
       mode: viewerMode,
       base: { ...baseSettings, cutoutShapes: null },
       inlay: { ...inlaySettings },
-      geometry: { ...geometrySettings, patternShapes: null },
+      geometry: stripGeometryRuntime(geometrySettings),
       imageMode: colorFlowSettings,
     };
     saveAutoSnapshot({ project });
@@ -361,7 +361,7 @@ const App = () => {
                         mode: viewerMode,
                         base: { ...baseSettings, cutoutShapes: null },
                         inlay: { ...inlaySettings },
-                        geometry: { ...geometrySettings, patternShapes: null },
+                        geometry: stripGeometryRuntime(geometrySettings),
                         imageMode: colorFlowSettings,
                       },
                       assets: projectAssets,

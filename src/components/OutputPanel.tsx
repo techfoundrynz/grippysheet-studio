@@ -58,14 +58,21 @@ const OutputPanel: React.FC<OutputPanelProps> = ({ meshRef, debugMode = false, c
     return group;
   };
 
+  // Match the new compound-pattern naming: `Pattern_0`, `Pattern_1`, …
+  // (was a single `Pattern` mesh before the layer feature landed).
+  const PATTERN_LAYER_NAME = /^Pattern_\d+$/;
+  const isPatternLayerName = (name: string) => name === 'Pattern' || PATTERN_LAYER_NAME.test(name);
+
   const prepareForExport = (source: THREE.Object3D): THREE.Object3D | null => {
       // Check for InstancedMesh FIRST to ensure it gets expanded
       if (source instanceof THREE.InstancedMesh) {
           return expandInstancedMesh(source as THREE.InstancedMesh);
       }
 
-      // Special handling for Base and Pattern (CSG results) - clone shallow to drop CSG children
-      if (source.name === 'Base' || source.name === 'Pattern') {
+      // Special handling for Base and Pattern_<i> (CSG results) — clone
+      // shallow to drop CSG children. Matches the legacy `Pattern` name
+      // for back-compat with any old saved meshes.
+      if (source.name === 'Base' || isPatternLayerName(source.name)) {
           return source.clone(false);
       }
       
@@ -99,11 +106,16 @@ const OutputPanel: React.FC<OutputPanelProps> = ({ meshRef, debugMode = false, c
     if (!meshRef.current) return;
 
     const group = meshRef.current;
-    
-    // Find meshes by name
+
+    // Find meshes by name. Pattern is now potentially multi-layer
+    // (`Pattern_0` / `Pattern_1` / …) — collect every match into a group
+    // for export so compound layers all ride along.
     const baseMesh = group.getObjectByName("Base") as THREE.Mesh;
-    const patternMesh = group.getObjectByName("Pattern") as THREE.Mesh;
-    
+    const patternMeshes: THREE.Object3D[] = [];
+    group.traverse((obj) => {
+        if (isPatternLayerName(obj.name)) patternMeshes.push(obj);
+    });
+
     let objectToExport: THREE.Object3D | null = null;
     let filename = 'grippysheet-model.stl';
 
@@ -115,12 +127,20 @@ const OutputPanel: React.FC<OutputPanelProps> = ({ meshRef, debugMode = false, c
         objectToExport = baseMesh.clone(false);
         filename = 'grippysheet-base.stl';
     } else if (mode === 'pattern') {
-        if (!patternMesh) {
+        if (patternMeshes.length === 0) {
              showAlert({ title: "Export Error", message: "Pattern mesh not found!", type: "error" });
              return;
         }
-        // Use prepareForExport to handle InstancedMesh expansion if needed
-        objectToExport = prepareForExport(patternMesh); 
+        // Compound layers: collect every `Pattern_<i>` into a single
+        // export group. Each gets the same Instanced→Mesh expansion
+        // treatment via `prepareForExport`.
+        const patternGroup = new THREE.Group();
+        patternGroup.name = 'Pattern';
+        patternMeshes.forEach((m) => {
+            const processed = prepareForExport(m);
+            if (processed) patternGroup.add(processed);
+        });
+        objectToExport = patternGroup;
         filename = 'grippysheet-pattern.stl';
     } else {
         // Merged

@@ -1056,6 +1056,11 @@ const ImperativeModel = React.forwardRef((props: ImperativeModelProps, ref: Reac
             iMesh.name = meshName;
             iMesh.castShadow = true;
             iMesh.receiveShadow = true;
+            // Cache tile origins so the Eraser tool can snap a raycast hit
+            // back to the canonical tileKey even after CSG merges this mesh.
+            // Always stored from the un-modified `positions` array so the
+            // key survives any later matrix transforms.
+            iMesh.userData.tilePositions = positions.map((p) => ({ x: p.position.x, y: p.position.y }));
 
             const dummy = new THREE.Object3D();
             positions.forEach((p, i) => {
@@ -1347,6 +1352,11 @@ const ImperativeModel = React.forwardRef((props: ImperativeModelProps, ref: Reac
             resultBrush.material = mat;
             resultBrush.castShadow = true;
             resultBrush.receiveShadow = true;
+            // See InstancedMesh path above — Eraser tool reads this to map
+            // a raycast hit on the CSG-merged result back to the canonical
+            // tileKey (CSG destroys per-instance identity, so we cache the
+            // original tile origins on userData instead).
+            resultBrush.userData.tilePositions = positions.map((p) => ({ x: p.position.x, y: p.position.y }));
             group.add(resultBrush);
         } else {
             console.warn(`Pattern layer ${layerIdx} produced empty geometry after CSG.`);

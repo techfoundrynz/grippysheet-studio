@@ -33,6 +33,10 @@ interface GeometryControlsProps {
   updateSettings: (updates: Partial<GeometrySettings>) => void;
   baseSize: number;
   onPatternAssetChanged?: (asset: { name: string, content: string | ArrayBuffer, type: 'dxf' | 'svg' | 'stl' } | null) => void;
+  /** Same shape as onPatternAssetChanged but keyed by extra-layer id, so
+   *  per-layer DXF/STL source bytes flow into ProjectAssets.extraLayers
+   *  and survive 3MF / .zip roundtrips. */
+  onExtraLayerAssetChanged?: (id: string, asset: { name: string, content: string | ArrayBuffer, type: 'dxf' | 'svg' | 'stl' } | null) => void;
 }
 
 const GeometryControls: React.FC<GeometryControlsProps> = ({
@@ -40,6 +44,7 @@ const GeometryControls: React.FC<GeometryControlsProps> = ({
   updateSettings,
   baseSize,
   onPatternAssetChanged,
+  onExtraLayerAssetChanged,
 }) => {
   const { showAlert } = useAlert();
   const {
@@ -600,6 +605,7 @@ const GeometryControls: React.FC<GeometryControlsProps> = ({
         settings={settings}
         updateSettings={updateSettings}
         baseSize={baseSize}
+        onExtraLayerAssetChanged={onExtraLayerAssetChanged}
       />
     </section>
   );
@@ -615,12 +621,14 @@ interface ExtraLayersSectionProps {
   settings: GeometrySettings;
   updateSettings: (updates: Partial<GeometrySettings>) => void;
   baseSize: number;
+  onExtraLayerAssetChanged?: (id: string, asset: { name: string, content: string | ArrayBuffer, type: 'dxf' | 'svg' | 'stl' } | null) => void;
 }
 
 const ExtraLayersSection: React.FC<ExtraLayersSectionProps> = ({
   settings,
   updateSettings,
   baseSize,
+  onExtraLayerAssetChanged,
 }) => {
   const extras = settings.extraLayers ?? [];
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -700,8 +708,12 @@ const ExtraLayersSection: React.FC<ExtraLayersSectionProps> = ({
                 index={index}
                 isExpanded={!!expanded[layer.id]}
                 onToggle={() => toggleExpanded(layer.id)}
-                onDelete={() => handleDelete(layer.id)}
+                onDelete={() => {
+                  handleDelete(layer.id);
+                  onExtraLayerAssetChanged?.(layer.id, null);
+                }}
                 onUpdate={(patch) => updateLayer(layer.id, patch)}
+                onAssetChanged={(asset) => onExtraLayerAssetChanged?.(layer.id, asset)}
                 baseSize={baseSize}
               />
             ))}
@@ -727,6 +739,7 @@ interface ExtraLayerCardProps {
   onToggle: () => void;
   onDelete: () => void;
   onUpdate: (patch: Partial<PatternLayer>) => void;
+  onAssetChanged?: (asset: { name: string, content: string | ArrayBuffer, type: 'dxf' | 'svg' | 'stl' } | null) => void;
   baseSize: number;
 }
 
@@ -737,6 +750,7 @@ const ExtraLayerCard: React.FC<ExtraLayerCardProps> = ({
   onToggle,
   onDelete,
   onUpdate,
+  onAssetChanged,
   baseSize,
 }) => {
   const layerName = `Layer ${index + 2}`; // Primary is layer 1
@@ -785,7 +799,7 @@ const ExtraLayerCard: React.FC<ExtraLayerCardProps> = ({
     shapes: any[],
     name?: string | null,
     type?: "dxf" | "svg" | "stl",
-    _content?: string | ArrayBuffer
+    content?: string | ArrayBuffer
   ) => {
     const pType = type ?? null;
     const newScale = calculateAutoScale(
@@ -801,6 +815,12 @@ const ExtraLayerCard: React.FC<ExtraLayerCardProps> = ({
       assetName: name ?? layer.assetName,
       ...(newScale !== null ? { scale: newScale } : {}),
     });
+    // Capture the source bytes so the layer round-trips through 3MF /
+    // .zip export. Without this, exported projects load with the
+    // settings but no live shapes for the layer.
+    if (onAssetChanged && name && content && type) {
+      onAssetChanged({ name, content, type });
+    }
   };
 
   return (
@@ -872,6 +892,7 @@ const ExtraLayerCard: React.FC<ExtraLayerCardProps> = ({
             }
             onClear={() => {
               onUpdate({ shapes: [], type: null, assetName: undefined });
+              onAssetChanged?.(null);
             }}
             allowedTypes={["stl"]}
           />

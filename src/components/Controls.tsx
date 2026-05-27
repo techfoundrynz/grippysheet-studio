@@ -180,6 +180,18 @@ const Controls: React.FC<ControlsProps> = ({
       });
   };
 
+  // Mirror of `handleInlayAssetChanged` for the new compound pattern
+  // layers. Each extra layer's DXF/STL bytes get keyed by `layer.id` and
+  // flow up into `ProjectAssets.extraLayers`.
+  const handleExtraLayerAssetChanged = (id: string, asset: { name: string, content: string | ArrayBuffer, type: 'dxf' | 'svg' | 'stl' } | null) => {
+      updateProjectAssets((prev) => {
+          const extras = { ...(prev.extraLayers || {}) };
+          if (asset) extras[id] = asset;
+          else delete extras[id];
+          return { ...prev, extraLayers: extras };
+      });
+  };
+
   // `handleExportClick` (the old .zip Save Project flow) was removed
   // when the .3mf round-trip landed — the Export 3MF CTA below now
   // produces a file that prints AND reloads as a project. The asset-
@@ -241,6 +253,27 @@ const Controls: React.FC<ControlsProps> = ({
                            }
                        } else if (newGeometry.patternShapes) {
                             console.warn("[Import] Pattern shapes present in settings but missing from assets bundle.");
+                       }
+
+                       // 4. Extra pattern layers — re-parse each layer's
+                       //    source bytes back into THREE.Shape / BufferGeometry
+                       //    so the construction loop has live geometry again.
+                       //    The settings already carry per-layer `type` /
+                       //    `assetName` etc. from the sidecar JSON.
+                       if (importedAssets.extraLayers && newGeometry.extraLayers) {
+                           newGeometry = {
+                               ...newGeometry,
+                               extraLayers: newGeometry.extraLayers.map((l) => {
+                                   const asset = importedAssets.extraLayers?.[l.id];
+                                   if (!asset || !isShapeAsset(asset.type)) return l;
+                                   const res = parseShapeFile(asset.content, asset.type);
+                                   if (!res.success) {
+                                       console.error('[Import] Failed to parse extra layer:', l.id, res.error);
+                                       return l;
+                                   }
+                                   return { ...l, shapes: res.shapes, type: asset.type };
+                               }),
+                           };
                        }
 
                        // 3. Inlays
@@ -517,6 +550,7 @@ const Controls: React.FC<ControlsProps> = ({
                         updateSettings={updateGeom}
                         baseSize={baseSettings.size}
                         onPatternAssetChanged={handlePatternAssetChanged}
+                        onExtraLayerAssetChanged={handleExtraLayerAssetChanged}
                     />
                     {colorFlowActive && colorFlowPaletteSize > 0 && (
                         <SpikeControls

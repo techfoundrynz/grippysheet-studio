@@ -171,6 +171,25 @@ export type GeometrySettings = z.infer<typeof GeometrySettingsSchema>;
 export type PatternLayer = z.infer<typeof PatternLayerSchema>;
 
 /**
+ * Strip runtime-only fields (THREE.Shape / BufferGeometry arrays) from
+ * a `GeometrySettings` snapshot so it survives `JSON.stringify`. The
+ * primary layer drops `patternShapes`; every entry in `extraLayers`
+ * drops its own `shapes`. Without this, `JSON.stringify` produces
+ * non-rehydratable garbage (typed arrays, circular refs) AND blows the
+ * localStorage quota for any project with two or more compound layers.
+ *
+ * Sites that must use it: 3MF sidecar writer, auto-save snapshot,
+ * legacy `.zip` project bundle export.
+ */
+export function stripGeometryRuntime(geometry: GeometrySettings): GeometrySettings {
+    return {
+        ...geometry,
+        patternShapes: null,
+        extraLayers: (geometry.extraLayers ?? []).map((l) => ({ ...l, shapes: null })),
+    };
+}
+
+/**
  * Uniform view of every pattern layer in play, including the primary one
  * synthesized from `GeometrySettings`'s flat fields. Construction loops
  * iterate this rather than special-casing layer 1.

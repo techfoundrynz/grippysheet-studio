@@ -1,5 +1,5 @@
 import JSZip from 'jszip';
-import { ProjectSchema, ProjectSchemaV1, ProjectDataV2, migrateV1ToV2 } from '../types/schemas';
+import { ProjectSchema, ProjectSchemaV1, ProjectDataV2, migrateV1ToV2, stripGeometryRuntime } from '../types/schemas';
 import type { ProjectAssets, Asset } from './projectUtils';
 import { detectAssetType } from './fileTypeSniffer';
 
@@ -42,7 +42,7 @@ export function addGrippySidecar(zip: JSZip, payload: GrippySidecarPayload): voi
     const projectData: ProjectDataV2 = {
         ...payload.project,
         base: { ...payload.project.base, cutoutShapes: null },
-        geometry: { ...payload.project.geometry, patternShapes: null },
+        geometry: stripGeometryRuntime(payload.project.geometry),
     };
     zip.file(PROJECT_JSON, JSON.stringify(projectData, null, 2));
 
@@ -59,6 +59,11 @@ export function addGrippySidecar(zip: JSZip, payload: GrippySidecarPayload): voi
     }
     if (payload.assets.image) {
         zip.file(`${SIDECAR_ROOT}/assets/image/${payload.assets.image.name}`, payload.assets.image.content);
+    }
+    if (payload.assets.extraLayers) {
+        Object.entries(payload.assets.extraLayers).forEach(([id, asset]) => {
+            zip.file(`${SIDECAR_ROOT}/assets/extraLayers/${id}/${asset.name}`, asset.content);
+        });
     }
 }
 
@@ -141,6 +146,24 @@ export async function readGrippySidecar(zip: JSZip): Promise<GrippySidecarPayloa
     if (imageFolder) {
         const files = imageFolder.file(/.*/);
         if (files.length > 0) assets.image = await processEntry(files[0], 'image', 'image');
+    }
+
+    // Extra pattern layers — same path-safe id pattern as inlays since the
+    // ids are user-uncontrolled but we route them into a Record<id, Asset>
+    // that downstream code keys directly on.
+    assets.extraLayers = {};
+    const extraEntries = Object.keys(zip.files).filter((path) => path.startsWith(`${SIDECAR_ROOT}/assets/extraLayers/`) && !zip.files[path].dir);
+    for (const path of extraEntries) {
+        const parts = path.split('/');
+        // Metadata/grippy/assets/extraLayers/<id>/<filename> → 6 segments
+        if (parts.length === 6) {
+            const id = parts[4];
+            if (!isSafeInlayId(id)) {
+                console.warn(`[grippySidecar] skipping extra layer with unsafe id: ${JSON.stringify(id)}`);
+                continue;
+            }
+            assets.extraLayers[id] = await processEntry(zip.files[path], 'extraLayer');
+        }
     }
 
     return { project, assets };

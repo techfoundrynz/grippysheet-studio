@@ -2,7 +2,7 @@
 import {
     ProjectSchema, ProjectSchemaV1, ProjectDataV2,
     BaseSettings, InlaySettings, GeometrySettings,
-    migrateV1ToV2,
+    migrateV1ToV2, stripGeometryRuntime,
 } from '../types/schemas';
 import { ColorFlowSettings } from '../colorflow/schema';
 import JSZip from 'jszip';
@@ -19,6 +19,10 @@ export interface ProjectAssets {
     pattern?: Asset;
     inlays?: Record<string, Asset>;
     image?: Asset;  // ColorFlow image bytes
+    /** Per-extra-layer source files, keyed by PatternLayer.id, so compound
+     *  pattern layers round-trip through .3mf / .zip export with their
+     *  original DXF/STL/SVG bytes preserved. */
+    extraLayers?: Record<string, Asset>;
 }
 
 // --- Export Logic ---
@@ -37,7 +41,7 @@ export const exportProjectBundle = async (
         mode,
         base: { ...base, cutoutShapes: null },
         inlay: { ...inlay },
-        geometry: { ...geometry, patternShapes: null },
+        geometry: stripGeometryRuntime(geometry),
         imageMode,
     } satisfies ProjectDataV2;
 
@@ -61,6 +65,12 @@ export const exportProjectBundle = async (
 
     if (assets.image) {
         zip.file(`assets/image/${assets.image.name}`, assets.image.content);
+    }
+
+    if (assets.extraLayers) {
+        Object.entries(assets.extraLayers).forEach(([id, asset]) => {
+            zip.file(`assets/extraLayers/${id}/${asset.name}`, asset.content);
+        });
     }
 
     // Generate Zip
@@ -245,6 +255,22 @@ export const importProjectBundle = async (file: File): Promise<ImportResult> => 
             const files = imageFolder.file(/.*/);
             if (files.length > 0) {
                 assets.image = await processEntry(files[0], 'image', 'image');
+            }
+        }
+
+        // Extra pattern layers — same path-safe id guard as inlays.
+        assets.extraLayers = {};
+        const extraEntries = Object.keys(zip.files).filter((path) => path.startsWith('assets/extraLayers/') && !zip.files[path].dir);
+        for (const path of extraEntries) {
+            const parts = path.split('/');
+            // assets/extraLayers/<id>/<filename> → 4 segments
+            if (parts.length === 4) {
+                const id = parts[2];
+                if (!isSafeInlayId(id)) {
+                    console.warn(`[importProjectBundle] skipping extra layer with unsafe id: ${JSON.stringify(id)}`);
+                    continue;
+                }
+                assets.extraLayers[id] = await processEntry(zip.files[path], 'extraLayer');
             }
         }
 

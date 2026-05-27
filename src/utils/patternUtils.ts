@@ -17,7 +17,14 @@ export interface TileInstance {
  * pass.
  */
 export function tileKey(x: number, y: number): string {
-    return `${x.toFixed(2)},${y.toFixed(2)}`;
+    // Collapse the negative-zero / sub-0.005-magnitude window so the
+    // generator's Float64 doubles and the click-path's Float32-decomposed
+    // matrices agree on tiles sitting near x=0 or y=0. Without this,
+    // `(-0.001).toFixed(2)` → `"-0.00"` but `(0.001).toFixed(2)` → `"0.00"`
+    // and a centered radial tile silently misses its key.
+    const nx = Math.abs(x) < 0.005 ? 0 : x;
+    const ny = Math.abs(y) < 0.005 ? 0 : y;
+    return `${nx.toFixed(2)},${ny.toFixed(2)}`;
 }
 
 /**
