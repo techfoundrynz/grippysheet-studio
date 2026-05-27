@@ -26,6 +26,11 @@ interface ControlsProps {
   setInlaySettings: React.Dispatch<React.SetStateAction<InlaySettings>>;
   geometrySettings: GeometrySettings;
   setGeometrySettings: React.Dispatch<React.SetStateAction<GeometrySettings>>;
+  /** Tile-selection mode lifted to App so the Geometry tab can render an
+   *  inline toggle alongside the toolbar Eraser button. Optional — falls
+   *  back to a hidden toggle if the parent doesn't lift. */
+  tileRemovalMode?: boolean;
+  setTileRemovalMode?: React.Dispatch<React.SetStateAction<boolean>>;
   onReset?: () => void;
   onOpenWelcome?: () => void;
   isCollapsed?: boolean;
@@ -92,6 +97,8 @@ const Controls: React.FC<ControlsProps> = ({
   initialColorFlowImageAsset,
   onProjectImported,
   onProjectAssetsChanged,
+  tileRemovalMode,
+  setTileRemovalMode,
 }) => {
   const { showAlert } = useAlert();
   // Lifted state
@@ -551,6 +558,8 @@ const Controls: React.FC<ControlsProps> = ({
                         baseSize={baseSettings.size}
                         onPatternAssetChanged={handlePatternAssetChanged}
                         onExtraLayerAssetChanged={handleExtraLayerAssetChanged}
+                        tileRemovalMode={tileRemovalMode ?? false}
+                        setTileRemovalMode={setTileRemovalMode}
                     />
                     {colorFlowActive && colorFlowPaletteSize > 0 && (
                         <SpikeControls

@@ -12,6 +12,7 @@ import {
   Trash2,
   ChevronRight,
   RotateCcw,
+  Eraser,
 } from "lucide-react";
 import { COLORS } from "../../constants/colors";
 import ShapeUploader from "../ShapeUploader";
@@ -37,6 +38,11 @@ interface GeometryControlsProps {
    *  per-layer DXF/STL source bytes flow into ProjectAssets.extraLayers
    *  and survive 3MF / .zip roundtrips. */
   onExtraLayerAssetChanged?: (id: string, asset: { name: string, content: string | ArrayBuffer, type: 'dxf' | 'svg' | 'stl' } | null) => void;
+  /** Lifted tile-removal toggle — when true, the viewer is in tile-pick
+   *  mode (click to remove). Surfaced inline in the Geometry tab so users
+   *  configuring a pattern don't have to hunt for the toolbar Eraser. */
+  tileRemovalMode?: boolean;
+  setTileRemovalMode?: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 const GeometryControls: React.FC<GeometryControlsProps> = ({
@@ -45,6 +51,8 @@ const GeometryControls: React.FC<GeometryControlsProps> = ({
   baseSize,
   onPatternAssetChanged,
   onExtraLayerAssetChanged,
+  tileRemovalMode,
+  setTileRemovalMode,
 }) => {
   const { showAlert } = useAlert();
   const {
@@ -230,6 +238,36 @@ const GeometryControls: React.FC<GeometryControlsProps> = ({
           }
         }}
       />
+
+      {patternShapes && patternShapes.length > 0 && setTileRemovalMode && (
+        <div className={`mt-2 rounded-lg border transition-all ${tileRemovalMode
+            ? 'bg-signal-error/[0.06] border-signal-error/40 shadow-[0_0_18px_rgba(255,56,96,0.18)]'
+            : 'bg-gray-900/40 border-gray-800'}`}>
+          <button
+            type="button"
+            onClick={() => setTileRemovalMode((v) => !v)}
+            className="w-full flex items-center justify-between gap-2 p-3 text-left"
+            aria-pressed={tileRemovalMode}
+          >
+            <span className="flex items-center gap-2.5">
+              <span className={`flex h-7 w-7 items-center justify-center rounded-md transition-colors ${tileRemovalMode ? 'bg-signal-error/25 text-signal-error' : 'bg-gray-800 text-gray-400'}`}>
+                <Eraser size={15} />
+              </span>
+              <span className="flex flex-col">
+                <span className={`text-xs font-display font-semibold tracking-wide ${tileRemovalMode ? 'text-signal-error' : 'text-gray-200'}`}>
+                  {tileRemovalMode ? 'Tile selection · ON' : 'Tile selection'}
+                </span>
+                <span className="text-[10px] font-mono text-gray-500">
+                  {tileRemovalMode ? 'Click tiles in 2D or 3D to remove' : 'Thin out the pattern by clicking tiles'}
+                </span>
+              </span>
+            </span>
+            <span className={`flex h-5 w-9 items-center rounded-full p-0.5 transition-colors ${tileRemovalMode ? 'bg-signal-error/70 justify-end' : 'bg-gray-700 justify-start'}`}>
+              <span className="h-4 w-4 rounded-full bg-white shadow" />
+            </span>
+          </button>
+        </div>
+      )}
 
       {patternShapes && patternShapes.length > 0 && (
         <>
@@ -633,11 +671,12 @@ const ExtraLayersSection: React.FC<ExtraLayersSectionProps> = ({
   const extras = settings.extraLayers ?? [];
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
-  // Pull schema defaults so a freshly-added layer matches the canonical shape.
-  const makeBlankLayer = (): PatternLayer => ({
-    ...(PatternLayerSchema.parse({}) as PatternLayer),
-    id: uuidv4(),
-  });
+  // Pull schema defaults so a freshly-added layer matches the canonical
+  // shape. `id` is required (no schema default), so we have to seed it
+  // BEFORE the parse — `PatternLayerSchema.parse({})` would throw on the
+  // missing `id` before the spread can override it.
+  const makeBlankLayer = (): PatternLayer =>
+    PatternLayerSchema.parse({ id: uuidv4() }) as PatternLayer;
 
   const handleAdd = () => {
     const newLayer = makeBlankLayer();

@@ -37,6 +37,11 @@ const App = () => {
   const [showWelcome, setShowWelcome] = useState(() => !localStorage.getItem('welcome_modal_dismissed_v2'));
   const [isControlsCollapsed, setIsControlsCollapsed] = useState(false);
   const [activeTab, setActiveTab] = useState<'base' | 'inlay' | 'colorflow' | 'geometry'>('base');
+  // Tile-removal toggle is shared between the viewer's toolbar button
+  // and the Geometry tab's inline toggle so users find it from either
+  // surface (the toolbar Eraser is easy to miss while configuring a
+  // pattern in the right panel).
+  const [tileRemovalMode, setTileRemovalMode] = useState(false);
 
   // Resume banner — seed from localStorage exactly once on mount. We only
   // load the snapshot here; the "user has live work already" check happens
@@ -302,6 +307,8 @@ const App = () => {
                 onInlayChange={setInlaySettings}
                 geometrySettings={geometrySettings}
                 setGeometrySettings={setGeometrySettings}
+                tileRemovalMode={tileRemovalMode}
+                setTileRemovalMode={setTileRemovalMode}
                 meshRef={meshRef}
                 activeTab={activeTab}
                 selectedInlayId={selectedInlayId}
@@ -332,6 +339,8 @@ const App = () => {
               setInlaySettings={setInlaySettings}
               geometrySettings={geometrySettings}
               setGeometrySettings={setGeometrySettings}
+              tileRemovalMode={tileRemovalMode}
+              setTileRemovalMode={setTileRemovalMode}
               onReset={handleReset}
               selectedInlayId={selectedInlayId}
               setSelectedInlayId={setSelectedInlayId}

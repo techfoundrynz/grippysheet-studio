@@ -48,6 +48,12 @@ interface ModelViewerProps {
     };
   } | null;
   colorFlowSettings: ColorFlowSettings;
+  /** When the App lifts the tile-removal mode (so the Geometry tab can
+   *  surface its own toggle), these props let ModelViewer's toolbar
+   *  button mirror that shared state. Optional — falls back to viewer-
+   *  local state when the parent doesn't lift. */
+  tileRemovalMode?: boolean;
+  setTileRemovalMode?: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 const ModelViewer: React.FC<ModelViewerProps> = ({
@@ -64,7 +70,9 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
   previewInlay,
   setPreviewInlay,
   colorFlowGeom,
-  colorFlowSettings
+  colorFlowSettings,
+  tileRemovalMode: tileRemovalModeProp,
+  setTileRemovalMode: setTileRemovalModeProp,
 }) => {
   const { size, thickness, color, cutoutShapes, baseOutlineRotation, baseOutlineMirror } = baseSettings;
   
@@ -116,7 +124,13 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
   // owning layer's `removedTiles` set. Mutually exclusive with normal
   // orbit/drag — OrbitControls remains enabled (so the user can still pan),
   // but the tile-click handler intercepts mouseups on the canvas first.
-  const [tileRemovalMode, setTileRemovalMode] = useState(false);
+  // Lifted to App level so the Geometry tab can also drive it — gives users
+  // a second discovery surface inside the right panel where they're already
+  // configuring patterns. ModelViewer renders the toolbar mirror of the
+  // toggle; props fall back to local state when the parent doesn't lift.
+  const [tileRemovalModeLocal, setTileRemovalModeLocal] = useState(false);
+  const tileRemovalMode = tileRemovalModeProp ?? tileRemovalModeLocal;
+  const setTileRemovalMode = setTileRemovalModeProp ?? setTileRemovalModeLocal;
   // Global processing keys → label. UI shows spinner if non-empty.
   const [processingMap, setProcessingMap] = useState<Map<string, string>>(() => new Map());
 
@@ -702,11 +716,11 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
             didn't pass setGeometrySettings (defensive — should never happen
             in practice but keeps the prop-optional contract intact). */}
         {mode === 'pattern' && setGeometrySettings && (
-          <IconTooltip label="Tile removal mode" shortcut="click tiles to delete">
+          <IconTooltip label="Tile selection — click tiles to remove">
             <button
                 onClick={() => setTileRemovalMode((v) => !v)}
-                className={`p-2 rounded hover:bg-gray-700 transition-colors ${tileRemovalMode ? 'bg-signal-error/15 text-signal-error ring-1 ring-signal-error/40' : 'text-gray-400'}`}
-                aria-label="Toggle tile removal mode"
+                className={`p-2 rounded hover:bg-gray-700 transition-colors ${tileRemovalMode ? 'bg-signal-error/15 text-signal-error ring-1 ring-signal-error/40 shadow-[0_0_12px_rgba(255,56,96,0.35)]' : 'text-gray-400'}`}
+                aria-label="Toggle tile selection mode"
                 aria-pressed={tileRemovalMode}
             >
                 <Eraser size={20} />
