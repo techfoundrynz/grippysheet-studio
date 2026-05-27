@@ -78,7 +78,12 @@ export const InlaySettingsSchema = z.object({
  * tiles to remove them".
  */
 export const PatternLayerSchema = z.object({
-    id: z.string(),
+    // Auto-generated when callers don't supply one — fresh UUID via
+    // `crypto.randomUUID()`. Lets `PatternLayerSchema.parse({})` succeed
+    // so layer-creation paths can't accidentally ship a layer without an
+    // id (the 16a807b bug). The id is also the routing key for asset
+    // round-trip — see `ProjectAssets.extraLayers`.
+    id: z.string().default(() => crypto.randomUUID()),
     shapes: ThreeObjectsSchema.nullable().optional().default(null),
     type: z.enum(['dxf', 'svg', 'stl']).nullable().default(null),
     scale: z.number().default(1),
@@ -195,9 +200,11 @@ export function stripGeometryRuntime(geometry: GeometrySettings): GeometrySettin
  * iterate this rather than special-casing layer 1.
  *
  * Layer 0 corresponds to the primary (flat-field) layer; index 1+ map to
- * `extraLayers`. Layers whose `shapes` are empty/null are filtered out so
- * an "empty extra layer" placeholder in the UI doesn't add a hidden empty
- * tile pass.
+ * `extraLayers[i-1]`. **This mapping is stable regardless of whether a
+ * layer has shapes** — empty layers are kept in the array so that the
+ * iteration index can be used directly as a routing key by click
+ * handlers (`Pattern_<i>` mesh name, `DrawnTile.layerIdx`). Construction
+ * loops must skip layers whose `shapes` are empty by themselves.
  */
 export function getPatternLayers(g: GeometrySettings): PatternLayer[] {
     const primary: PatternLayer = {
@@ -218,6 +225,47 @@ export function getPatternLayers(g: GeometrySettings): PatternLayer[] {
         rotationClamp: g.rotationClamp,
         removedTiles: g.removedTiles ?? [],
     };
-    const all = [primary, ...(g.extraLayers ?? [])];
-    return all.filter((l) => l.shapes && l.shapes.length > 0);
+    return [primary, ...(g.extraLayers ?? [])];
+}
+
+/** Predicate for layers that actually contribute geometry — useful for
+ *  the "is anything visible?" check without losing the stable index that
+ *  `getPatternLayers` callers rely on for click routing. */
+export function isLayerRenderable(layer: PatternLayer): boolean {
+    return !!layer.shapes && layer.shapes.length > 0;
+}
+
+/** Ids the user (or an imported project) cannot use for an `extraLayers`
+ *  entry. `__primary__` is the in-memory sentinel for the synthesized
+ *  primary layer (`getPatternLayers`, `ImperativeModel.primaryLayer`); if
+ *  an imported project carried a layer with that id it would hijack
+ *  routing. */
+export const RESERVED_LAYER_IDS = new Set(['__primary__']);
+
+/**
+ * Replace ids in `extraLayers` that are reserved or that collide with
+ * another layer's id. Returns the (possibly rewritten) array plus a
+ * `Map<oldId, newId>` of any rewrites the caller might need to apply to
+ * a parallel asset bundle. Untouched layers map to themselves so callers
+ * can blindly look up new ids.
+ *
+ * Conservative — never drops a layer. Just hands it a fresh uuid when
+ * its old id is unusable.
+ */
+export function normalizeExtraLayerIds(
+    extras: PatternLayer[]
+): { layers: PatternLayer[]; idMap: Map<string, string> } {
+    const seen = new Set<string>();
+    const idMap = new Map<string, string>();
+    const layers = extras.map((l) => {
+        const original = l.id;
+        let next = original;
+        if (RESERVED_LAYER_IDS.has(next) || seen.has(next)) {
+            next = crypto.randomUUID();
+        }
+        seen.add(next);
+        idMap.set(original, next);
+        return next === original ? l : { ...l, id: next };
+    });
+    return { layers, idMap };
 }

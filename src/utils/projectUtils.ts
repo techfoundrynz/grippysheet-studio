@@ -2,7 +2,7 @@
 import {
     ProjectSchema, ProjectSchemaV1, ProjectDataV2,
     BaseSettings, InlaySettings, GeometrySettings,
-    migrateV1ToV2, stripGeometryRuntime,
+    migrateV1ToV2, stripGeometryRuntime, normalizeExtraLayerIds,
 } from '../types/schemas';
 import { ColorFlowSettings } from '../colorflow/schema';
 import JSZip from 'jszip';
@@ -289,6 +289,24 @@ export const importProjectBundle = async (file: File): Promise<ImportResult> => 
     if (!result.success) {
         console.warn("Schema validation failed:", result.error);
         throw new Error("Invalid project file format or version mismatch.");
+    }
+
+    // Rewrite any extraLayer ids that are reserved or collide. If the
+    // caller's asset bundle was keyed by the old ids, walk it across so
+    // the rehydration in Controls.tsx still finds the right bytes.
+    const { layers: normalizedExtras, idMap } = normalizeExtraLayerIds(result.data.geometry.extraLayers);
+    if ([...idMap.entries()].some(([from, to]) => from !== to)) {
+        const collisions = [...idMap.entries()].filter(([from, to]) => from !== to);
+        console.warn(`[importProjectBundle] rewrote ${collisions.length} reserved/duplicate extraLayer id(s):`, collisions);
+        result.data.geometry.extraLayers = normalizedExtras;
+        if (assets.extraLayers) {
+            const rekeyed: Record<string, typeof assets.extraLayers[string]> = {};
+            for (const [oldId, asset] of Object.entries(assets.extraLayers)) {
+                const newId = idMap.get(oldId) ?? oldId;
+                rekeyed[newId] = asset;
+            }
+            assets.extraLayers = rekeyed;
+        }
     }
 
     // Return full ProjectDataV2.

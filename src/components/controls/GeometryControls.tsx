@@ -27,7 +27,6 @@ import { useAlert } from "../../context/AlertContext";
 import { STLLoader } from "three-stdlib";
 import { getShapesBounds } from "../../utils/patternUtils";
 import { parseShapeFile } from "../../utils/shapeLoader";
-import { v4 as uuidv4 } from "uuid";
 
 interface GeometryControlsProps {
   settings: GeometrySettings;
@@ -672,11 +671,10 @@ const ExtraLayersSection: React.FC<ExtraLayersSectionProps> = ({
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   // Pull schema defaults so a freshly-added layer matches the canonical
-  // shape. `id` is required (no schema default), so we have to seed it
-  // BEFORE the parse — `PatternLayerSchema.parse({})` would throw on the
-  // missing `id` before the spread can override it.
+  // shape. `id` defaults to a fresh `crypto.randomUUID()` via the schema,
+  // so the parse on its own is enough.
   const makeBlankLayer = (): PatternLayer =>
-    PatternLayerSchema.parse({ id: uuidv4() }) as PatternLayer;
+    PatternLayerSchema.parse({}) as PatternLayer;
 
   const handleAdd = () => {
     const newLayer = makeBlankLayer();

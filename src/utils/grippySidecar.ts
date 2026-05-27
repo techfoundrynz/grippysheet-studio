@@ -1,5 +1,5 @@
 import JSZip from 'jszip';
-import { ProjectSchema, ProjectSchemaV1, ProjectDataV2, migrateV1ToV2, stripGeometryRuntime } from '../types/schemas';
+import { ProjectSchema, ProjectSchemaV1, ProjectDataV2, migrateV1ToV2, stripGeometryRuntime, normalizeExtraLayerIds } from '../types/schemas';
 import type { ProjectAssets, Asset } from './projectUtils';
 import { detectAssetType } from './fileTypeSniffer';
 
@@ -163,6 +163,24 @@ export async function readGrippySidecar(zip: JSZip): Promise<GrippySidecarPayloa
                 continue;
             }
             assets.extraLayers[id] = await processEntry(zip.files[path], 'extraLayer');
+        }
+    }
+
+    // Rewrite reserved/duplicate extraLayer ids. Mirrors the .zip path in
+    // projectUtils.importProjectBundle so both routes apply the same id
+    // safety contract.
+    const { layers: normalizedExtras, idMap } = normalizeExtraLayerIds(project.geometry.extraLayers);
+    if ([...idMap.entries()].some(([from, to]) => from !== to)) {
+        const collisions = [...idMap.entries()].filter(([from, to]) => from !== to);
+        console.warn(`[grippySidecar] rewrote ${collisions.length} reserved/duplicate extraLayer id(s):`, collisions);
+        project.geometry.extraLayers = normalizedExtras;
+        if (assets.extraLayers) {
+            const rekeyed: Record<string, Asset> = {};
+            for (const [oldId, asset] of Object.entries(assets.extraLayers)) {
+                const newId = idMap.get(oldId) ?? oldId;
+                rekeyed[newId] = asset;
+            }
+            assets.extraLayers = rekeyed;
         }
     }
 

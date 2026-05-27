@@ -901,10 +901,14 @@ const ImperativeModel = React.forwardRef((props: ImperativeModelProps, ref: Reac
         rotationClamp: rotationClamp,
         removedTiles: removedTiles ?? [],
     };
-    const allLayers: ResolvedLayer[] = [primaryLayer, ...(extraLayers ?? [])]
-        .filter((l) => l.shapes && l.shapes.length > 0);
+    // Keep the full array (including empty layers) so each layer's
+    // position here is the stable routing index used by click handlers
+    // (`Pattern_<layerIdx>` mesh name → tile-removal lookup). The body of
+    // the loop below skips layers without shapes; we just don't drop them
+    // here. See `getPatternLayers` in schemas.ts for the matching contract.
+    const allLayers: ResolvedLayer[] = [primaryLayer, ...(extraLayers ?? [])];
 
-    if (allLayers.length === 0) return;
+    if (!allLayers.some((l) => l.shapes && l.shapes.length > 0)) return;
 
     // ---------------------------------------------------------
     // 1. Shared infrastructure (cutters, masks, bounds) — built ONCE,
@@ -943,6 +947,14 @@ const ImperativeModel = React.forwardRef((props: ImperativeModelProps, ref: Reac
     allLayers.forEach((layer, layerIdx) => {
         const layerShapes = layer.shapes;
         if (!layerShapes || layerShapes.length === 0) return;
+
+        // Per-layer error fence. CSG / mergeGeometries / mergeVertices can
+        // throw on degenerate input (zero-area triangles, NaN vertices,
+        // a tile set fully clipped to nothing). Without this, one bad
+        // layer aborts the whole `allLayers.forEach` and silently drops
+        // every subsequent layer's mesh. We log and continue so the rest
+        // of the deck still renders.
+        try {
 
         const layerScale = layer.scale ?? 1;
         const layerScaleZNum = typeof layer.scaleZ === 'number' ? layer.scaleZ : Number(layer.scaleZ);
@@ -1368,6 +1380,15 @@ const ImperativeModel = React.forwardRef((props: ImperativeModelProps, ref: Reac
         // unitGeo: the InstancedMesh path retains it as the shared geometry;
         // CSG path doesn't need it after merging.
         if (layerUseCSG) unitGeo.dispose();
+
+        } catch (err) {
+            // One layer's CSG / merge failed. The rebuild that re-runs
+            // this effect will retry from scratch — for now, log and let
+            // the loop continue so other layers still get meshes. Some
+            // intermediate buffers may leak from this layer; the rebuild
+            // sweep cleans them up by name on next pass.
+            console.error(`[ImperativeModel] layer ${layerIdx} construction threw — skipping this layer.`, err);
+        }
     });
 
     // Reference useCSG so an unused-var warning doesn't surface — it's the

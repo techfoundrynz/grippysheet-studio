@@ -230,6 +230,12 @@ const Controls: React.FC<ControlsProps> = ({
                    let newInlay = data.inlay;
                    let newGeometry = data.geometry;
 
+                   // Collect any per-asset rehydration failures so we can
+                   // tell the user about them in one toast instead of
+                   // showing a green success while layers silently arrive
+                   // empty. Each entry is human-readable.
+                   const rehydrationFailures: string[] = [];
+
                    // Re-hydrate Shapes from Assets if available. Image-type
                    // assets (ColorFlow raster) can't be reparsed as shapes,
                    // so they're skipped here — they're handled separately
@@ -241,6 +247,9 @@ const Controls: React.FC<ControlsProps> = ({
                            const res = parseShapeFile(importedAssets.baseOutline.content, importedAssets.baseOutline.type);
                            if (res.success) {
                                newBase = { ...newBase, cutoutShapes: res.shapes };
+                           } else {
+                               console.error('[Import] Failed to parse base outline:', res.error);
+                               rehydrationFailures.push(`Base outline (${importedAssets.baseOutline.name})`);
                            }
                        }
 
@@ -250,16 +259,18 @@ const Controls: React.FC<ControlsProps> = ({
                            const res = parseShapeFile(importedAssets.pattern.content, importedAssets.pattern.type);
                            if (res.success) {
                                // Ensure we update all relevant fields
-                               newGeometry = { 
-                                   ...newGeometry, 
-                                   patternShapes: res.shapes, 
-                                   patternType: importedAssets.pattern.type as any 
+                               newGeometry = {
+                                   ...newGeometry,
+                                   patternShapes: res.shapes,
+                                   patternType: importedAssets.pattern.type as any
                                };
                            } else {
                                console.error("[Import] Failed to parse pattern:", res.error);
+                               rehydrationFailures.push(`Pattern (${importedAssets.pattern.name})`);
                            }
                        } else if (newGeometry.patternShapes) {
                             console.warn("[Import] Pattern shapes present in settings but missing from assets bundle.");
+                            rehydrationFailures.push('Primary pattern (asset bytes missing)');
                        }
 
                        // 4. Extra pattern layers — re-parse each layer's
@@ -267,15 +278,27 @@ const Controls: React.FC<ControlsProps> = ({
                        //    so the construction loop has live geometry again.
                        //    The settings already carry per-layer `type` /
                        //    `assetName` etc. from the sidecar JSON.
-                       if (importedAssets.extraLayers && newGeometry.extraLayers) {
+                       if (newGeometry.extraLayers && newGeometry.extraLayers.length > 0) {
                            newGeometry = {
                                ...newGeometry,
-                               extraLayers: newGeometry.extraLayers.map((l) => {
+                               extraLayers: newGeometry.extraLayers.map((l, i) => {
+                                   const layerLabel = l.assetName ? `Layer ${i + 2} (${l.assetName})` : `Layer ${i + 2}`;
                                    const asset = importedAssets.extraLayers?.[l.id];
-                                   if (!asset || !isShapeAsset(asset.type)) return l;
+                                   if (!asset) {
+                                       // Settings carry this layer but no
+                                       // bytes shipped with it. User will
+                                       // see an empty layer card.
+                                       if (l.assetName) {
+                                           console.warn('[Import] Extra layer asset missing:', l.id, l.assetName);
+                                           rehydrationFailures.push(`${layerLabel} — asset bytes missing`);
+                                       }
+                                       return l;
+                                   }
+                                   if (!isShapeAsset(asset.type)) return l;
                                    const res = parseShapeFile(asset.content, asset.type);
                                    if (!res.success) {
                                        console.error('[Import] Failed to parse extra layer:', l.id, res.error);
+                                       rehydrationFailures.push(`${layerLabel} — failed to parse`);
                                        return l;
                                    }
                                    return { ...l, shapes: res.shapes, type: asset.type };
@@ -317,7 +340,17 @@ const Controls: React.FC<ControlsProps> = ({
                    setBaseSettings(newBase);
                    setInlaySettings(newInlay);
                    setGeometrySettings(newGeometry);
-                   emitToast({ message: 'Project loaded', detail: 'settings + assets restored', tone: 'ready' });
+                   if (rehydrationFailures.length === 0) {
+                       emitToast({ message: 'Project loaded', detail: 'settings + assets restored', tone: 'ready' });
+                   } else {
+                       const head = rehydrationFailures.slice(0, 3).join(' · ');
+                       const tail = rehydrationFailures.length > 3 ? ` (+${rehydrationFailures.length - 3} more)` : '';
+                       emitToast({
+                           message: 'Project loaded with missing assets',
+                           detail: `${head}${tail}`,
+                           tone: 'error',
+                       });
+                   }
               };
 
               if (versionMismatch) {
