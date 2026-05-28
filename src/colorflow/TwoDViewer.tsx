@@ -659,7 +659,11 @@ export const TwoDViewer: React.FC<Props> = ({
     // toggleSpikeAt is bypassed by feeding it just the hit tile (or none).
     const idx = findTileAt(cx, cy);
     const hit = idx >= 0 ? drawnTilesRef.current[idx] : null;
-    const positions: SpikePosition[] = hit && hit.layerIdx === 0
+    // Clicking a dormant extra-layer tile (from a legacy project) is a
+    // no-op — we only manage the primary layer's spikes now. Without this
+    // guard the click would fall through to a spurious primary add.
+    if (hit && hit.layerIdx !== 0) return;
+    const positions: SpikePosition[] = hit
       ? [{ x: hit.x, y: hit.y, origin: hit.origin }]
       : [];
     onGeometryChange((prev) => {
@@ -688,6 +692,19 @@ export const TwoDViewer: React.FC<Props> = ({
   const handlePointerUp = useCallback(() => {
     draggingRef.current = false;
     draggedRef.current = [];
+  }, []);
+
+  // Window-level pointerup/cancel so a release OUTSIDE the canvas still ends
+  // the drag — parity with the 3D handler. The div's onPointerUp covers the
+  // common case; this covers fast swipes that release off-canvas.
+  useEffect(() => {
+    const end = () => { draggingRef.current = false; draggedRef.current = []; };
+    window.addEventListener('pointerup', end);
+    window.addEventListener('pointercancel', end);
+    return () => {
+      window.removeEventListener('pointerup', end);
+      window.removeEventListener('pointercancel', end);
+    };
   }, []);
 
   return (

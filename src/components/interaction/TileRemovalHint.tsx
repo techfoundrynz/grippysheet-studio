@@ -40,6 +40,7 @@ export const TileRemovalHint: React.FC<TileRemovalHintProps> = ({
     const raycaster = useMemo(() => new THREE.Raycaster(), []);
     const plane = useMemo(() => new THREE.Plane(), []);
     const planeNormal = useMemo(() => new THREE.Vector3(0, 0, 1), []);
+    const planePoint = useMemo(() => new THREE.Vector3(), []);
     const hitPoint = useMemo(() => new THREE.Vector3(), []);
     const [hover, setHover] = useState<{ position: THREE.Vector3; size: number; mode: 'add' | 'remove' } | null>(null);
     const dragging = useRef(false);
@@ -57,8 +58,10 @@ export const TileRemovalHint: React.FC<TileRemovalHintProps> = ({
         const m: THREE.Mesh = mesh;
         const cached = m.userData?.tilePositions as SpikePosition[] | undefined;
         const tileR = (m.userData?.tileR as number | undefined) ?? 6;
-        if (!m.geometry.boundingBox) m.geometry.computeBoundingBox();
-        const topZ = m.geometry.boundingBox ? m.geometry.boundingBox.max.z : 5;
+        // Spike-top z is cached on userData by ImperativeModel, so we never
+        // compute a bounding box inside the frame loop (which could race a
+        // concurrent geometry rebuild). Fall back to 5 if absent.
+        const topZ = (m.userData?.topZ as number | undefined) ?? 5;
         return { positions: cached ?? [], tileR, topZ };
     };
 
@@ -73,7 +76,7 @@ export const TileRemovalHint: React.FC<TileRemovalHintProps> = ({
             if (hover) setHover(null);
             return;
         }
-        plane.setFromNormalAndCoplanarPoint(planeNormal, new THREE.Vector3(0, 0, primary.topZ));
+        plane.setFromNormalAndCoplanarPoint(planeNormal, planePoint.set(0, 0, primary.topZ));
         raycaster.setFromCamera(state.pointer, camera);
         if (!raycaster.ray.intersectPlane(plane, hitPoint)) {
             if (hover) setHover(null);
@@ -113,7 +116,7 @@ export const TileRemovalHint: React.FC<TileRemovalHintProps> = ({
             ((clientX - rect.left) / rect.width) * 2 - 1,
             -((clientY - rect.top) / rect.height) * 2 + 1,
         );
-        plane.setFromNormalAndCoplanarPoint(planeNormal, new THREE.Vector3(0, 0, primary.topZ));
+        plane.setFromNormalAndCoplanarPoint(planeNormal, planePoint.set(0, 0, primary.topZ));
         raycaster.setFromCamera(ndc, camera);
         const out = new THREE.Vector3();
         if (!raycaster.ray.intersectPlane(plane, out)) return null;

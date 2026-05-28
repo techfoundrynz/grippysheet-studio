@@ -1095,6 +1095,10 @@ const ImperativeModel = React.forwardRef((props: ImperativeModelProps, ref: Reac
                 origin: i < gridCount ? 'grid' : 'added',
             }));
             iMesh.userData.tileR = Math.max(pWidth, pHeight, 1) * 0.75;
+            // Spike-top z (deck top + spike height) — the tile-removal hint
+            // reads this for its click-plane instead of computing a bbox in
+            // its frame loop.
+            iMesh.userData.topZ = thickness + maxPatternHeight;
 
             const dummy = new THREE.Object3D();
             positions.forEach((p, i) => {
@@ -1395,6 +1399,7 @@ const ImperativeModel = React.forwardRef((props: ImperativeModelProps, ref: Reac
                 origin: i < gridCount ? 'grid' : 'added',
             }));
             resultBrush.userData.tileR = Math.max(pWidth, pHeight, 1) * 0.75;
+            resultBrush.userData.topZ = thickness + maxPatternHeight;
             group.add(resultBrush);
         } else {
             console.warn(`Pattern layer ${layerIdx} produced empty geometry after CSG.`);
