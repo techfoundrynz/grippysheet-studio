@@ -85,6 +85,18 @@ const App = () => {
   // pattern in the right panel).
   const [tileRemovalMode, setTileRemovalMode] = useState(false);
 
+  // On mobile the controls are a bottom sheet that covers the viewer when
+  // expanded. Tile-selection happens by tapping spikes on the deck, so when
+  // the user turns the mode on (e.g. from the Geometry tab's pill, inside
+  // the expanded sheet) we drop the sheet to peek to expose the deck. No-op
+  // on desktop, where the controls are a static side panel.
+  React.useEffect(() => {
+    if (tileRemovalMode && typeof window !== 'undefined'
+        && window.matchMedia('(max-width: 767px)').matches) {
+      setIsControlsCollapsed(true);
+    }
+  }, [tileRemovalMode]);
+
   // Resume banner — seed from localStorage exactly once on mount. We only
   // load the snapshot here; the "user has live work already" check happens
   // below against the App's actual initial state (which is just defaults
