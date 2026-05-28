@@ -88,6 +88,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
       clipToOutline, debugMode, patternColor: geomPatternColor, rotationClamp,
       holeMode,
       removedTiles: geomRemovedTiles,
+      addedSpikes: geomAddedSpikes,
       extraLayers: geomExtraLayers,
   } = geometrySettings;
 
@@ -1062,6 +1063,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
                 rotationClamp={rotationClamp}
                 patternMaxHeight={geometrySettings.patternMaxHeight === '' ? undefined : Number(geometrySettings.patternMaxHeight)}
                 removedTiles={geomRemovedTiles}
+                addedSpikes={geomAddedSpikes}
                 extraLayers={geomExtraLayers}
                 clipToOutline={clipToOutline}
                 holeMode={holeMode}

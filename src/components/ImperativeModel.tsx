@@ -33,6 +33,9 @@ interface ImperativeModelProps {
    *  `"x.xx,y.yy"` keys; positions matching these are dropped from
    *  the layer's instance list. */
   removedTiles?: string[];
+  /** Free-placed spikes for the PRIMARY layer — appended to the generated
+   *  grid positions so they render. World (x,y) in mm. */
+  addedSpikes?: { x: number; y: number }[];
   /** Additional compound pattern layers stacked on top of the primary
    *  flat-field one. Layer 0 = primary (synthesized from flat props);
    *  layers 1+ come from this array. Each renders as its own
@@ -87,6 +90,7 @@ const ImperativeModel = React.forwardRef((props: ImperativeModelProps, ref: Reac
   rotationClamp,
   patternMaxHeight,
   removedTiles,
+  addedSpikes,
   extraLayers,
   clipToOutline = false,
   baseOutlineRotation = 0,
@@ -900,7 +904,7 @@ const ImperativeModel = React.forwardRef((props: ImperativeModelProps, ref: Reac
         rotation: baseRotation,
         rotationClamp: rotationClamp,
         removedTiles: removedTiles ?? [],
-        addedSpikes: [],
+        addedSpikes: addedSpikes ?? [],
     };
     // Keep the full array (including empty layers) so each layer's
     // position here is the stable routing index used by click handlers
@@ -1033,7 +1037,16 @@ const ImperativeModel = React.forwardRef((props: ImperativeModelProps, ref: Reac
 
         // Drop user-removed tiles. Done AFTER generation so a removed key
         // stays stable across unrelated settings tweaks (see filterRemovedTiles).
-        const positions: TileInstance[] = filterRemovedTiles(rawPositions, layer.removedTiles);
+        const gridPositions: TileInstance[] = filterRemovedTiles(rawPositions, layer.removedTiles);
+        const gridCount = gridPositions.length;
+        const positions: TileInstance[] = [
+            ...gridPositions,
+            ...(layer.addedSpikes ?? []).map((p) => ({
+                position: new THREE.Vector2(p.x, p.y),
+                rotation: 0,
+                scale: 1,
+            })),
+        ];
 
         if (positions.length === 0) {
             unitGeo.dispose();
@@ -1073,7 +1086,11 @@ const ImperativeModel = React.forwardRef((props: ImperativeModelProps, ref: Reac
             // back to the canonical tileKey even after CSG merges this mesh.
             // Always stored from the un-modified `positions` array so the
             // key survives any later matrix transforms.
-            iMesh.userData.tilePositions = positions.map((p) => ({ x: p.position.x, y: p.position.y }));
+            iMesh.userData.tilePositions = positions.map((p, i) => ({
+                x: p.position.x, y: p.position.y,
+                origin: i < gridCount ? 'grid' : 'added',
+            }));
+            iMesh.userData.tileR = Math.max(pWidth, pHeight, 1) * 0.6;
 
             const dummy = new THREE.Object3D();
             positions.forEach((p, i) => {
@@ -1369,7 +1386,11 @@ const ImperativeModel = React.forwardRef((props: ImperativeModelProps, ref: Reac
             // a raycast hit on the CSG-merged result back to the canonical
             // tileKey (CSG destroys per-instance identity, so we cache the
             // original tile origins on userData instead).
-            resultBrush.userData.tilePositions = positions.map((p) => ({ x: p.position.x, y: p.position.y }));
+            resultBrush.userData.tilePositions = positions.map((p, i) => ({
+                x: p.position.x, y: p.position.y,
+                origin: i < gridCount ? 'grid' : 'added',
+            }));
+            resultBrush.userData.tileR = Math.max(pWidth, pHeight, 1) * 0.6;
             group.add(resultBrush);
         } else {
             console.warn(`Pattern layer ${layerIdx} produced empty geometry after CSG.`);
@@ -1412,7 +1433,7 @@ const ImperativeModel = React.forwardRef((props: ImperativeModelProps, ref: Reac
       isTiled, tileSpacing, patternMargin, tilingDistribution, tilingOrientation, tilingDirection,
       clipToOutline, displayMode, inlayItems, baseRotation, rotationClamp,
       thickness, filledCutoutShapes, holeShapes, patternShapes, size, patternMaxHeight,
-      holeMode, removedTiles, extraLayers,
+      holeMode, removedTiles, addedSpikes, extraLayers,
   ]);
 
   // --- 4. Debug Visibility & Material Effect ---
