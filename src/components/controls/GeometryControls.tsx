@@ -72,7 +72,12 @@ const GeometryControls: React.FC<GeometryControlsProps> = ({
     patternColor,
   } = settings;
 
-  const [showPatternLibrary, setShowPatternLibrary] = useState(false);
+  // Pattern Library trigger surface. `target` says which layer the next
+  // library pick should load into: `{ kind: 'primary' }` routes to the
+  // flat `patternShapes` field (legacy), `{ kind: 'extra', id }` routes
+  // to the matching `extraLayers[i]`. `null` means modal is closed.
+  type LibraryTarget = { kind: 'primary' } | { kind: 'extra'; id: string };
+  const [libraryTarget, setLibraryTarget] = useState<LibraryTarget | null>(null);
   const [libraryPatternName, setLibraryPatternName] = useState<string | null>(
     null
   );
@@ -184,7 +189,7 @@ const GeometryControls: React.FC<GeometryControlsProps> = ({
         allowedTypes={["stl"]}
         adornment={
           <button
-            onClick={() => setShowPatternLibrary(true)}
+            onClick={() => setLibraryTarget({ kind: 'primary' })}
             className={
               "p-1 rounded-lg transition-colors border bg-gray-700/50 hover:bg-gray-700 text-gray-400 hover:text-white border-gray-600 hover:border-gray-500"
             }
@@ -196,35 +201,65 @@ const GeometryControls: React.FC<GeometryControlsProps> = ({
       />
 
       <PatternLibraryModal
-        isOpen={showPatternLibrary}
-        onClose={() => setShowPatternLibrary(false)}
+        isOpen={libraryTarget !== null}
+        onClose={() => setLibraryTarget(null)}
         onSelect={async (preset) => {
-          setShowPatternLibrary(false);
+          const target = libraryTarget;
+          setLibraryTarget(null);
+          if (!target) return;
           emitProcessing({ key: 'geometry:pattern-fetch', busy: true, label: 'loading pattern' });
           try {
+            // Fetch + parse. Branch on type but produce the same
+            // `(shapes, type, name, content)` payload for either kind
+            // of layer below.
+            let shapes: any[] = [];
+            let content: string | ArrayBuffer | null = null;
             if (preset.type === "stl") {
                const response = await fetch(`/${preset.category}/${preset.file}`);
                const buffer = await response.arrayBuffer();
-
               const loader = new STLLoader();
               const geometry = loader.parse(buffer);
               geometry.center(); // Auto-center STLs
-              handlePatternLoaded([geometry], preset.type, preset.name, buffer);
-
+              shapes = [geometry];
+              content = buffer;
             } else {
-               // For DXF/SVG, we need text content
                const response = await fetch(`/${preset.category}/${preset.file}`);
                const text = await response.text();
-
                const result = parseShapeFile(text, preset.type as 'dxf' | 'svg');
-               if (result.success) {
-                   handlePatternLoaded(result.shapes, preset.type, preset.name, text);
-               } else {
+               if (!result.success) {
                    console.error("Failed to parse library pattern:", result.error);
+                   return;
                }
+               shapes = result.shapes;
+               content = text;
             }
 
-            setLibraryPatternName(preset.name);
+            if (target.kind === 'primary') {
+               handlePatternLoaded(shapes, preset.type, preset.name, content);
+               setLibraryPatternName(preset.name);
+            } else {
+               // Extra layer: write shapes + type + assetName into the
+               // matching layer entry, and pump the source bytes through
+               // the asset channel so round-trip survives.
+               const extras = settings.extraLayers ?? [];
+               const idx = extras.findIndex((l) => l.id === target.id);
+               if (idx < 0) return;
+               const updated = extras.slice();
+               updated[idx] = {
+                 ...updated[idx],
+                 shapes,
+                 type: preset.type as 'dxf' | 'svg' | 'stl',
+                 assetName: preset.name,
+               };
+               updateSettings({ extraLayers: updated });
+               if (onExtraLayerAssetChanged && content !== null) {
+                 onExtraLayerAssetChanged(target.id, {
+                   name: preset.name,
+                   content,
+                   type: preset.type as 'dxf' | 'svg' | 'stl',
+                 });
+               }
+            }
           } catch (error) {
             console.error("Failed to load pattern:", error);
             showAlert({
@@ -646,6 +681,7 @@ const GeometryControls: React.FC<GeometryControlsProps> = ({
         updateSettings={updateSettings}
         baseSize={baseSize}
         onExtraLayerAssetChanged={onExtraLayerAssetChanged}
+        onOpenLibrary={(id) => setLibraryTarget({ kind: 'extra', id })}
       />
     </section>
   );
@@ -662,6 +698,9 @@ interface ExtraLayersSectionProps {
   updateSettings: (updates: Partial<GeometrySettings>) => void;
   baseSize: number;
   onExtraLayerAssetChanged?: (id: string, asset: { name: string, content: string | ArrayBuffer, type: 'dxf' | 'svg' | 'stl' } | null) => void;
+  /** Open the parent's PatternLibraryModal targeting this layer's id —
+   *  selections route into the matching `extraLayers[i]` entry. */
+  onOpenLibrary?: (id: string) => void;
 }
 
 const ExtraLayersSection: React.FC<ExtraLayersSectionProps> = ({
@@ -669,6 +708,7 @@ const ExtraLayersSection: React.FC<ExtraLayersSectionProps> = ({
   updateSettings,
   baseSize,
   onExtraLayerAssetChanged,
+  onOpenLibrary,
 }) => {
   const extras = settings.extraLayers ?? [];
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -754,6 +794,7 @@ const ExtraLayersSection: React.FC<ExtraLayersSectionProps> = ({
                 }}
                 onUpdate={(patch) => updateLayer(layer.id, patch)}
                 onAssetChanged={(asset) => onExtraLayerAssetChanged?.(layer.id, asset)}
+                onOpenLibrary={onOpenLibrary ? () => onOpenLibrary(layer.id) : undefined}
                 baseSize={baseSize}
               />
             ))}
@@ -773,6 +814,7 @@ const ExtraLayersSection: React.FC<ExtraLayersSectionProps> = ({
 };
 
 interface ExtraLayerCardProps {
+  onOpenLibrary?: () => void;
   layer: PatternLayer;
   index: number;
   isExpanded: boolean;
@@ -791,6 +833,7 @@ const ExtraLayerCard: React.FC<ExtraLayerCardProps> = ({
   onDelete,
   onUpdate,
   onAssetChanged,
+  onOpenLibrary,
   baseSize,
 }) => {
   const layerName = `Layer ${index + 2}`; // Primary is layer 1
@@ -935,6 +978,19 @@ const ExtraLayerCard: React.FC<ExtraLayerCardProps> = ({
               onAssetChanged?.(null);
             }}
             allowedTypes={["stl"]}
+            adornment={
+              onOpenLibrary ? (
+                <button
+                  type="button"
+                  onClick={onOpenLibrary}
+                  className="p-1 rounded-lg transition-colors border bg-gray-700/50 hover:bg-gray-700 text-gray-400 hover:text-white border-gray-600 hover:border-gray-500"
+                  title="Open Pattern Library"
+                  aria-label="Open Pattern Library"
+                >
+                  <BookOpen size={12} />
+                </button>
+              ) : undefined
+            }
           />
 
           {layer.shapes && layer.shapes.length > 0 && (

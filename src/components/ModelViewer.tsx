@@ -964,7 +964,14 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
       <ErrorBoundary>
       <div className={renderMode === '3d' ? 'absolute inset-0' : 'hidden'}>
       <Canvas shadows onCreated={() => setCanvasReady(true)}>
-        <OrthographicCamera makeDefault={cameraType === 'orthographic'} position={[0, -1, 1000]} near={-2000} far={2000} up={[0, 0, 1]} />
+        {/* Top-down ortho. `up={[0, 1, 0]}` is critical: with the world's
+            z-up convention and a camera looking straight down -Z, using
+            `up=[0,0,1]` is parallel to the view direction (gimbal lock) —
+            the resulting camera basis is degenerate and Raycaster builds
+            invalid rays so click-to-remove silently misses every tile.
+            See TileRemovalHint. The perspective iso camera keeps z-up
+            because its view direction isn't parallel to z. */}
+        <OrthographicCamera makeDefault={cameraType === 'orthographic'} position={[0, 0, 1000]} near={-2000} far={2000} up={[0, 1, 0]} />
         <PerspectiveCamera makeDefault={cameraType === 'perspective'} position={[500, -500, 500]} near={0.1} far={5000} up={[0, 0, 1]} fov={45} />
         
         {showFps && <FpsTracker fpsRef={fpsRef as React.RefObject<HTMLDivElement>} />}

@@ -31,8 +31,11 @@ const CameraRig: React.FC<CameraRigProps> = ({ viewState, size, setCameraType })
     // 1. Setup based on View Type
     if (viewState.type === 'ortho') {
       // Transition to Ortho:
-      // Keep Perspective (don't switch yet)
-      targetPos.current.set(0, -1, 1000); // Top view position
+      // Keep Perspective (don't switch yet). Camera lands straight above
+      // the pad — pairs with the OrthographicCamera's `up=[0,1,0]` in
+      // ModelViewer so the camera basis is well-defined (avoiding the
+      // gimbal-lock-breaks-raycaster trap that nuked tile clicks).
+      targetPos.current.set(0, 0, 1000); // Top view position
       
       // Calculate target zoom for Fit (to apply later)
       const minDim = Math.min(canvasSize.width, canvasSize.height);
