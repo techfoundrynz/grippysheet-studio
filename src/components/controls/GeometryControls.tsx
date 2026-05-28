@@ -676,13 +676,10 @@ const GeometryControls: React.FC<GeometryControlsProps> = ({
         </>
       )}
 
-      <ExtraLayersSection
-        settings={settings}
-        updateSettings={updateSettings}
-        baseSize={baseSize}
-        onExtraLayerAssetChanged={onExtraLayerAssetChanged}
-        onOpenLibrary={(id) => setLibraryTarget({ kind: 'extra', id })}
-      />
+      {/* Compound "extra layers" UI intentionally hidden — the schema,
+          construction, and round-trip code remain so existing projects with
+          extraLayers still load and render. Re-enable by restoring this
+          <ExtraLayersSection/> render. */}
     </section>
   );
 };
@@ -812,6 +809,10 @@ const ExtraLayersSection: React.FC<ExtraLayersSectionProps> = ({
     </div>
   );
 };
+
+// ExtraLayersSection render is intentionally hidden (see comment in GeometryControls
+// JSX above). Keep the symbol referenced so noUnusedLocals doesn't reject it.
+void ExtraLayersSection;
 
 interface ExtraLayerCardProps {
   onOpenLibrary?: () => void;
