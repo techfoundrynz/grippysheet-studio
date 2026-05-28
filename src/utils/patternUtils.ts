@@ -94,10 +94,9 @@ export function toggleSpikeAt(
         return { removedTiles: [...removedTiles, key], addedSpikes };
     }
 
-    const targetKey = tileKey(best.x, best.y);
     return {
         removedTiles,
-        addedSpikes: addedSpikes.filter((p) => tileKey(p.x, p.y) !== targetKey),
+        addedSpikes: addedSpikes.filter((p) => !(p.x === best.x && p.y === best.y)),
     };
 }
 

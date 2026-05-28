@@ -218,4 +218,10 @@ describe('toggleSpikeAt', () => {
         expect(res.addedSpikes).toEqual([]);
         expect(res.removedTiles).toEqual([]);
     });
+
+    it('adds a spike when there are no existing positions at all', () => {
+        const res = toggleSpikeAt(7, 8, [], [], [], R);
+        expect(res.removedTiles).toEqual([]);
+        expect(res.addedSpikes).toEqual([{ x: 7, y: 8 }]);
+    });
 });
