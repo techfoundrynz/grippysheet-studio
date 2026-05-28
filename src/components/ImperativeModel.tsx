@@ -1039,6 +1039,10 @@ const ImperativeModel = React.forwardRef((props: ImperativeModelProps, ref: Reac
         // stays stable across unrelated settings tweaks (see filterRemovedTiles).
         const gridPositions: TileInstance[] = filterRemovedTiles(rawPositions, layer.removedTiles);
         const gridCount = gridPositions.length;
+        // Free-placed spikes use rotation 0 / scale 1 — they get the same
+        // rotated unit geometry as grid spikes (the unit rotation is baked
+        // into `unitGeo`), they just opt out of per-tile orientation
+        // (alternate/aligned/random), which is meaningless for a hand-placed point.
         const positions: TileInstance[] = [
             ...gridPositions,
             ...(layer.addedSpikes ?? []).map((p) => ({
