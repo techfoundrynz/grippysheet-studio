@@ -31,6 +31,10 @@ interface SegmentedControlProps<T extends string> {
    *   via `react-freeze`, so there is no perf reason to defer activation.
    */
   semantics?: 'radio' | 'tab';
+  /** Tighter padding + smaller text so a strip with several entries (e.g.
+   *  the 4-section right-panel tabs) fits the fixed-width panel without the
+   *  last entry overflowing/clipping. */
+  compact?: boolean;
 }
 
 export function SegmentedControl<T extends string>({
@@ -40,8 +44,10 @@ export function SegmentedControl<T extends string>({
   className = '',
   'aria-label': ariaLabel,
   semantics = 'radio',
+  compact = false,
 }: SegmentedControlProps<T>) {
   const isTab = semantics === 'tab';
+  const sizing = compact ? 'py-1.5 px-2 text-xs gap-1' : 'py-1.5 px-3 text-sm gap-2';
 
   // Arrow-key navigation for the tablist variant. Computes prev/next from
   // the enabled options only, wrapping at the edges. Activates immediately
@@ -99,7 +105,7 @@ export function SegmentedControl<T extends string>({
             tabIndex={isActive ? 0 : -1}
             onClick={() => { if (!isDisabled) onChange(option.value); }}
             disabled={isDisabled}
-            className={`flex-1 flex items-center justify-center gap-2 py-1.5 px-3 rounded-md text-sm font-medium transition-all ${
+            className={`flex-1 min-w-0 flex items-center justify-center rounded-md font-medium transition-all ${sizing} ${
               isDisabled
                 ? 'text-gray-600 cursor-not-allowed opacity-50'
                 : isActive

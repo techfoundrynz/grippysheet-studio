@@ -535,16 +535,17 @@ const Controls: React.FC<ControlsProps> = ({
             const colorFlowCount = colorFlowPaletteSize;
             const geometryFilled = !!(geometrySettings.patternShapes && geometrySettings.patternShapes.length > 0);
             const dot = (active: boolean) => (
-              <span className={`ml-1.5 inline-block w-1.5 h-1.5 rounded-full ${active ? 'bg-signal-ready shadow-[0_0_6px_rgba(0,255,136,0.7)]' : 'bg-gray-700'}`} />
+              <span className={`ml-1 inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 ${active ? 'bg-signal-ready shadow-[0_0_6px_rgba(0,255,136,0.7)]' : 'bg-gray-700'}`} />
             );
             const count = (n: number) => (
-              <span className={`ml-1.5 inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded text-[9px] font-mono font-semibold ${n > 0 ? 'bg-signal-ready/15 text-signal-ready' : 'bg-gray-800 text-gray-600'}`}>
+              <span className={`ml-1 inline-flex items-center justify-center min-w-[14px] h-4 px-0.5 rounded text-[9px] font-mono font-semibold flex-shrink-0 ${n > 0 ? 'bg-signal-ready/15 text-signal-ready' : 'bg-gray-800 text-gray-600'}`}>
                 {n}
               </span>
             );
             return (
               <SegmentedControl
                 semantics="tab"
+                compact
                 aria-label="Right panel section"
                 value={activeTab}
                 onChange={(val) => setActiveTab(val as any)}
