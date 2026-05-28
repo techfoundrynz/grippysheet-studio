@@ -99,6 +99,10 @@ export const PatternLayerSchema = z.object({
     rotation: z.number().default(0),
     rotationClamp: z.number().optional(),
     removedTiles: z.array(z.string()).default([]),
+    /** Free-placed spikes at arbitrary world (x,y) — added by clicking
+     *  empty deck in tile-selection mode. Appended to the generated grid
+     *  positions at construction time. Plain numbers, JSON-safe. */
+    addedSpikes: z.array(z.object({ x: z.number(), y: z.number() })).default([]),
     /** Per-layer asset filename — referenced by the 3MF sidecar so
      *  each extra layer's source bytes round-trip on save. */
     assetName: z.string().optional(),
@@ -125,6 +129,8 @@ export const GeometrySettingsSchema = z.object({
      *  `PatternLayer.removedTiles`. Enables thinning out the radial /
      *  grid via direct canvas clicks. */
     removedTiles: z.array(z.string()).default([]),
+    /** Free-placed spikes for the primary layer — see PatternLayer.addedSpikes. */
+    addedSpikes: z.array(z.object({ x: z.number(), y: z.number() })).default([]),
 
     // --- Additional layers (compound patterns, opt-in) ---------------
     extraLayers: z.array(PatternLayerSchema).default([]),
@@ -224,6 +230,7 @@ export function getPatternLayers(g: GeometrySettings): PatternLayer[] {
         rotation: g.baseRotation,
         rotationClamp: g.rotationClamp,
         removedTiles: g.removedTiles ?? [],
+        addedSpikes: g.addedSpikes ?? [],
     };
     return [primary, ...(g.extraLayers ?? [])];
 }

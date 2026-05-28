@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { tileKey, filterRemovedTiles, generateTilePositions } from '../patternUtils';
-import { normalizeExtraLayerIds, PatternLayerSchema } from '../../types/schemas';
+import { normalizeExtraLayerIds, PatternLayerSchema, GeometrySettingsSchema, getPatternLayers } from '../../types/schemas';
 
 describe('tileKey', () => {
     it('quantises to 0.01 mm precision', () => {
@@ -150,5 +150,30 @@ describe('normalizeExtraLayerIds', () => {
         const { layers, idMap } = normalizeExtraLayerIds([]);
         expect(layers).toEqual([]);
         expect(idMap.size).toBe(0);
+    });
+});
+
+describe('addedSpikes schema + getPatternLayers', () => {
+    it('defaults addedSpikes to an empty array on GeometrySettings', () => {
+        const g = GeometrySettingsSchema.parse({});
+        expect(g.addedSpikes).toEqual([]);
+    });
+
+    it('round-trips addedSpikes coordinates', () => {
+        const g = GeometrySettingsSchema.parse({ addedSpikes: [{ x: 1.5, y: -2.25 }] });
+        expect(g.addedSpikes).toEqual([{ x: 1.5, y: -2.25 }]);
+    });
+
+    it('synthesizes the primary layer with addedSpikes from the flat field', () => {
+        const g = GeometrySettingsSchema.parse({
+            patternShapes: null,
+            addedSpikes: [{ x: 3, y: 4 }],
+        });
+        expect(getPatternLayers(g)[0].addedSpikes).toEqual([{ x: 3, y: 4 }]);
+    });
+
+    it('defaults a PatternLayer addedSpikes to empty', () => {
+        const g = GeometrySettingsSchema.parse({ extraLayers: [{ id: 'x' }] });
+        expect(g.extraLayers[0].addedSpikes).toEqual([]);
     });
 });

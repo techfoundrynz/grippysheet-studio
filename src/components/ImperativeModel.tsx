@@ -900,6 +900,7 @@ const ImperativeModel = React.forwardRef((props: ImperativeModelProps, ref: Reac
         rotation: baseRotation,
         rotationClamp: rotationClamp,
         removedTiles: removedTiles ?? [],
+        addedSpikes: [],
     };
     // Keep the full array (including empty layers) so each layer's
     // position here is the stable routing index used by click handlers
