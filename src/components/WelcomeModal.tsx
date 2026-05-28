@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { SiGithub } from '@icons-pack/react-simple-icons';
-import { Box, X, ExternalLink, ChevronDown, HelpCircle, Sparkles } from 'lucide-react';
+import { Box, X, ExternalLink, ChevronDown, HelpCircle, Sparkles, Wrench } from 'lucide-react';
 import Button from './ui/Button';
 
 interface WelcomeModalProps {
@@ -139,6 +139,22 @@ const WelcomeModal: React.FC<WelcomeModalProps> = ({ onClose }) => {
                                 <p className="text-[11px] text-gray-400">More deck outlines on Printables</p>
                             </div>
                             <ExternalLink size={14} className="text-gray-500 group-hover:text-brand-400 transition-colors" />
+                         </a>
+
+                         <a
+                            href="https://repairflow.dev/?utm_source=grippysheet&utm_medium=referral&utm_content=welcome-modal"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-4 p-3 rounded-xl bg-gray-800/50 hover:bg-gray-800 border border-gray-700 hover:border-gray-600 transition-all group"
+                         >
+                             <div className="p-2 bg-accent-500/10 rounded-lg group-hover:bg-accent-500/20 transition-colors text-accent-500">
+                                <Wrench size={20} />
+                            </div>
+                            <div className="flex-1">
+                                <h3 className="font-semibold text-gray-200 text-sm">Built with RepairFlow</h3>
+                                <p className="text-[11px] text-gray-400">Features &amp; fixes by the RepairFlow team</p>
+                            </div>
+                            <ExternalLink size={14} className="text-gray-500 group-hover:text-accent-500 transition-colors" />
                          </a>
                     </div>
 

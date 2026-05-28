@@ -72,4 +72,4 @@ No license file is present yet. Until one is added, no permissions are granted b
 
 ## Credits
 
-Built by Siwoz.
+Built by Siwoz, with features and fixes contributed by [RepairFlow](https://repairflow.dev/?utm_source=grippysheet&utm_medium=referral&utm_content=readme).

@@ -490,7 +490,15 @@ const Controls: React.FC<ControlsProps> = ({
             help/welcome modal instead. */}
         <div className="hidden md:flex flex-col -mt-1 mb-4 gap-0.25">
              <p className="text-[12px] text-gray-300 font-mono font-bold">
-               Built by Siwoz
+               Built by Siwoz ·{' '}
+               <a
+                 href="https://repairflow.dev/?utm_source=grippysheet&utm_medium=referral&utm_content=built-by"
+                 target="_blank"
+                 rel="noopener noreferrer"
+                 className="text-brand-400 hover:text-brand-300 underline-offset-2 hover:underline transition-colors"
+               >
+                 RepairFlow
+               </a>
              </p>
              <p className="text-[10px] text-gray-500 font-mono">
                Build: {import.meta.env.DEV ? 'DEV' : __BUILD_TIMESTAMP__}
