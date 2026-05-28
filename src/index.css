@@ -130,3 +130,26 @@ input[type='range']:focus-visible::-moz-range-thumb {
 .custom-scrollbar {
   scrollbar-gutter: stable;
 }
+
+/* Higher-contrast, always-present scrollbar on the panel scroll area so it's
+   obvious the content scrolls (the global gray-700-on-gray-800 thumb was
+   nearly invisible, making tall tabs read as "cut off"). */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 10px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: #4b5563; /* gray-600 */
+  border: 2px solid transparent;
+  background-clip: content-box;
+  border-radius: 9999px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: #6b7280; /* gray-500 */
+}
+/* Firefox */
+.custom-scrollbar {
+  scrollbar-color: #4b5563 transparent;
+}

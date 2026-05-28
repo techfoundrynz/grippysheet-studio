@@ -110,6 +110,31 @@ const Controls: React.FC<ControlsProps> = ({
     }
   }, [isCollapsed]);
 
+  // Scroll affordance: the tab content scrolls inside a fixed-height panel
+  // (header + pinned footer). On a tall tab (e.g. Geometry with a pattern
+  // loaded) the content runs past the fold; without a cue users read it as
+  // "cut off". `scrollHasMore` drives a bottom fade hint that shows only
+  // while there's content below the viewport. Desktop only — on mobile the
+  // outer container scrolls the whole panel instead.
+  const scrollRef = React.useRef<HTMLDivElement>(null);
+  const [scrollHasMore, setScrollHasMore] = React.useState(false);
+  const recomputeScrollHint = React.useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setScrollHasMore(el.scrollHeight - el.scrollTop - el.clientHeight > 4);
+  }, []);
+  React.useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    recomputeScrollHint();
+    const ro = new ResizeObserver(recomputeScrollHint);
+    ro.observe(el);
+    // Observe the content wrapper too so tab switches / pattern loads (which
+    // change content height without resizing the scroller) re-evaluate.
+    if (el.firstElementChild) ro.observe(el.firstElementChild);
+    return () => ro.disconnect();
+  }, [recomputeScrollHint, activeTab]);
+
   // Helper Setters
   const updateBase = (updates: Partial<BaseSettings>) => setBaseSettings(prev => ({ ...prev, ...updates }));
   const updateGeom = (updates: Partial<GeometrySettings>) => setGeometrySettings(prev => ({ ...prev, ...updates }));
@@ -536,8 +561,15 @@ const Controls: React.FC<ControlsProps> = ({
       </div>
 
       <div className={`flex-1 min-h-0 flex flex-col transition-all duration-300 ease-in-out ${isCollapsed ? 'max-h-0 opacity-0 md:max-h-[2000px] md:opacity-100' : 'max-h-[2000px] opacity-100'}`}>
-        <div className="flex-1 md:overflow-y-auto overflow-visible custom-scrollbar p-6 flex flex-col gap-6">
-            
+        {/* relative wrapper so the scroll-more fade hint can overlay the
+            bottom edge of the scrolling content (desktop only). */}
+        <div className="relative flex-1 min-h-0 flex flex-col">
+        <div
+          ref={scrollRef}
+          onScroll={recomputeScrollHint}
+          className="flex-1 min-h-0 md:overflow-y-auto overflow-visible custom-scrollbar p-6 flex flex-col gap-6"
+        >
+
             <Freeze freeze={activeTab !== 'base'}>
                 <div
                     role="tabpanel"
@@ -631,6 +663,17 @@ const Controls: React.FC<ControlsProps> = ({
                 </div>
             </Freeze>
 
+            </div>
+
+            {/* Scroll-more hint: a soft fade at the bottom of the scroll
+                area that fades in only while there's content below the
+                fold, signalling "scroll for more" so a tall tab (e.g.
+                Geometry) doesn't read as cut off. Desktop only — on mobile
+                the whole panel scrolls in the outer container. */}
+            <div
+              aria-hidden
+              className={`pointer-events-none absolute inset-x-0 bottom-0 h-10 hidden md:block bg-gradient-to-t from-gray-800 via-gray-800/80 to-transparent transition-opacity duration-200 ${scrollHasMore ? 'opacity-100' : 'opacity-0'}`}
+            />
             </div>
 
             {/* Single-instance footer. Lives outside the inner scroll
