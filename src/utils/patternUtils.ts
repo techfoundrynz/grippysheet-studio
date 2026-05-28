@@ -42,6 +42,65 @@ export function filterRemovedTiles<T extends { position: THREE.Vector2 }>(
     return tiles.filter((t) => !set.has(tileKey(t.position.x, t.position.y)));
 }
 
+/** A spike position with provenance — `grid` came from the tile generator
+ *  (removable via removedTiles), `added` came from a free click (removable
+ *  by splicing addedSpikes). */
+export interface SpikePosition {
+    x: number;
+    y: number;
+    origin: 'grid' | 'added';
+}
+
+export interface SpikeToggleResult {
+    removedTiles: string[];
+    addedSpikes: Array<{ x: number; y: number }>;
+}
+
+/**
+ * Toggle a spike at world (x, y) for one layer. Pure — returns the next
+ * `removedTiles` + `addedSpikes` without mutating inputs.
+ *
+ * - Nearest spike within `radius` and origin `grid`  → push its tileKey to removedTiles.
+ * - Nearest spike within `radius` and origin `added` → splice it from addedSpikes.
+ * - No spike within `radius`                         → append {x,y} to addedSpikes.
+ */
+export function toggleSpikeAt(
+    x: number,
+    y: number,
+    positions: SpikePosition[],
+    removedTiles: string[],
+    addedSpikes: Array<{ x: number; y: number }>,
+    radius: number,
+): SpikeToggleResult {
+    let best: SpikePosition | null = null;
+    let bestD2 = radius * radius;
+    for (const p of positions) {
+        const dx = p.x - x;
+        const dy = p.y - y;
+        const d2 = dx * dx + dy * dy;
+        if (d2 <= bestD2) {
+            bestD2 = d2;
+            best = p;
+        }
+    }
+
+    if (!best) {
+        return { removedTiles, addedSpikes: [...addedSpikes, { x, y }] };
+    }
+
+    if (best.origin === 'grid') {
+        const key = tileKey(best.x, best.y);
+        if (removedTiles.includes(key)) return { removedTiles, addedSpikes };
+        return { removedTiles: [...removedTiles, key], addedSpikes };
+    }
+
+    const targetKey = tileKey(best.x, best.y);
+    return {
+        removedTiles,
+        addedSpikes: addedSpikes.filter((p) => tileKey(p.x, p.y) !== targetKey),
+    };
+}
+
 /**
  * Calculates the bounding box of a set of shapes.
  */

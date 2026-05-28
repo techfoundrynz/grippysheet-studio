@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
-import { tileKey, filterRemovedTiles, generateTilePositions } from '../patternUtils';
+import { tileKey, filterRemovedTiles, generateTilePositions, toggleSpikeAt, SpikePosition } from '../patternUtils';
 import { normalizeExtraLayerIds, PatternLayerSchema, GeometrySettingsSchema, getPatternLayers } from '../../types/schemas';
 
 describe('tileKey', () => {
@@ -175,5 +175,47 @@ describe('addedSpikes schema + getPatternLayers', () => {
     it('defaults a PatternLayer addedSpikes to empty', () => {
         const g = GeometrySettingsSchema.parse({ extraLayers: [{ id: 'x' }] });
         expect(g.extraLayers[0].addedSpikes).toEqual([]);
+    });
+});
+
+describe('toggleSpikeAt', () => {
+    const R = 5;
+    const grid: SpikePosition[] = [
+        { x: 0, y: 0, origin: 'grid' },
+        { x: 20, y: 0, origin: 'grid' },
+    ];
+
+    it('removes a grid spike when the click lands within R of it', () => {
+        const res = toggleSpikeAt(1, 1, grid, [], [], R);
+        expect(res.removedTiles).toEqual([tileKey(0, 0)]);
+        expect(res.addedSpikes).toEqual([]);
+    });
+
+    it('adds a free spike at the exact point when the click is in a gap', () => {
+        const res = toggleSpikeAt(10, 10, grid, [], [], R);
+        expect(res.removedTiles).toEqual([]);
+        expect(res.addedSpikes).toEqual([{ x: 10, y: 10 }]);
+    });
+
+    it('removes an existing added spike when clicked', () => {
+        const positions: SpikePosition[] = [{ x: 50, y: 50, origin: 'added' }];
+        const res = toggleSpikeAt(50.5, 49.5, positions, [], [{ x: 50, y: 50 }], R);
+        expect(res.addedSpikes).toEqual([]);
+        expect(res.removedTiles).toEqual([]);
+    });
+
+    it('does not duplicate a removedTiles key already present', () => {
+        const res = toggleSpikeAt(0, 0, grid, [tileKey(0, 0)], [], R);
+        expect(res.removedTiles).toEqual([tileKey(0, 0)]);
+    });
+
+    it('prefers the nearest spike when two are in range', () => {
+        const close: SpikePosition[] = [
+            { x: 0, y: 0, origin: 'grid' },
+            { x: 4, y: 0, origin: 'added' },
+        ];
+        const res = toggleSpikeAt(3, 0, close, [], [{ x: 4, y: 0 }], R);
+        expect(res.addedSpikes).toEqual([]);
+        expect(res.removedTiles).toEqual([]);
     });
 });
