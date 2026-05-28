@@ -105,6 +105,8 @@ export const TileRemovalHint: React.FC<TileRemovalHintProps> = ({
     }, [enabled, gl]);
 
     // Project a clientX/clientY screen coord onto the spike-top plane → world (x,y).
+    // Uses its own scratch result vector (not the frame loop's `hitPoint`) so the
+    // pointer path and the per-frame hover path never read each other's writes.
     const clientToWorld = (clientX: number, clientY: number, primary: PrimarySpikes): { x: number; y: number } | null => {
         const rect = gl.domElement.getBoundingClientRect();
         const ndc = new THREE.Vector2(
@@ -113,8 +115,9 @@ export const TileRemovalHint: React.FC<TileRemovalHintProps> = ({
         );
         plane.setFromNormalAndCoplanarPoint(planeNormal, new THREE.Vector3(0, 0, primary.topZ));
         raycaster.setFromCamera(ndc, camera);
-        if (!raycaster.ray.intersectPlane(plane, hitPoint)) return null;
-        return { x: hitPoint.x, y: hitPoint.y };
+        const out = new THREE.Vector3();
+        if (!raycaster.ray.intersectPlane(plane, out)) return null;
+        return { x: out.x, y: out.y };
     };
 
     // One toggle at a world point, deduped against the current drag stroke.
@@ -157,10 +160,14 @@ export const TileRemovalHint: React.FC<TileRemovalHintProps> = ({
         el.addEventListener('pointerdown', onDown);
         el.addEventListener('pointermove', onMove);
         window.addEventListener('pointerup', onUp);
+        // pointercancel: touch interrupted by a browser gesture would otherwise
+        // leave the drag "stuck on" until the next pointerdown.
+        window.addEventListener('pointercancel', onUp);
         return () => {
             el.removeEventListener('pointerdown', onDown);
             el.removeEventListener('pointermove', onMove);
             window.removeEventListener('pointerup', onUp);
+            window.removeEventListener('pointercancel', onUp);
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [enabled, gl, onGeometryChange, camera]);
