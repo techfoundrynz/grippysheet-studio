@@ -445,6 +445,10 @@ export const TwoDViewer: React.FC<Props> = ({
 
       // Free-placed spikes for this layer — painted with the same footprint
       // so they read identically to grid spikes and are click-removable.
+      // Intentionally drawn with no per-tile orientation rotation (unlike
+      // grid tiles, which carry alternate/aligned/random rotation): a
+      // hand-placed point has no orientation. This matches the 3D side,
+      // where added spikes also use rotation 0.
       for (const sp of layer.addedSpikes ?? []) {
         const path = new Path2D();
         for (let i = 0; i < footprint.length; i++) {
