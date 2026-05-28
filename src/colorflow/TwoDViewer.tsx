@@ -382,7 +382,7 @@ export const TwoDViewer: React.FC<Props> = ({
       const tileW = (maxX - minX) * layerScale;
       const tileH = (maxY - minY) * layerScale;
       if (tileW <= 0.05 || tileH <= 0.05) return;
-      if (layerIdx === 0) tileRRef.current = Math.max(tileW, tileH, 1) * 0.6;
+      if (layerIdx === 0) tileRRef.current = Math.max(tileW, tileH, 1) * 0.75;
 
       const rawTiles = generateTilePositions(
         tileBounds, tileW, tileH, layer.tileSpacing,
@@ -641,7 +641,9 @@ export const TwoDViewer: React.FC<Props> = ({
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
-    const w = canvasToWorld(clientX - rect.left, clientY - rect.top);
+    const cx = clientX - rect.left;
+    const cy = clientY - rect.top;
+    const w = canvasToWorld(cx, cy);
     if (!w) return;
     const R = tileRRef.current;
     for (const d of draggedRef.current) {
@@ -649,17 +651,28 @@ export const TwoDViewer: React.FC<Props> = ({
       if (dx * dx + dy * dy <= R * R) return;
     }
     draggedRef.current.push(w);
-    const primaryPositions: SpikePosition[] = drawnTilesRef.current
-      .filter((t) => t.layerIdx === 0)
-      .map((t) => ({ x: t.x, y: t.y, origin: t.origin }));
+    // Use the exact Path2D hit-test for the remove-vs-add decision: if the
+    // click lands inside a painted spike's footprint, that spike is the
+    // target (removal), regardless of how far the click is from its centre
+    // — an edge click still removes. Only a click on bare deck (no footprint
+    // under it) falls through to a free add. The radius search inside
+    // toggleSpikeAt is bypassed by feeding it just the hit tile (or none).
+    const idx = findTileAt(cx, cy);
+    const hit = idx >= 0 ? drawnTilesRef.current[idx] : null;
+    const positions: SpikePosition[] = hit && hit.layerIdx === 0
+      ? [{ x: hit.x, y: hit.y, origin: hit.origin }]
+      : [];
     onGeometryChange((prev) => {
       const result = toggleSpikeAt(
-        w.x, w.y, primaryPositions,
-        prev.removedTiles ?? [], prev.addedSpikes ?? [], R,
+        w.x, w.y, positions,
+        prev.removedTiles ?? [], prev.addedSpikes ?? [],
+        // Infinite radius when we have an exact hit (always remove it);
+        // the empty-positions case adds regardless of radius.
+        hit ? Number.POSITIVE_INFINITY : R,
       );
       return { ...prev, removedTiles: result.removedTiles, addedSpikes: result.addedSpikes };
     });
-  }, [tileRemovalMode, onGeometryChange, canvasToWorld]);
+  }, [tileRemovalMode, onGeometryChange, canvasToWorld, findTileAt]);
 
   const handlePointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     if (!tileRemovalMode) return;

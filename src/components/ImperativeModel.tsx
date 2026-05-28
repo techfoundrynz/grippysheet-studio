@@ -1094,7 +1094,7 @@ const ImperativeModel = React.forwardRef((props: ImperativeModelProps, ref: Reac
                 x: p.position.x, y: p.position.y,
                 origin: i < gridCount ? 'grid' : 'added',
             }));
-            iMesh.userData.tileR = Math.max(pWidth, pHeight, 1) * 0.6;
+            iMesh.userData.tileR = Math.max(pWidth, pHeight, 1) * 0.75;
 
             const dummy = new THREE.Object3D();
             positions.forEach((p, i) => {
@@ -1394,7 +1394,7 @@ const ImperativeModel = React.forwardRef((props: ImperativeModelProps, ref: Reac
                 x: p.position.x, y: p.position.y,
                 origin: i < gridCount ? 'grid' : 'added',
             }));
-            resultBrush.userData.tileR = Math.max(pWidth, pHeight, 1) * 0.6;
+            resultBrush.userData.tileR = Math.max(pWidth, pHeight, 1) * 0.75;
             group.add(resultBrush);
         } else {
             console.warn(`Pattern layer ${layerIdx} produced empty geometry after CSG.`);
