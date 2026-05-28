@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { type OutlinePolygon } from './outlineToPolygon';
-import { generateTilePositions, tileKey, filterRemovedTiles } from '../utils/patternUtils';
+import { generateTilePositions, tileKey, filterRemovedTiles, toggleSpikeAt, type SpikePosition } from '../utils/patternUtils';
 import { pointInPolygon, assignTilesToColors, type TileAssignment } from './spikes';
 import type { Centroid } from './pipeline/quantize';
 import type { TracedLayerEntry } from './workerProtocol';
@@ -36,6 +36,9 @@ interface DrawnTile {
   layerIdx: number;
   key: string;
   path: Path2D;
+  x: number;        // world-mm tile origin
+  y: number;
+  origin: 'grid' | 'added';
 }
 
 const PAD_PX = 40; // canvas inset
@@ -131,6 +134,8 @@ export const TwoDViewer: React.FC<Props> = ({
   // hit-tested first) using `ctx.isPointInPath` so the top-most visible
   // tile claims the click.
   const drawnTilesRef = useRef<DrawnTile[]>([]);
+  const tileRRef = useRef<number>(6);
+  const worldToCanvasRef = useRef<{ minX: number; maxY: number; scale: number; offsetX: number; offsetY: number } | null>(null);
   // Cursor-anchored hover state for the in-canvas red outline. Stored as
   // the index into `drawnTilesRef.current` so we don't have to clone the
   // Path2D when the cursor moves between tiles.
@@ -187,6 +192,7 @@ export const TwoDViewer: React.FC<Props> = ({
     // Map world (mm, Y-up) to canvas (px, Y-down).
     const wx = (mmX: number) => offsetX + (mmX - outlinePolygon.minX) * scale;
     const wy = (mmY: number) => offsetY + (outlinePolygon.maxY - mmY) * scale;
+    worldToCanvasRef.current = { minX: outlinePolygon.minX, maxY: outlinePolygon.maxY, scale, offsetX, offsetY };
 
     const pathRing = (path: Path2D, ring: Array<[number, number]>) => {
       if (ring.length === 0) return;
@@ -376,6 +382,7 @@ export const TwoDViewer: React.FC<Props> = ({
       const tileW = (maxX - minX) * layerScale;
       const tileH = (maxY - minY) * layerScale;
       if (tileW <= 0.05 || tileH <= 0.05) return;
+      if (layerIdx === 0) tileRRef.current = Math.max(tileW, tileH, 1) * 0.6;
 
       const rawTiles = generateTilePositions(
         tileBounds, tileW, tileH, layer.tileSpacing,
@@ -430,6 +437,38 @@ export const TwoDViewer: React.FC<Props> = ({
           layerIdx,
           key: tileKey(tile.x, tile.y),
           path,
+          x: tile.x,
+          y: tile.y,
+          origin: 'grid',
+        });
+      }
+
+      // Free-placed spikes for this layer — painted with the same footprint
+      // so they read identically to grid spikes and are click-removable.
+      for (const sp of layer.addedSpikes ?? []) {
+        const path = new Path2D();
+        for (let i = 0; i < footprint.length; i++) {
+          const [px, py] = footprint[i];
+          const lx = px * layerScale;
+          const ly = py * layerScale;
+          const rx = lx + sp.x;
+          const ry = ly + sp.y;
+          if (i === 0) path.moveTo(wx(rx), wy(ry));
+          else path.lineTo(wx(rx), wy(ry));
+        }
+        path.closePath();
+        ctx.fillStyle = layer.color;
+        ctx.fill(path);
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.4)';
+        ctx.lineWidth = 0.6;
+        ctx.stroke(path);
+        drawnTiles.push({
+          layerIdx,
+          key: tileKey(sp.x, sp.y),
+          path,
+          x: sp.x,
+          y: sp.y,
+          origin: 'added',
         });
       }
     });
@@ -579,34 +618,60 @@ export const TwoDViewer: React.FC<Props> = ({
     if (idx !== hoverTileIdx) setHoverTileIdx(idx === -1 ? null : idx);
   }, [tileRemovalMode, hoverTileIdx, findTileAt]);
 
-  const handleClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+  // Invert wx/wy: canvas-relative px (CSS space, since draw() applies the DPR
+  // transform) → world mm. Mirrors wx/wy captured during the last draw.
+  const canvasToWorld = useCallback((cx: number, cy: number): { x: number; y: number } | null => {
+    const m = worldToCanvasRef.current;
+    if (!m) return null;
+    return {
+      x: m.minX + (cx - m.offsetX) / m.scale,
+      y: m.maxY - (cy - m.offsetY) / m.scale,
+    };
+  }, []);
+
+  const draggingRef = useRef(false);
+  const draggedRef = useRef<Array<{ x: number; y: number }>>([]);
+
+  const toggleAtClient = useCallback((clientX: number, clientY: number) => {
     if (!tileRemovalMode || !onGeometryChange) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    const idx = findTileAt(x, y);
-    if (idx === -1) return; // empty space — no-op, matches 3D behavior
-    const hit = drawnTilesRef.current[idx];
-    if (!hit) return;
+    const w = canvasToWorld(clientX - rect.left, clientY - rect.top);
+    if (!w) return;
+    const R = tileRRef.current;
+    for (const d of draggedRef.current) {
+      const dx = d.x - w.x, dy = d.y - w.y;
+      if (dx * dx + dy * dy <= R * R) return;
+    }
+    draggedRef.current.push(w);
+    const primaryPositions: SpikePosition[] = drawnTilesRef.current
+      .filter((t) => t.layerIdx === 0)
+      .map((t) => ({ x: t.x, y: t.y, origin: t.origin }));
     onGeometryChange((prev) => {
-      if (hit.layerIdx === 0) {
-        const existing = prev.removedTiles ?? [];
-        if (existing.includes(hit.key)) return prev;
-        return { ...prev, removedTiles: [...existing, hit.key] };
-      }
-      const extras = prev.extraLayers ?? [];
-      const targetIdx = hit.layerIdx - 1;
-      if (targetIdx < 0 || targetIdx >= extras.length) return prev;
-      const target = extras[targetIdx];
-      const existing = target.removedTiles ?? [];
-      if (existing.includes(hit.key)) return prev;
-      const nextExtras = extras.slice();
-      nextExtras[targetIdx] = { ...target, removedTiles: [...existing, hit.key] };
-      return { ...prev, extraLayers: nextExtras };
+      const result = toggleSpikeAt(
+        w.x, w.y, primaryPositions,
+        prev.removedTiles ?? [], prev.addedSpikes ?? [], R,
+      );
+      return { ...prev, removedTiles: result.removedTiles, addedSpikes: result.addedSpikes };
     });
-  }, [tileRemovalMode, onGeometryChange, findTileAt]);
+  }, [tileRemovalMode, onGeometryChange, canvasToWorld]);
+
+  const handlePointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (!tileRemovalMode) return;
+    draggingRef.current = true;
+    draggedRef.current = [];
+    toggleAtClient(e.clientX, e.clientY);
+  }, [tileRemovalMode, toggleAtClient]);
+
+  const handlePointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (draggingRef.current) toggleAtClient(e.clientX, e.clientY);
+  }, [toggleAtClient]);
+
+  const handlePointerUp = useCallback(() => {
+    draggingRef.current = false;
+    draggedRef.current = [];
+  }, []);
 
   return (
     <div
@@ -616,7 +681,10 @@ export const TwoDViewer: React.FC<Props> = ({
       onMouseEnter={() => setShowDims(true)}
       onMouseLeave={() => { setShowDims(false); if (hoverTileIdx !== null) setHoverTileIdx(null); }}
       onMouseMove={handleMouseMove}
-      onClick={handleClick}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerLeave={handlePointerUp}
     >
       <canvas ref={canvasRef} className="block" />
 
