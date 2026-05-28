@@ -513,7 +513,7 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
         ].join(', '),
       }}
     >
-      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 flex flex-row items-center gap-2 p-1.5 bg-gray-900/85 backdrop-blur-md rounded-xl border border-gray-700/60 shadow-xl ring-1 ring-black/30">
+      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 flex flex-row flex-wrap justify-center items-center gap-2 max-w-[calc(100%-1rem)] p-1.5 bg-gray-900/85 backdrop-blur-md rounded-xl border border-gray-700/60 shadow-xl ring-1 ring-black/30">
 
         {/* 2D / 3D mode toggle — bigger pill with animated active indicator
             so it reads as the primary viewer control, not chrome. */}

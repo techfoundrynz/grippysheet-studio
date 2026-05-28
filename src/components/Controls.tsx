@@ -450,7 +450,7 @@ const Controls: React.FC<ControlsProps> = ({
   return (
     <div 
         ref={containerRef}
-        className={`bg-gray-800 md:rounded-lg md:border border-gray-700 shadow-lg flex-1 min-h-0 flex flex-col transition-all relative rounded-t-xl border-t ${isCollapsed ? 'overflow-hidden' : 'overflow-y-auto md:overflow-hidden'}`}
+        className="bg-gray-800 md:rounded-lg md:border border-gray-700 shadow-lg flex-1 min-h-0 flex flex-col transition-all relative rounded-t-xl border-t overflow-hidden"
     >
       <div className="md:sticky md:top-0 z-10 bg-gray-800 p-4 pb-2 md:p-6 md:pb-2 border-b border-gray-700/50 mb-0">
         <div className="flex items-center justify-between mb-1">
@@ -576,7 +576,7 @@ const Controls: React.FC<ControlsProps> = ({
         <div
           ref={scrollRef}
           onScroll={recomputeScrollHint}
-          className="flex-1 min-h-0 md:overflow-y-auto overflow-visible custom-scrollbar p-6 flex flex-col gap-6"
+          className="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-6 flex flex-col gap-6"
         >
 
             <Freeze freeze={activeTab !== 'base'}>
@@ -677,11 +677,11 @@ const Controls: React.FC<ControlsProps> = ({
             {/* Scroll-more hint: a soft fade at the bottom of the scroll
                 area that fades in only while there's content below the
                 fold, signalling "scroll for more" so a tall tab (e.g.
-                Geometry) doesn't read as cut off. Desktop only — on mobile
-                the whole panel scrolls in the outer container. */}
+                Geometry) doesn't read as cut off. The body scrolls
+                internally on both mobile (bottom sheet) and desktop. */}
             <div
               aria-hidden
-              className={`pointer-events-none absolute inset-x-0 bottom-0 h-10 hidden md:block bg-gradient-to-t from-gray-800 via-gray-800/80 to-transparent transition-opacity duration-200 ${scrollHasMore ? 'opacity-100' : 'opacity-0'}`}
+              className={`pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-gray-800 via-gray-800/80 to-transparent transition-opacity duration-200 ${scrollHasMore ? 'opacity-100' : 'opacity-0'}`}
             />
             </div>
 

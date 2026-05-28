@@ -35,7 +35,49 @@ const App = () => {
   const [previewInlay, setPreviewInlay] = useState<InlayItem | null>(null);
 
   const [showWelcome, setShowWelcome] = useState(() => !localStorage.getItem('welcome_modal_dismissed_v2'));
+  // Mobile bottom-sheet: `isControlsCollapsed` is the snap state (true = peek,
+  // false = expanded ~88dvh). `sheetDragPx` is the live height while dragging
+  // the handle (null when at rest). Desktop ignores all of this (md:static
+  // side panel). See the bottom-sheet wrapper + drag handlers below.
   const [isControlsCollapsed, setIsControlsCollapsed] = useState(false);
+  // Peek height reveals the drag handle + brand row + tab strip (incl. the
+  // project chip when a deck is loaded) so users can switch sections without
+  // fully expanding the sheet.
+  const SHEET_PEEK_PX = 150;
+  const [sheetDragPx, setSheetDragPx] = useState<number | null>(null);
+  const sheetDragging = sheetDragPx !== null;
+  const sheetDragRef = React.useRef<{ startY: number; startH: number; moved: boolean } | null>(null);
+  const expandedPx = () => Math.round(window.innerHeight * 0.88);
+  const onSheetHandleDown = (e: React.PointerEvent) => {
+    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+    sheetDragRef.current = {
+      startY: e.clientY,
+      startH: isControlsCollapsed ? SHEET_PEEK_PX : expandedPx(),
+      moved: false,
+    };
+    setSheetDragPx(isControlsCollapsed ? SHEET_PEEK_PX : expandedPx());
+  };
+  const onSheetHandleMove = (e: React.PointerEvent) => {
+    const d = sheetDragRef.current;
+    if (!d) return;
+    const dy = d.startY - e.clientY; // up = positive = taller
+    if (Math.abs(dy) > 5) d.moved = true;
+    const next = Math.max(SHEET_PEEK_PX, Math.min(expandedPx(), d.startH + dy));
+    setSheetDragPx(next);
+  };
+  const onSheetHandleUp = () => {
+    const d = sheetDragRef.current;
+    sheetDragRef.current = null;
+    if (d && !d.moved) {
+      // tap → toggle snap
+      setIsControlsCollapsed((v) => !v);
+    } else if (sheetDragPx !== null) {
+      // drag → snap to nearest of peek / expanded
+      const mid = (SHEET_PEEK_PX + expandedPx()) / 2;
+      setIsControlsCollapsed(sheetDragPx < mid);
+    }
+    setSheetDragPx(null);
+  };
   const [activeTab, setActiveTab] = useState<'base' | 'inlay' | 'colorflow' | 'geometry'>('base');
   // Tile-removal toggle is shared between the viewer's toolbar button
   // and the Geometry tab's inline toggle so users find it from either
@@ -298,7 +340,9 @@ const App = () => {
       <ToastHost />
       <div className="h-[100dvh] flex flex-col bg-gray-950 text-gray-100 overflow-hidden">
         <main className="flex-1 flex flex-col md:flex-row overflow-hidden">
-          <div className="h-1/2 md:h-auto flex-1 flex flex-col p-4 min-w-0">
+          {/* Viewer fills the screen on mobile (the controls float above it as
+              a bottom sheet); on desktop it's the left column of the row. */}
+          <div className="flex-1 md:h-auto flex flex-col p-2 md:p-4 min-w-0">
             <div className="flex-1 relative bg-gray-900 rounded-lg border border-gray-800 overflow-hidden shadow-inner">
               <ModelViewer
                 mode={viewerMode}
@@ -329,7 +373,28 @@ const App = () => {
             </div>
           </div>
 
-          <div className={`md:h-auto w-full md:w-96 overflow-hidden flex flex-col md:p-4 bg-gray-950 md:bg-transparent transition-all duration-300 ease-in-out ${isControlsCollapsed ? 'h-auto flex-shrink-0 md:flex-none' : 'h-1/2 flex-1 md:flex-none'}`}>
+          <div
+            className={`z-40 overflow-hidden flex flex-col bg-gray-950
+              fixed inset-x-0 bottom-0 rounded-t-2xl border-t border-gray-800 shadow-[0_-8px_30px_rgba(0,0,0,0.55)]
+              md:static md:z-auto md:rounded-none md:border-t-0 md:shadow-none md:bg-transparent
+              md:h-auto md:w-96 md:flex-none md:p-4
+              ${sheetDragging ? '' : 'transition-[height] duration-300 ease-in-out'}
+              ${isControlsCollapsed ? 'h-[150px]' : 'h-[88dvh]'} md:!h-auto`}
+            style={sheetDragPx !== null ? { height: `${sheetDragPx}px` } : undefined}
+          >
+            {/* Drag handle — mobile only. Drag to resize the sheet between
+                peek and ~88dvh; tap to toggle. */}
+            <div
+              className="md:hidden flex-shrink-0 flex items-center justify-center pt-2 pb-1 cursor-grab active:cursor-grabbing touch-none"
+              onPointerDown={onSheetHandleDown}
+              onPointerMove={onSheetHandleMove}
+              onPointerUp={onSheetHandleUp}
+              onPointerCancel={onSheetHandleUp}
+              role="button"
+              aria-label={isControlsCollapsed ? 'Expand controls' : 'Collapse controls'}
+            >
+              <span className="block w-10 h-1.5 rounded-full bg-gray-600" />
+            </div>
             <Controls
               activeTab={activeTab}
               setActiveTab={setActiveTab}
@@ -345,7 +410,7 @@ const App = () => {
               selectedInlayId={selectedInlayId}
               setSelectedInlayId={setSelectedInlayId}
               onOpenWelcome={() => setShowWelcome(true)}
-              isCollapsed={isControlsCollapsed}
+              isCollapsed={sheetDragging ? false : isControlsCollapsed}
               onToggleCollapse={() => setIsControlsCollapsed(!isControlsCollapsed)}
               onProjectAssetsChanged={(mutate) => setProjectAssets((prev) => mutate(prev))}
               exportControls={
