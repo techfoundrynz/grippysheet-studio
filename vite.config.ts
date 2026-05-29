@@ -1,3 +1,4 @@
+/// <reference types="vitest" />
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
@@ -20,4 +21,19 @@ export default defineConfig({
   define: {
     '__BUILD_TIMESTAMP__': `${Date.now()}`,
   },
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'json', 'html'],
+      include: [
+        'src/utils/**',
+        'src/context/**',
+        'src/components/DebouncedInput.tsx',
+        'src/components/Spinner.tsx'
+      ],
+    },
+  },
 });
+
