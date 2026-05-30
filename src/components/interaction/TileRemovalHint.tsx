@@ -45,6 +45,12 @@ export const TileRemovalHint: React.FC<TileRemovalHintProps> = ({
     const [hover, setHover] = useState<{ position: THREE.Vector3; size: number; mode: 'add' | 'remove' } | null>(null);
     const dragging = useRef(false);
     const draggedPoints = useRef<Array<{ x: number; y: number }>>([]);
+    // Sticky drag mode — see the parallel comment in TwoDViewer.tsx for the
+    // full rationale. First hit of a drag picks remove (started on a tile)
+    // or add (started on empty); subsequent off-mode samples are no-ops so
+    // an erase swipe across gaps doesn't paint stray spikes, and an add
+    // stroke across a dense area doesn't erase the tiles it crosses.
+    const dragMode = useRef<'remove' | 'add' | null>(null);
 
     // Read the primary spike set (Pattern_0) from the imperative group.
     const readPrimary = (): PrimarySpikes | null => {
@@ -129,6 +135,24 @@ export const TileRemovalHint: React.FC<TileRemovalHintProps> = ({
             const dx = d.x - wx, dy = d.y - wy;
             if (dx * dx + dy * dy <= primary.tileR * primary.tileR) return;
         }
+        // Sticky drag mode: nearest-spike-within-radius hit-test mirrors
+        // `toggleSpikeAt`'s own decision, so the mode locked in at drag
+        // start matches the action that would actually run.
+        let nearest: SpikePosition | null = null;
+        let bestD2 = primary.tileR * primary.tileR;
+        for (const p of primary.positions) {
+            const dx = p.x - wx, dy = p.y - wy;
+            const d2 = dx * dx + dy * dy;
+            if (d2 <= bestD2) { bestD2 = d2; nearest = p; }
+        }
+        if (dragging.current) {
+            const wantRemove = !!nearest;
+            if (dragMode.current === null) {
+                dragMode.current = wantRemove ? 'remove' : 'add';
+            } else if ((dragMode.current === 'remove') !== wantRemove) {
+                return;
+            }
+        }
         draggedPoints.current.push({ x: wx, y: wy });
         onGeometryChange((prev) => {
             const result = toggleSpikeAt(
@@ -149,6 +173,7 @@ export const TileRemovalHint: React.FC<TileRemovalHintProps> = ({
             if (!primary) return;
             dragging.current = true;
             draggedPoints.current = [];
+            dragMode.current = null;
             const w = clientToWorld(e.clientX, e.clientY, primary);
             if (w) applyToggle(w.x, w.y, primary);
         };
@@ -159,7 +184,11 @@ export const TileRemovalHint: React.FC<TileRemovalHintProps> = ({
             const w = clientToWorld(e.clientX, e.clientY, primary);
             if (w) applyToggle(w.x, w.y, primary);
         };
-        const onUp = () => { dragging.current = false; draggedPoints.current = []; };
+        const onUp = () => {
+            dragging.current = false;
+            draggedPoints.current = [];
+            dragMode.current = null;
+        };
         el.addEventListener('pointerdown', onDown);
         el.addEventListener('pointermove', onMove);
         window.addEventListener('pointerup', onUp);

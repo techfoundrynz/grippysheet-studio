@@ -49,8 +49,8 @@ const ScreenshotManager: React.FC<ScreenshotManagerProps> = ({ triggerRef, size 
                 const hiddenObjects: THREE.Object3D[] = [];
                 scene.traverse((obj) => {
                     if (
-                        obj instanceof THREE.GridHelper || 
-                        obj.type === 'GridHelper' || 
+                        obj instanceof THREE.GridHelper ||
+                        obj.type === 'GridHelper' ||
                         obj.type === 'AxesHelper' ||
                         obj.name.startsWith('Debug_') ||
                         obj.name === 'InlayHandles'
@@ -62,8 +62,41 @@ const ScreenshotManager: React.FC<ScreenshotManagerProps> = ({ triggerRef, size 
                     }
                 });
 
+                // 4b. Base silhouette overlay. Top-down ortho of a flat slab
+                // gives the base no shading variation; against a transparent
+                // or similarly-dark chosen background the deck shape
+                // disappears entirely (reported as "PNG doesn't show a
+                // base"). A thin edge stroke around the Base geometry keeps
+                // the deck outline readable regardless of fill colour or
+                // background pick. Inherits the base mesh's transform so
+                // rotation/mirror stays in sync; disposed below the render.
+                let baseEdges: THREE.LineSegments | null = null;
+                const baseMesh = scene.getObjectByName('Base');
+                if (baseMesh instanceof THREE.Mesh && baseMesh.geometry) {
+                    const edgesGeom = new THREE.EdgesGeometry(baseMesh.geometry, 1);
+                    const edgeMat = new THREE.LineBasicMaterial({
+                        color: 0xffffff,
+                        transparent: true,
+                        opacity: 0.55,
+                        depthTest: false,
+                        depthWrite: false,
+                    });
+                    baseEdges = new THREE.LineSegments(edgesGeom, edgeMat);
+                    baseEdges.position.copy(baseMesh.position);
+                    baseEdges.quaternion.copy(baseMesh.quaternion);
+                    baseEdges.scale.copy(baseMesh.scale);
+                    baseEdges.renderOrder = 999;
+                    scene.add(baseEdges);
+                }
+
                 // 5. Render & Capture
                 gl.render(scene, shotCamera);
+
+                if (baseEdges) {
+                    scene.remove(baseEdges);
+                    (baseEdges.material as THREE.Material).dispose();
+                    baseEdges.geometry.dispose();
+                }
                 
                 // Composite Watermark (2D Canvas)
                 const canvas = document.createElement('canvas');

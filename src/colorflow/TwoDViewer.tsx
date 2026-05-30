@@ -635,6 +635,15 @@ export const TwoDViewer: React.FC<Props> = ({
 
   const draggingRef = useRef(false);
   const draggedRef = useRef<Array<{ x: number; y: number }>>([]);
+  // Sticky drag mode: the very first hit of a drag picks whether it's
+  // "remove" (started on a tile) or "add" (started on empty deck). Every
+  // subsequent pointermove that doesn't match is a no-op — so an erase
+  // swipe across a sparse pattern doesn't accidentally paint a row of
+  // free spikes in the gaps, and a paint-stroke across a dense area
+  // doesn't accidentally erase the tiles it crosses. Single taps (no
+  // drag) ignore the mode entirely. Reset on every pointerdown + on
+  // window pointerup/cancel.
+  const dragModeRef = useRef<'remove' | 'add' | null>(null);
 
   const toggleAtClient = useCallback((clientX: number, clientY: number) => {
     if (!tileRemovalMode || !onGeometryChange) return;
@@ -650,7 +659,6 @@ export const TwoDViewer: React.FC<Props> = ({
       const dx = d.x - w.x, dy = d.y - w.y;
       if (dx * dx + dy * dy <= R * R) return;
     }
-    draggedRef.current.push(w);
     // Use the exact Path2D hit-test for the remove-vs-add decision: if the
     // click lands inside a painted spike's footprint, that spike is the
     // target (removal), regardless of how far the click is from its centre
@@ -663,6 +671,15 @@ export const TwoDViewer: React.FC<Props> = ({
     // no-op — we only manage the primary layer's spikes now. Without this
     // guard the click would fall through to a spurious primary add.
     if (hit && hit.layerIdx !== 0) return;
+
+    if (draggingRef.current) {
+      if (dragModeRef.current === null) {
+        dragModeRef.current = hit ? 'remove' : 'add';
+      } else if ((dragModeRef.current === 'remove') !== !!hit) {
+        return;
+      }
+    }
+    draggedRef.current.push(w);
     const positions: SpikePosition[] = hit
       ? [{ x: hit.x, y: hit.y, origin: hit.origin }]
       : [];
@@ -682,6 +699,7 @@ export const TwoDViewer: React.FC<Props> = ({
     if (!tileRemovalMode) return;
     draggingRef.current = true;
     draggedRef.current = [];
+    dragModeRef.current = null;
     toggleAtClient(e.clientX, e.clientY);
   }, [tileRemovalMode, toggleAtClient]);
 
@@ -692,13 +710,18 @@ export const TwoDViewer: React.FC<Props> = ({
   const handlePointerUp = useCallback(() => {
     draggingRef.current = false;
     draggedRef.current = [];
+    dragModeRef.current = null;
   }, []);
 
   // Window-level pointerup/cancel so a release OUTSIDE the canvas still ends
   // the drag — parity with the 3D handler. The div's onPointerUp covers the
   // common case; this covers fast swipes that release off-canvas.
   useEffect(() => {
-    const end = () => { draggingRef.current = false; draggedRef.current = []; };
+    const end = () => {
+      draggingRef.current = false;
+      draggedRef.current = [];
+      dragModeRef.current = null;
+    };
     window.addEventListener('pointerup', end);
     window.addEventListener('pointercancel', end);
     return () => {

@@ -916,6 +916,37 @@ const ModelViewer: React.FC<ModelViewerProps> = ({
         );
       })()}
 
+      {(() => {
+        // ColorFlow + pattern coexistence hint. In colorflow mode the 3D
+        // viewer renders ColorFlowModel, which only shows pattern bumps
+        // once the user clicks "Generate preview" (heavy spike pipeline
+        // is gated behind a button by design). Without this hint the
+        // pattern silently vanishes from the 3D scene the moment an
+        // image is dropped — reported as "image removes the grip pattern".
+        const hasPattern = !!geometrySettings.patternShapes?.[0];
+        const hasSpikesGenerated = (colorFlowGeom?.spikes.length ?? 0) > 0;
+        if (
+          renderMode !== '3d' ||
+          mode !== 'colorflow' ||
+          !colorFlowGeom ||
+          !hasPattern ||
+          hasSpikesGenerated ||
+          isAnyProcessing
+        ) {
+          return null;
+        }
+        return (
+          <div className="absolute top-20 left-1/2 -translate-x-1/2 z-10 pointer-events-none">
+            <div className="bg-gray-900/85 backdrop-blur border border-brand-500/40 rounded-lg px-4 py-2.5 text-center shadow-lg max-w-sm">
+              <p className="text-[11px] font-mono text-brand-400 tracking-wider mb-1">PATTERN STAGED</p>
+              <p className="text-xs text-gray-300 leading-snug">
+                Open the <span className="text-brand-400">ColorFlow tab</span> and click <span className="text-gray-100 font-medium">Generate preview</span> to add your pattern as spikes on top of the colors.
+              </p>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Consolidated bottom-right info chip — pad size + (optional) FPS in
           one panel. Skipped entirely in 2D since TwoDViewer paints its own
           pad-dim chip into the canvas overlay. The FPS counter is kept here
