@@ -108,9 +108,31 @@ const ImperativeModel = React.forwardRef((props: ImperativeModelProps, ref: Reac
   previewInlay = null,
   } = props;
   const localGroupRef = useRef<THREE.Group>(null);
-  
+
   // Expose ref
   React.useImperativeHandle(ref, () => localGroupRef.current!, []);
+
+  // Dispose every geometry / material we created when this component
+  // unmounts. R3F removes the wrapping <group> from the scene, but it does
+  // NOT walk the children to free GPU buffers — without this cleanup,
+  // toggling between pattern <-> colorflow (ColorFlowModel ↔ ImperativeModel
+  // in ModelViewer) leaks every Base / Inlay / Pattern mesh's VBOs.
+  useEffect(() => {
+    const group = localGroupRef.current;
+    return () => {
+      if (!group) return;
+      group.traverse((obj) => {
+        if (obj instanceof THREE.Mesh || obj instanceof THREE.InstancedMesh) {
+          obj.geometry.dispose();
+          if (Array.isArray(obj.material)) {
+            obj.material.forEach((m) => m.dispose());
+          } else if (obj.material) {
+            (obj.material as THREE.Material).dispose();
+          }
+        }
+      });
+    };
+  }, []);
 
   // --- Gradient Map for Toon Shading ---
   const gradientMap = useMemo(() => {
@@ -477,7 +499,9 @@ const ImperativeModel = React.forwardRef((props: ImperativeModelProps, ref: Reac
     mesh.castShadow = true;
     group.add(mesh);
 
-  }, [size, thickness, color, cutoutShapes, baseOutlineRotation, baseOutlineMirror, wireframeBase, displayMode]);
+    // Note: wireframeBase is handled by the fast-update effect below, so
+    // toggling wireframe doesn't re-extrude the base.
+  }, [size, thickness, color, cutoutShapes, baseOutlineRotation, baseOutlineMirror, displayMode]);
 
 
   // --- 2. Inlays Construction ---
@@ -750,7 +774,9 @@ const ImperativeModel = React.forwardRef((props: ImperativeModelProps, ref: Reac
     });
     });
 
-  }, [inlayItems, thickness, color, wireframeInlay, clipToOutline, filledCutoutShapes, holeShapes, displayMode, isDragging, debugShowHoleCutter, debugShowInlayCutter, previewInlay, inlayOpacity]);
+    // Note: wireframeInlay handled by the fast-update effect — don't rebuild
+    // every inlay mesh just to toggle wireframe.
+  }, [inlayItems, thickness, color, clipToOutline, filledCutoutShapes, holeShapes, displayMode, isDragging, debugShowHoleCutter, debugShowInlayCutter, previewInlay, inlayOpacity]);
 
     // Subscribe to Event Bus for high-performance live preview updates
     // This allows us to move meshes during drag without React re-renders or regenerating geometry
@@ -831,28 +857,34 @@ const ImperativeModel = React.forwardRef((props: ImperativeModelProps, ref: Reac
 
     // Use setTimeout to allow the UI to render the loading state (spinner)
     // before locking the main thread with heavy geometry generation.
+    let timerFired = false;
     const timer = setTimeout(() => {
+        timerFired = true;
         try {
-            // Cleanup old Pattern meshes (Pattern, Pattern_0, Pattern_1, ...).
-            // We sweep by prefix so the same code handles the legacy single-mesh
-            // name AND the new compound-layer names; this keeps rebuild idempotent.
-            const oldPatternMeshes: THREE.Object3D[] = [];
+            // Snapshot the old Pattern meshes by name. We DO NOT remove them
+            // up front — if a layer's CSG throws, blanking everything leaves
+            // the user with no visible deck pattern until they touch another
+            // setting. Instead each layer's per-add code removes ONLY its own
+            // matching old mesh just before adding the new one, and a final
+            // sweep after the loop drops any old meshes that no longer
+            // correspond to a current layer (layer count shrank). Layers
+            // whose build failed silently retain the stale-but-visible mesh.
+            const oldPatternByName = new Map<string, THREE.Object3D>();
             group.children.forEach((child) => {
                 if (child.name === 'Pattern' || /^Pattern_\d+$/.test(child.name)) {
-                    oldPatternMeshes.push(child);
+                    oldPatternByName.set(child.name, child);
                 }
             });
-            oldPatternMeshes.forEach((existingPattern) => {
-                if (existingPattern instanceof THREE.Mesh || existingPattern instanceof THREE.InstancedMesh) {
-                    existingPattern.geometry.dispose();
-                    if (Array.isArray(existingPattern.material)) {
-                        existingPattern.material.forEach((m) => m.dispose());
-                    } else {
-                        (existingPattern.material as THREE.Material).dispose();
-                    }
+            // Helper used at each in-loop `group.add(...)` and the post-loop
+            // sweep — keeps disposal logic in one place.
+            const disposeAndRemove = (obj: THREE.Object3D) => {
+                if (obj instanceof THREE.Mesh || obj instanceof THREE.InstancedMesh) {
+                    obj.geometry.dispose();
+                    if (Array.isArray(obj.material)) obj.material.forEach((m) => m.dispose());
+                    else (obj.material as THREE.Material).dispose();
                 }
-                group.remove(existingPattern);
-            });
+                group.remove(obj);
+            };
 
              // Cleanup Pattern/Hole Debug Meshes AND Masked Patterns
             const objectsToRemove: THREE.Object3D[] = [];
@@ -1111,6 +1143,8 @@ const ImperativeModel = React.forwardRef((props: ImperativeModelProps, ref: Reac
                 iMesh.setMatrixAt(i, dummy.matrix);
             });
             iMesh.instanceMatrix.needsUpdate = true;
+            const stale = oldPatternByName.get(meshName);
+            if (stale) { disposeAndRemove(stale); oldPatternByName.delete(meshName); }
             group.add(iMesh);
             return;
         }
@@ -1400,6 +1434,8 @@ const ImperativeModel = React.forwardRef((props: ImperativeModelProps, ref: Reac
             }));
             resultBrush.userData.tileR = Math.max(pWidth, pHeight, 1) * 0.75;
             resultBrush.userData.topZ = thickness + maxPatternHeight;
+            const stale = oldPatternByName.get(meshName);
+            if (stale) { disposeAndRemove(stale); oldPatternByName.delete(meshName); }
             group.add(resultBrush);
         } else {
             console.warn(`Pattern layer ${layerIdx} produced empty geometry after CSG.`);
@@ -1422,6 +1458,21 @@ const ImperativeModel = React.forwardRef((props: ImperativeModelProps, ref: Reac
         }
     });
 
+    // Post-loop sweep: any old pattern mesh that survived the loop falls
+    // into one of two cases:
+    //   1. Its layer was removed from the current spec (layerIdx >=
+    //      allLayers.length, or the legacy unnumbered 'Pattern' name) —
+    //      dispose so it doesn't linger.
+    //   2. Its layer is still in the spec but the build failed (an inner
+    //      catch logged the error) — KEEP the old mesh so the deck doesn't
+    //      go blank between this failed rebuild and the next valid one.
+    oldPatternByName.forEach((old, name) => {
+        const m = name.match(/^Pattern_(\d+)$/);
+        const idx = m ? parseInt(m[1], 10) : -1;
+        const shouldDrop = idx < 0 || idx >= allLayers.length;
+        if (shouldDrop) disposeAndRemove(old);
+    });
+
     // Reference useCSG so an unused-var warning doesn't surface — it's the
     // legacy aggregate flag we keep around for symmetry with prior code reads.
     void useCSG;
@@ -1434,10 +1485,16 @@ const ImperativeModel = React.forwardRef((props: ImperativeModelProps, ref: Reac
 
     return () => {
         clearTimeout(timer);
+        // If the timer never fired, the matching `(false)` inside the
+        // try/finally was never reached — flush it here so the spinner
+        // doesn't get stuck "on" forever under rapid edits.
+        if (!timerFired) onProcessingChange?.(false);
     };
 
+    // Note: wireframePattern handled by the fast-update effect — don't run
+    // the entire CSG pipeline just to toggle wireframe.
   }, [
-      patternColor, wireframePattern,
+      patternColor,
       patternScale, patternScaleZ,
       isTiled, tileSpacing, patternMargin, tilingDistribution, tilingOrientation, tilingDirection,
       clipToOutline, displayMode, inlayItems, baseRotation, rotationClamp,
@@ -1467,31 +1524,54 @@ const ImperativeModel = React.forwardRef((props: ImperativeModelProps, ref: Reac
          }
      });
 
-     // Fast Update Base Opacity
+     // Fast Update Base Opacity + wireframe
      const baseMesh = group.getObjectByName('Base');
      if (baseMesh && baseMesh instanceof THREE.Mesh) {
-         const mat = baseMesh.material as THREE.Material;
+         const mat = baseMesh.material as (THREE.Material & { wireframe?: boolean });
          if (mat && typeof baseOpacity === 'number') {
              mat.opacity = baseOpacity;
              mat.transparent = baseOpacity < 1.0;
              mat.needsUpdate = true;
          }
+         if (mat && 'wireframe' in mat) mat.wireframe = !!wireframeBase;
      }
 
-     // Fast Update Inlay Opacity (Iterate children)
+     // Pattern wireframe — separate from the opacity loop above so all
+     // Pattern_* meshes pick up the toggle on the same pass.
+     group.children.forEach((child) => {
+         const isPatternMesh = child.name === 'Pattern' || /^Pattern_\d+$/.test(child.name);
+         if (!isPatternMesh) return;
+         if (child instanceof THREE.Mesh || child instanceof THREE.InstancedMesh) {
+             const mat = child.material as (THREE.Material & { wireframe?: boolean });
+             if (mat && 'wireframe' in mat) mat.wireframe = !!wireframePattern;
+         }
+     });
+
+     // Fast Update Inlay Opacity + wireframe (Iterate children)
      // Inlays are named "Inlay_0", "Inlay_1", etc.
      group.children.forEach(child => {
          if (child.name.startsWith('Inlay_')) {
              if (child instanceof THREE.Mesh) {
-                const mat = child.material as THREE.Material;
+                const mat = child.material as (THREE.Material & { wireframe?: boolean });
                 if (mat && typeof inlayOpacity === 'number') {
                     mat.opacity = inlayOpacity;
                     mat.transparent = inlayOpacity < 1.0;
                     mat.needsUpdate = true;
                 }
+                if (mat && 'wireframe' in mat) mat.wireframe = !!wireframeInlay;
              }
          }
      });
+     // Inlay meshes can also live inside the InlayGroup sub-group.
+     const inlayGroup = group.getObjectByName('InlayGroup');
+     if (inlayGroup) {
+         inlayGroup.traverse((child) => {
+             if (child instanceof THREE.Mesh) {
+                 const mat = child.material as (THREE.Material & { wireframe?: boolean });
+                 if (mat && 'wireframe' in mat) mat.wireframe = !!wireframeInlay;
+             }
+         });
+     }
 
      const patternCutter = group.getObjectByName('Debug_Pattern_Cutter');
      if (patternCutter) patternCutter.visible = !!debugShowPatternCutter;
@@ -1530,7 +1610,7 @@ const ImperativeModel = React.forwardRef((props: ImperativeModelProps, ref: Reac
          }
      });
 
-  }, [debugShowPatternCutter, debugShowHoleCutter, debugShowInlayCutter, patternOpacity, baseOpacity, inlayOpacity]);
+  }, [debugShowPatternCutter, debugShowHoleCutter, debugShowInlayCutter, patternOpacity, baseOpacity, inlayOpacity, wireframeBase, wireframeInlay, wireframePattern]);
 
   return <group ref={localGroupRef} />;
 });

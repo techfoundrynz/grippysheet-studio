@@ -61,6 +61,26 @@ export const ColorFlowModel = React.forwardRef<THREE.Group, Props>(({ baseGeom, 
     if (localGroupRef.current) localGroupRef.current.name = 'ColorFlowAssembly';
   }, []);
 
+  // Dispose every mesh attached to this group when the component unmounts —
+  // R3F frees the wrapping <group> but doesn't walk the children to release
+  // GPU buffers, so mode toggles otherwise leak VBOs/textures.
+  useEffect(() => {
+    const group = localGroupRef.current;
+    return () => {
+      if (!group) return;
+      group.traverse((obj) => {
+        if (obj instanceof THREE.Mesh) {
+          obj.geometry.dispose();
+          if (Array.isArray(obj.material)) {
+            obj.material.forEach((m) => m.dispose());
+          } else if (obj.material) {
+            (obj.material as THREE.Material).dispose();
+          }
+        }
+      });
+    };
+  }, []);
+
   // Base mesh: depends on baseGeom + baseColor + displayMode only.
   useEffect(() => {
     const group = localGroupRef.current;
