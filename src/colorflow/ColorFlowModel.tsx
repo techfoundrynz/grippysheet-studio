@@ -81,7 +81,11 @@ export const ColorFlowModel = React.forwardRef<THREE.Group, Props>(({ baseGeom, 
     };
   }, []);
 
-  // Base mesh: depends on baseGeom + baseColor + displayMode only.
+  // Base / layer / spike meshes are rebuilt only when their own geometry
+  // input changes — `displayMode` is handled by the material-swap effect
+  // below so toggling toon/standard doesn't re-upload any VBOs.
+
+  // Base mesh: depends on baseGeom + baseColor only.
   useEffect(() => {
     const group = localGroupRef.current;
     if (!group) return;
@@ -101,9 +105,11 @@ export const ColorFlowModel = React.forwardRef<THREE.Group, Props>(({ baseGeom, 
         baseRef.current = null;
       }
     };
-  }, [baseGeom, baseColor, displayMode]);
+    // displayMode intentionally omitted — see swap effect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [baseGeom, baseColor]);
 
-  // Color layer meshes: depend on layers + displayMode only.
+  // Color layer meshes: depend on layers only.
   useEffect(() => {
     const group = localGroupRef.current;
     if (!group) return;
@@ -120,9 +126,10 @@ export const ColorFlowModel = React.forwardRef<THREE.Group, Props>(({ baseGeom, 
       disposeMeshArray(layerMeshesRef.current);
       layerMeshesRef.current = [];
     };
-  }, [layers, displayMode]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [layers]);
 
-  // Spike meshes: depend on spikes + displayMode only.
+  // Spike meshes: depend on spikes only.
   useEffect(() => {
     const group = localGroupRef.current;
     if (!group) return;
@@ -138,7 +145,28 @@ export const ColorFlowModel = React.forwardRef<THREE.Group, Props>(({ baseGeom, 
       disposeMeshArray(spikeMeshesRef.current);
       spikeMeshesRef.current = [];
     };
-  }, [spikes, displayMode]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spikes]);
+
+  // displayMode swap: re-create the material on each existing mesh in
+  // place, preserving its colour. The geometry is reused — no VBO churn.
+  useEffect(() => {
+    const swap = (mesh: THREE.Mesh | null) => {
+      if (!mesh) return;
+      const old = mesh.material;
+      if (Array.isArray(old)) return;
+      const wantsToon = displayMode === 'toon';
+      const isToon = old instanceof THREE.MeshToonMaterial;
+      if (wantsToon === isToon) return;
+      const m = old as THREE.Material & { color?: THREE.Color };
+      const color = m.color ? m.color.clone() : new THREE.Color(0xffffff);
+      mesh.material = makeMaterial(color, displayMode);
+      m.dispose();
+    };
+    swap(baseRef.current);
+    layerMeshesRef.current.forEach(swap);
+    spikeMeshesRef.current.forEach(swap);
+  }, [displayMode]);
 
   return <group ref={localGroupRef} />;
 });

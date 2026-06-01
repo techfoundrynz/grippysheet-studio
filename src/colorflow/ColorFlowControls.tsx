@@ -410,7 +410,11 @@ export const ColorFlowControls: React.FC<Props> = ({
       }
     })();
     return () => { cancelled = true; };
-  }, [layers, outlinePolygon, palette, coverage, baseMm, settings.colorLayerMm, settings.sort, settings.layerOrder, request, onGeometryReady, showAlert]);
+    // `request`, `onGeometryReady`, and `showAlert` come in from parent
+    // refs that are stable across renders — listing them just creates
+    // refactor friction without changing the firing behaviour.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [layers, outlinePolygon, palette, coverage, baseMm, settings.colorLayerMm, settings.sort, settings.layerOrder]);
 
   return (
     <div className="space-y-6">

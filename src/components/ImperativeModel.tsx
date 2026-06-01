@@ -499,9 +499,11 @@ const ImperativeModel = React.forwardRef((props: ImperativeModelProps, ref: Reac
     mesh.castShadow = true;
     group.add(mesh);
 
-    // Note: wireframeBase is handled by the fast-update effect below, so
-    // toggling wireframe doesn't re-extrude the base.
-  }, [size, thickness, color, cutoutShapes, baseOutlineRotation, baseOutlineMirror, displayMode]);
+    // Note: wireframeBase + displayMode are handled by the fast-update +
+    // material-swap effects below, so toggling either doesn't re-extrude
+    // the base.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [size, thickness, color, cutoutShapes, baseOutlineRotation, baseOutlineMirror]);
 
 
   // --- 2. Inlays Construction ---
@@ -774,9 +776,11 @@ const ImperativeModel = React.forwardRef((props: ImperativeModelProps, ref: Reac
     });
     });
 
-    // Note: wireframeInlay handled by the fast-update effect — don't rebuild
-    // every inlay mesh just to toggle wireframe.
-  }, [inlayItems, thickness, color, clipToOutline, filledCutoutShapes, holeShapes, displayMode, isDragging, debugShowHoleCutter, debugShowInlayCutter, previewInlay, inlayOpacity]);
+    // Note: wireframeInlay + displayMode handled by the fast-update +
+    // material-swap effects — don't rebuild every inlay mesh just to flip
+    // those.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inlayItems, thickness, color, clipToOutline, filledCutoutShapes, holeShapes, isDragging, debugShowHoleCutter, debugShowInlayCutter, previewInlay, inlayOpacity]);
 
     // Subscribe to Event Bus for high-performance live preview updates
     // This allows us to move meshes during drag without React re-renders or regenerating geometry
@@ -1491,13 +1495,15 @@ const ImperativeModel = React.forwardRef((props: ImperativeModelProps, ref: Reac
         if (!timerFired) onProcessingChange?.(false);
     };
 
-    // Note: wireframePattern handled by the fast-update effect — don't run
-    // the entire CSG pipeline just to toggle wireframe.
+    // Note: wireframePattern + displayMode handled by the fast-update +
+    // material-swap effects — don't run the entire CSG pipeline just to
+    // flip them.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
       patternColor,
       patternScale, patternScaleZ,
       isTiled, tileSpacing, patternMargin, tilingDistribution, tilingOrientation, tilingDirection,
-      clipToOutline, displayMode, inlayItems, baseRotation, rotationClamp,
+      clipToOutline, inlayItems, baseRotation, rotationClamp,
       thickness, filledCutoutShapes, holeShapes, patternShapes, size, patternMaxHeight,
       holeMode, removedTiles, addedSpikes, extraLayers,
   ]);
@@ -1611,6 +1617,55 @@ const ImperativeModel = React.forwardRef((props: ImperativeModelProps, ref: Reac
      });
 
   }, [debugShowPatternCutter, debugShowHoleCutter, debugShowInlayCutter, patternOpacity, baseOpacity, inlayOpacity, wireframeBase, wireframeInlay, wireframePattern]);
+
+  // --- 5. displayMode material swap ---
+  // Toon ↔ standard is a material *type* swap, not a property change, so it
+  // can't ride along the fast-update effect above. But it also doesn't need
+  // any geometry to be rebuilt — we just swap the material on each managed
+  // mesh in place, preserving its colour / opacity / wireframe. This keeps
+  // CSG and extrude pipelines from running on every toon toggle.
+  useEffect(() => {
+     const group = localGroupRef.current;
+     if (!group) return;
+     const wantsToon = displayMode === 'toon';
+
+     const swap = (mesh: THREE.Mesh | THREE.InstancedMesh) => {
+        const oldMat = mesh.material;
+        if (Array.isArray(oldMat)) return;
+        const isToon = oldMat instanceof THREE.MeshToonMaterial;
+        if (wantsToon === isToon) return;
+        const m = oldMat as THREE.Material & {
+          color?: THREE.Color;
+          opacity?: number;
+          transparent?: boolean;
+          wireframe?: boolean;
+        };
+        const color = m.color ? m.color.clone() : new THREE.Color(0xffffff);
+        const isWireframe = !!m.wireframe;
+        const transparent = !!m.transparent;
+        const opacity = typeof m.opacity === 'number' ? m.opacity : 1;
+        mesh.material = createMaterial(color, transparent, opacity, isWireframe);
+        m.dispose();
+     };
+
+     group.traverse((obj) => {
+        const name = obj.name;
+        const isManaged =
+          name === 'Base' ||
+          name === 'Pattern' ||
+          /^Pattern_\d+$/.test(name) ||
+          name.startsWith('Inlay_') ||
+          name.startsWith('Pattern_Masked_');
+        if (!isManaged) return;
+        if (obj instanceof THREE.Mesh || obj instanceof THREE.InstancedMesh) {
+          swap(obj);
+        }
+     });
+    // createMaterial reads displayMode + gradientMap from closure; both are
+    // captured by `displayMode` triggering the re-render, and gradientMap is
+    // stable via useMemo([]).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [displayMode]);
 
   return <group ref={localGroupRef} />;
 });
