@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { type BaseSettings } from '../types/schemas';
+import { type BaseSettings, type GeometrySettings } from '../types/schemas';
 import { type ColorFlowSettings } from './schema';
 import { getOutlineBySlug } from './outlineLibrary';
 import { RequestCancelledError, useColorFlowWorker } from './useColorFlowWorker';
@@ -25,6 +25,7 @@ import { BaseStatusBanner } from './controls/BaseStatusBanner';
 import { ImageSection } from './controls/ImageSection';
 import { ColorSliders } from './controls/ColorSliders';
 import { PrintControls } from './controls/PrintControls';
+import { SpikeControls } from './controls/SpikeControls';
 import { LayerControls } from './controls/LayerControls';
 import { StatusFooter } from './controls/StatusFooter';
 
@@ -68,6 +69,17 @@ interface Props {
   initialImageAsset?: { name: string; bytes: ArrayBuffer } | null;
   /** Callback to switch the right-panel tabs to "Base". */
   onSwitchToBase?: () => void;
+  /** Pattern + spike state — drives the Spike overlay sub-section.
+   *  These come from App.tsx through Controls so the Generate button has
+   *  a single ownership chain. SpikeControls is the only sub-component that
+   *  reads geometry-mode state; rendering it here (not in the Geometry tab)
+   *  keeps it next to its mental siblings: it acts ON the colour stack. */
+  geometrySettings?: GeometrySettings;
+  spikeDiag?: string;
+  canGenerateSpikes?: boolean;
+  spikesStale?: boolean;
+  hasSpikes?: boolean;
+  onGenerateSpikes?: () => void;
 }
 
 const MAX_IMG_DIM = 1500;
@@ -112,6 +124,8 @@ async function probeImageDimensions(file: File): Promise<{ w: number; h: number 
 export const ColorFlowControls: React.FC<Props> = ({
   baseSettings, settings, setSettings,
   onGeometryReady, onImageAssetChanged, initialImageAsset, onSwitchToBase,
+  geometrySettings, spikeDiag, canGenerateSpikes, spikesStale, hasSpikes,
+  onGenerateSpikes,
 }) => {
   const { request, status } = useColorFlowWorker();
   const { showAlert } = useAlert();
@@ -462,6 +476,21 @@ export const ColorFlowControls: React.FC<Props> = ({
         settings={settings}
         setSettings={setSettings}
       />
+
+      {geometrySettings && (
+        <SpikeControls
+          paletteSize={palette.length}
+          geometrySettings={geometrySettings}
+          baseMm={baseMm}
+          settings={settings}
+          setSettings={setSettings}
+          spikeDiag={spikeDiag}
+          canGenerate={!!canGenerateSpikes}
+          isStale={!!spikesStale}
+          hasSpikes={!!hasSpikes}
+          onGenerate={onGenerateSpikes}
+        />
+      )}
 
       <StatusFooter
         phase={status.phase || undefined}

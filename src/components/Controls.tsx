@@ -11,7 +11,6 @@ import { useAlert } from '../context/AlertContext';
 import SegmentedControl from './ui/SegmentedControl';
 import Button from './ui/Button';
 import { ColorFlowControls, type ColorFlowGeomData } from '../colorflow/ColorFlowControls';
-import { SpikeControls } from '../colorflow/controls/SpikeControls';
 import type { ColorFlowSettings } from '../colorflow/schema';
 
 // Sub-components
@@ -635,20 +634,10 @@ const Controls: React.FC<ControlsProps> = ({
                         tileRemovalMode={tileRemovalMode ?? false}
                         setTileRemovalMode={setTileRemovalMode}
                     />
-                    {colorFlowActive && colorFlowPaletteSize > 0 && (
-                        <SpikeControls
-                            paletteSize={colorFlowPaletteSize}
-                            geometrySettings={geometrySettings}
-                            baseMm={baseSettings.thickness}
-                            settings={colorFlowSettings}
-                            setSettings={setColorFlowSettings}
-                            spikeDiag={colorFlowSpikeDiag}
-                            canGenerate={!!colorFlowCanGenerateSpikes}
-                            isStale={!!colorFlowSpikesStale}
-                            hasSpikes={!!colorFlowHasSpikes}
-                            onGenerate={onGenerateSpikes}
-                        />
-                    )}
+                    {/* SpikeControls used to live here but the Generate-preview
+                        action belongs next to the colour stack it sits on top
+                        of, not buried under the pattern-tile controls. It's
+                        rendered from ColorFlowControls now (per CLAUDE.md). */}
                 </div>
             </Freeze>
 
@@ -668,6 +657,12 @@ const Controls: React.FC<ControlsProps> = ({
                         onImageAssetChanged={onColorFlowImageAssetChanged}
                         initialImageAsset={initialColorFlowImageAsset}
                         onSwitchToBase={() => setActiveTab('base')}
+                        geometrySettings={geometrySettings}
+                        spikeDiag={colorFlowSpikeDiag}
+                        canGenerateSpikes={!!colorFlowCanGenerateSpikes}
+                        spikesStale={!!colorFlowSpikesStale}
+                        hasSpikes={!!colorFlowHasSpikes}
+                        onGenerateSpikes={onGenerateSpikes}
                     />
                 </div>
             </Freeze>
