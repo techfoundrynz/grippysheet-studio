@@ -3,6 +3,7 @@ import { Download, Layers, Box } from 'lucide-react';
 import { STLExporter } from 'three-stdlib';
 import { useAlert } from '../context/AlertContext';
 import { exportTo3MF } from 'three-3mf-exporter';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import * as THREE from 'three';
 
 interface OutputPanelProps {
@@ -135,6 +136,48 @@ const OutputPanel: React.FC<OutputPanelProps> = ({ meshRef, debugMode = false, c
     URL.revokeObjectURL(url);
   };
 
+  /**
+   * Collapse everything into one mesh per unique material colour, baking world
+   * transforms into the geometry. This gives the slicer a single object + material per
+   * colour instead of dozens of duplicate same-colour materials (one per source mesh).
+   */
+  const mergeByColor = (root: THREE.Object3D): THREE.Group => {
+    root.updateMatrixWorld(true);
+    const byColor = new Map<string, THREE.BufferGeometry[]>();
+    const colorVal = new Map<string, THREE.Color>();
+
+    root.traverse((obj) => {
+      if (!(obj instanceof THREE.Mesh) || !obj.geometry) return;
+      const material = Array.isArray(obj.material) ? obj.material[0] : obj.material;
+      const col = (material as THREE.MeshStandardMaterial)?.color ?? new THREE.Color(0xffffff);
+      const key = col.getHexString();
+
+      // Bake the world transform into a non-indexed clone so all parts merge uniformly.
+      const g = obj.geometry.index ? obj.geometry.toNonIndexed() : obj.geometry.clone();
+      g.applyMatrix4(obj.matrixWorld);
+      const clean = new THREE.BufferGeometry();
+      clean.setAttribute('position', (g.getAttribute('position') as THREE.BufferAttribute).clone());
+      const nrm = g.getAttribute('normal');
+      if (nrm) clean.setAttribute('normal', (nrm as THREE.BufferAttribute).clone());
+      else clean.computeVertexNormals();
+      g.dispose();
+
+      if (!byColor.has(key)) { byColor.set(key, []); colorVal.set(key, col.clone()); }
+      byColor.get(key)!.push(clean);
+    });
+
+    const out = new THREE.Group();
+    byColor.forEach((geos, key) => {
+      const merged = geos.length === 1 ? geos[0] : mergeGeometries(geos, false);
+      if (geos.length > 1) geos.forEach((g) => g.dispose());
+      if (!merged) return;
+      const mesh = new THREE.Mesh(merged, new THREE.MeshStandardMaterial({ color: colorVal.get(key)! }));
+      mesh.name = `Color_${key}`;
+      out.add(mesh);
+    });
+    return out;
+  };
+
   const handleExport3MF = async () => {
     try {
         if (!meshRef.current) return;
@@ -153,10 +196,12 @@ const OutputPanel: React.FC<OutputPanelProps> = ({ meshRef, debugMode = false, c
             return;
         }
 
-        exportGroup.updateMatrixWorld(true);
+        // Merge same-colour parts so the slicer gets one material per colour.
+        const mergedByColor = mergeByColor(exportGroup);
+        mergedByColor.updateMatrixWorld(true);
 
         // Async export
-        const blob = await exportTo3MF(exportGroup, {});
+        const blob = await exportTo3MF(mergedByColor, {});
         
         const link = document.createElement('a');
         link.style.display = 'none';
