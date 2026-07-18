@@ -1,62 +1,97 @@
 import { PatternJob, PatternResult } from './patternPipeline';
+import { InlayJob, InlayResult } from './inlayPipeline';
 import { geometryTransferables } from './serialize';
 
 /**
- * Main-thread manager for the geometry worker.
+ * Main-thread manager for the geometry worker (pattern + inlay).
  *
- * - Owns a single module Worker (lazily created).
- * - Assigns a monotonic jobId to every submission.
- * - Latest-wins cancellation: only the newest job's result is delivered; results
- *   for superseded jobs are dropped, so rapid setting changes never apply stale
- *   geometry. The worker itself stays responsive because it runs off the UI thread.
+ * The worker is single-threaded and a running Manifold job can't be interrupted, so we
+ * avoid letting stale work pile up: at most ONE job is in flight, plus ONE pending
+ * "latest" job per kind. Rapid input changes overwrite the pending slot, so intermediate
+ * values are coalesced away — the worker computes the in-flight job, then jumps straight
+ * to the newest values instead of grinding through every queued change.
+ *
+ * Latest-wins delivery still applies: an in-flight result that has since been superseded
+ * is dropped rather than applied.
  */
-class PatternWorkerClient {
+type Kind = 'pattern' | 'inlay';
+
+interface Slot {
+  kind: Kind;
+  jobId: number;
+  job: PatternJob | InlayJob;
+  transfer: ArrayBuffer[];
+  cb: (r: unknown) => void;
+  cancelled: boolean;
+}
+
+class GeometryWorkerClient {
   private worker: Worker | null = null;
   private counter = 0;
-  private latestJobId = 0;
-  private pending = new Map<number, (r: PatternResult) => void>();
+  private latest: Record<Kind, number> = { pattern: 0, inlay: 0 };
+  private slots: Record<Kind, Slot | null> = { pattern: null, inlay: null };
+  private inFlight: Slot | null = null;
 
   private ensureWorker(): Worker {
     if (!this.worker) {
       this.worker = new Worker(new URL('../../workers/geometryWorker.ts', import.meta.url), {
         type: 'module',
       });
-      this.worker.onmessage = (e: MessageEvent<PatternResult>) => this.onMessage(e.data);
-      this.worker.onerror = (e) => console.error('[patternClient] worker error:', e.message);
+      this.worker.onmessage = (e: MessageEvent<{ kind: Kind; result: { jobId: number } }>) =>
+        this.onMessage(e.data);
+      this.worker.onerror = (e) => {
+        console.error('[geometryClient] worker error:', e.message);
+        // Unblock the pump so a wedged in-flight job doesn't stall everything.
+        this.inFlight = null;
+        this.pump();
+      };
     }
     return this.worker;
   }
 
-  private onMessage(result: PatternResult) {
-    const cb = this.pending.get(result.jobId);
-    this.pending.delete(result.jobId);
-    // Drop stale results — only deliver the newest requested job.
-    if (result.jobId === this.latestJobId && cb) cb(result);
+  private onMessage(msg: { kind: Kind; result: { jobId: number } }) {
+    const done = this.inFlight;
+    this.inFlight = null;
+    // Deliver only if this job is still the newest of its kind and wasn't cancelled.
+    if (done && !done.cancelled && done.jobId === this.latest[done.kind]) done.cb(msg.result);
+    this.pump();
   }
 
-  /**
-   * Submit a job. The jobId field is assigned here (any incoming value is overwritten).
-   * Returns a handle whose cancel() prevents this job's callback from firing.
-   */
-  submit(job: PatternJob, cb: (r: PatternResult) => void): { cancel: () => void } {
-    const worker = this.ensureWorker();
+  private pump() {
+    if (this.inFlight) return;
+    // Send whichever kind has a pending latest (pattern first, then inlay next cycle).
+    const next = this.slots.pattern ?? this.slots.inlay;
+    if (!next) return;
+    this.slots[next.kind] = null;
+    this.inFlight = next;
+    this.ensureWorker().postMessage({ kind: next.kind, job: next.job }, next.transfer);
+  }
+
+  private enqueue(kind: Kind, job: PatternJob | InlayJob, transfer: ArrayBuffer[], cb: (r: unknown) => void) {
     const id = ++this.counter;
     job.jobId = id;
-    this.latestJobId = id;
-    this.pending.set(id, cb);
-
-    // Transfer the pattern-unit geometry buffers when present (they are copies made
-    // during serialization, so the scene-graph originals are unaffected).
-    const transfer: ArrayBuffer[] =
-      job.patternUnit.kind === 'geometry' ? geometryTransferables(job.patternUnit.geometry) : [];
-
-    worker.postMessage(job, transfer);
+    this.latest[kind] = id;
+    const slot: Slot = { kind, jobId: id, job, transfer, cb, cancelled: false };
+    this.slots[kind] = slot; // coalesce — overwrite any older pending job of this kind
+    this.ensureWorker();
+    this.pump();
     return {
       cancel: () => {
-        this.pending.delete(id);
+        if (this.slots[kind] === slot) this.slots[kind] = null;
+        if (this.inFlight === slot) this.inFlight.cancelled = true;
       },
     };
   }
+
+  submitPattern(job: PatternJob, cb: (r: PatternResult) => void): { cancel: () => void } {
+    const transfer =
+      job.patternUnit.kind === 'geometry' ? geometryTransferables(job.patternUnit.geometry) : [];
+    return this.enqueue('pattern', job, transfer, cb as (r: unknown) => void);
+  }
+
+  submitInlay(job: InlayJob, cb: (r: InlayResult) => void): { cancel: () => void } {
+    return this.enqueue('inlay', job, [], cb as (r: unknown) => void);
+  }
 }
 
-export const patternWorkerClient = new PatternWorkerClient();
+export const geometryWorkerClient = new GeometryWorkerClient();

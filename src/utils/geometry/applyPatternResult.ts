@@ -97,8 +97,13 @@ export function applyPatternResult(group: THREE.Group, result: PatternResult, ct
         material = ctx.makeMaterial(ctx.patternColor, ctx.patternOpacity < 1.0, ctx.patternOpacity, ctx.wireframePattern);
         break;
       case 'masked':
-        material = ctx.makeMaterial(ctx.resolveColor(part.material.color), ctx.patternOpacity < 1.0, ctx.patternOpacity, ctx.wireframePattern);
-        visible = !ctx.isDragging;
+        // While an inlay is being dragged, show masked regions in the standard pattern
+        // colour so the grip reads as one uniform colour (the material effect toggles
+        // this live too). The real mask colour is stashed on userData for restore.
+        material = ctx.makeMaterial(
+          ctx.isDragging ? ctx.patternColor : ctx.resolveColor(part.material.color),
+          ctx.patternOpacity < 1.0, ctx.patternOpacity, ctx.wireframePattern,
+        );
         break;
       case 'basic':
       default: {

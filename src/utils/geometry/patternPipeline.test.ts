@@ -1,6 +1,8 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import * as THREE from 'three';
-import { generatePattern, PatternJob } from './patternPipeline';
+import type { ManifoldToplevel } from 'manifold-3d';
+import { generatePattern, PatternJob, PatternResult } from './patternPipeline';
+import { getManifold } from './manifoldModule';
 import { serializeShape, deserializeShape, serializeGeometry, deserializeGeometry } from './serialize';
 
 /** Flat-array square shape centered at origin. */
@@ -9,6 +11,16 @@ function squareShape(half: number) {
     points: [-half, -half, half, -half, half, half, -half, half],
     holes: [] as number[][],
   };
+}
+
+/** XY bounding box of a part's position buffer. */
+function xyBounds(pos: Float32Array) {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (let i = 0; i < pos.length; i += 3) {
+    minX = Math.min(minX, pos[i]); maxX = Math.max(maxX, pos[i]);
+    minY = Math.min(minY, pos[i + 1]); maxY = Math.max(maxY, pos[i + 1]);
+  }
+  return { minX, minY, maxX, maxY };
 }
 
 const baseJob = (overrides: Partial<PatternJob>): PatternJob => ({
@@ -64,45 +76,77 @@ describe('serialize round-trip', () => {
   });
 });
 
-describe('generatePattern', () => {
+describe('generatePattern (Manifold)', () => {
+  let wasm: ManifoldToplevel;
+  const run = (job: PatternJob): PatternResult => generatePattern(job, wasm);
+
+  beforeAll(async () => {
+    wasm = await getManifold();
+  });
+
   it('uses the instanced fast path when no CSG is needed', () => {
-    const res = generatePattern(baseJob({ clipToOutline: false }));
+    const res = run(baseJob({ clipToOutline: false }));
     expect(res.empty).toBe(false);
     expect(res.instanced).toBeDefined();
     expect(res.instanced!.count).toBeGreaterThan(0);
-    // 16 floats per instance matrix.
     expect(res.instanced!.matrices.length).toBe(res.instanced!.count * 16);
+    // Manifold provides normals for lit materials.
+    expect(res.instanced!.unit.normal).toBeDefined();
     expect(res.parts.length).toBe(0);
   });
 
-  it('runs the CSG path and returns a Pattern part when clipping to outline', () => {
-    const res = generatePattern(baseJob({ clipToOutline: true }));
+  it('runs the CSG path and returns a watertight Pattern part when clipping', () => {
+    const res = run(baseJob({ clipToOutline: true }));
     expect(res.instanced).toBeUndefined();
     const pattern = res.parts.find((p) => p.name === 'Pattern');
     expect(pattern).toBeDefined();
     expect(pattern!.geometry.position.length).toBeGreaterThan(0);
+    expect(pattern!.geometry.index).toBeDefined();
     expect(pattern!.material.type).toBe('pattern');
+    // Clipped result must lie within the 10x10 outline (±5).
+    const b = xyBounds(pattern!.geometry.position);
+    expect(b.maxX).toBeLessThanOrEqual(5.01);
+    expect(b.minX).toBeGreaterThanOrEqual(-5.01);
+    expect(b.maxY).toBeLessThanOrEqual(5.01);
+    expect(b.minY).toBeGreaterThanOrEqual(-5.01);
+  });
+
+  it('erodes the clip region by the margin', () => {
+    const res = run(baseJob({ clipToOutline: true, patternMargin: 1 }));
+    const pattern = res.parts.find((p) => p.name === 'Pattern')!;
+    const b = xyBounds(pattern.geometry.position);
+    // With a 1mm margin the pattern must stay within ±4.
+    expect(b.maxX).toBeLessThanOrEqual(4.01);
+    expect(b.minX).toBeGreaterThanOrEqual(-4.01);
   });
 
   it('subtracts holes via CSG', () => {
-    const res = generatePattern(baseJob({ holeShapes: [squareShape(1.5)] }));
+    const res = run(baseJob({ holeShapes: [squareShape(1.5)] }));
     const pattern = res.parts.find((p) => p.name === 'Pattern');
     expect(pattern).toBeDefined();
     expect(pattern!.geometry.position.length).toBeGreaterThan(0);
   });
 
   it('produces colored mask parts', () => {
-    const res = generatePattern(baseJob({
+    const res = run(baseJob({
       clipToOutline: true,
       maskShapes: [{ shape: squareShape(2), color: 'red' }],
     }));
     const masked = res.parts.find((p) => p.name.startsWith('Pattern_Masked_'));
     expect(masked).toBeDefined();
     expect(masked!.material.type).toBe('masked');
+    expect(masked!.geometry.normal).toBeDefined();
+  });
+
+  it('emits debug parts only when a debug flag is set', () => {
+    const off = run(baseJob({ clipToOutline: true }));
+    expect(off.parts.some((p) => p.name.startsWith('Debug_'))).toBe(false);
+    const on = run(baseJob({ clipToOutline: true, debugPattern: true }));
+    expect(on.parts.some((p) => p.name === 'Debug_Pattern_Cutter')).toBe(true);
   });
 
   it('returns empty when there is no pattern unit geometry', () => {
-    const res = generatePattern(baseJob({ patternUnit: { kind: 'shapes', shapes: [] } }));
+    const res = run(baseJob({ patternUnit: { kind: 'shapes', shapes: [] } }));
     expect(res.empty).toBe(true);
   });
 });

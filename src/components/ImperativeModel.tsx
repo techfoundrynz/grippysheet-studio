@@ -1,11 +1,12 @@
 import React, { useEffect, useRef, useMemo } from 'react';
 import { eventBus } from "../utils/eventBus";
 import * as THREE from 'three';
-import { Brush, Evaluator, SUBTRACTION, INTERSECTION } from 'three-bvh-csg';
 import { generateTilePositions, getShapesBounds, TileInstance } from '../utils/patternUtils';
 import { PatternJob } from '../utils/geometry/patternPipeline';
+import { InlayJob, InlayJobItem } from '../utils/geometry/inlayPipeline';
 import { applyPatternResult, cleanupPatternObjects, ApplyContext } from '../utils/geometry/applyPatternResult';
-import { patternWorkerClient } from '../utils/geometry/patternClient';
+import { applyInlayResult, InlayApplyContext } from '../utils/geometry/applyInlayResult';
+import { geometryWorkerClient } from '../utils/geometry/patternClient';
 import { serializeShape, serializeShapes, serializeGeometry } from '../utils/geometry/serialize';
 
 import { InlayItem } from '../types/schemas';
@@ -548,9 +549,6 @@ const ImperativeModel = React.forwardRef((props: ImperativeModelProps, ref: Reac
         : inlayItems;
 
     itemsToRender.forEach((item, i) => {
-        // Check if this is the preview item (skip CSG for it)
-        const isPreviewItem = previewInlay && item.id === previewInlay.id;
-        
         // Calculate offset for THIS specific item
         // We use the "manual" position logic for all items now, as x/y are stored on the item.
         // If the user wants "center" or "top-left", the UI calculates those coords and saves them to x/y.
@@ -637,11 +635,6 @@ const ImperativeModel = React.forwardRef((props: ImperativeModelProps, ref: Reac
                  return;
             }
 
-            // Check CSG - Skip CSG for preview items
-            const needsClipping = filledCutoutShapes && filledCutoutShapes.length > 0;
-            const hasHoles = holeShapes && holeShapes.length > 0;
-
-             if ((!needsClipping && !hasHoles) || isPreviewItem) {
                   // Fast Path
                   const mesh = new THREE.Mesh(geo, mat);
                   mesh.name = `Inlay_${item.id}_${tileIdx}_${shapeIdx}`;
@@ -649,93 +642,62 @@ const ImperativeModel = React.forwardRef((props: ImperativeModelProps, ref: Reac
                  mesh.receiveShadow = true;
 
                  inlayGroup.add(mesh);
-            } else {
-                try {
-                    const evaluator = new Evaluator();
-                    evaluator.attributes = ['position', 'normal'];
-                    let resultBrush = new Brush(geo);
-                    resultBrush.updateMatrixWorld();
-
-                     // 3. Subtract Holes
-                    if (hasHoles) {
-                        const maxExtend = Math.max(...itemsToRender.map(it => it.extend || 0), 0);
-                        const holeDepth = thickness + Math.max(Number(patternScaleZ || 0), maxExtend) + 20;
-                        const holeGeo = new THREE.ExtrudeGeometry(holeShapes, { depth: holeDepth, bevelEnabled: false });
-                        
-                        if (holeGeo.attributes.position && holeGeo.attributes.position.count > 0) {
-                            const holeBrush = new Brush(holeGeo);
-                            holeBrush.position.z = -10;
-                            holeBrush.updateMatrixWorld();
-                            
-                            try {
-                                 // Only generate debug waste for the FIRST shape of the FIRST item to avoid clutter?
-                                 // Or maybe valid debug per item.
-                                 if (debugShowHoleCutter && i === 0 && shapeIdx === 0) {
-                                     const wasteBrush = evaluator.evaluate(resultBrush, holeBrush, INTERSECTION);
-                                     if (wasteBrush && wasteBrush.geometry && wasteBrush.geometry.attributes.position && wasteBrush.geometry.attributes.position.count > 0) {
-                                        // Since we already baked translation into resultBrush geometry, 
-                                        // wasteBrush geometry is in World Space (correct).
-                                        // We add to inlayGroup (which is at 0,0,0). Correct.
-                                        const wasteMat = new THREE.MeshBasicMaterial({ color: 0xff0000, opacity: 0.5, transparent: true, side: THREE.DoubleSide, depthWrite: false });
-                                        const wasteMesh = new THREE.Mesh(wasteBrush.geometry, wasteMat);
-                                        wasteMesh.name = `Debug_Hole_Waste_Inlay_${i}`;
-                                        inlayGroup.add(wasteMesh);
-                                     }
-                                 }
-                                resultBrush = evaluator.evaluate(resultBrush, holeBrush, SUBTRACTION);
-                            } catch (err) { }
-                        }
-                        holeGeo.dispose();
-                    }
-
-                    // 4. Clip to Outline
-                    if (needsClipping) {
-                        const maxExtend = Math.max(...itemsToRender.map(it => it.extend || 0), 0);
-                        const cutterDepth = thickness + Math.max(Number(patternScaleZ || 0), maxExtend) + 5;
-                        const cutterGeo = new THREE.ExtrudeGeometry(filledCutoutShapes, { depth: cutterDepth, bevelEnabled: false });
-                        
-                        if (cutterGeo.attributes.position && cutterGeo.attributes.position.count > 0) {
-                            const cutterBrush = new Brush(cutterGeo);
-                            cutterBrush.updateMatrixWorld();
-                            try {
-                                if (debugShowInlayCutter && i === 0 && shapeIdx === 0) {
-                                     const wasteBrush = evaluator.evaluate(resultBrush, cutterBrush, SUBTRACTION);
-                                     if (wasteBrush && wasteBrush.geometry && wasteBrush.geometry.attributes.position && wasteBrush.geometry.attributes.position.count > 0) {
-                                        const wasteMat = new THREE.MeshBasicMaterial({ color: 0x00ff00, opacity: 0.5, transparent: true, side: THREE.DoubleSide, depthWrite: false });
-                                        const wasteMesh = new THREE.Mesh(wasteBrush.geometry, wasteMat);
-                                        wasteMesh.name = `Debug_Inlay_Waste_${i}`;
-                                        inlayGroup.add(wasteMesh);
-                                     }
-                                }
-                                resultBrush = evaluator.evaluate(resultBrush, cutterBrush, INTERSECTION);
-                                
-                                if (debugShowInlayCutter && i === 0 && shapeIdx === 0) {
-                                    const debugMat = new THREE.MeshBasicMaterial({ color: 0x00ff00, opacity: 0.01, transparent: true, side: THREE.DoubleSide, depthWrite: false });
-                                    const debugMesh = new THREE.Mesh(cutterGeo.clone(), debugMat);
-                                    debugMesh.name = `Debug_Inlay_Cutter_${i}`;
-                                    group.add(debugMesh); 
-                                }
-
-                            } catch (err) { }
-                        }
-                        cutterGeo.dispose();
-                    }
-
-                    if (resultBrush && resultBrush.geometry && resultBrush.geometry.attributes.position && resultBrush.geometry.attributes.position.count > 0) {
-                        const mesh = new THREE.Mesh(resultBrush.geometry, mat);
-                        mesh.name = `Inlay_${item.id}_${tileIdx}_${shapeIdx}`;
-                        mesh.castShadow = true;
-                        mesh.receiveShadow = true;
-
-                        inlayGroup.add(mesh);
-                    }
-                } catch (error) {
-                    geo.dispose();
-                }
-            }
         });
     });
     });
+
+    // Refine committed inlays asynchronously: the worker computes the clipped geometry
+    // (outline intersection + hole subtraction) and we swap it in by mesh name. The
+    // inline placeholders above already show the fast, unclipped inlays instantly, so
+    // drag-release never blocks on CSG.
+    const needsCSG = (filledCutoutShapes && filledCutoutShapes.length > 0) || (holeShapes && holeShapes.length > 0);
+    if (!needsCSG) return;
+
+    const maxExtend = Math.max(...itemsToRender.map(it => it.extend || 0), 0);
+    const cutterExtra = Math.max(Number(patternScaleZ || 0), maxExtend);
+
+    const jobItems: InlayJobItem[] = [];
+    itemsToRender.forEach((item, i) => {
+        // The preview item stays unclipped inline during drag (matches legacy behavior).
+        if (previewInlay && item.id === previewInlay.id) return;
+        const positions = calculateItemPositions(item).map(p => ({ x: p.position.x, y: p.position.y, rot: p.rotation }));
+        const shapes = (item.shapes || [])
+            .map((sp: any) => ({ shape: serializeShape(sp.shape || sp), color: sp.color || 'white' }))
+            .filter((s) => s.color !== 'transparent');
+        if (shapes.length === 0) return;
+        jobItems.push({
+            id: item.id, itemIndex: i,
+            scale: item.scale, rotation: item.rotation, mirror: !!item.mirror,
+            x: item.x || 0, y: item.y || 0,
+            depth: item.depth || 0.6, extend: Number(item.extend || 0),
+            positions, shapes,
+        });
+    });
+    if (jobItems.length === 0) return;
+
+    const inlayJob: InlayJob = {
+        jobId: 0,
+        thickness, cutterExtra,
+        filledCutoutShapes: serializeShapes(filledCutoutShapes),
+        holeShapes: serializeShapes(holeShapes),
+        items: jobItems,
+    };
+
+    const inlayCtx: InlayApplyContext = {
+        makeMaterial: (c, t, o, w) => createMaterial(c, t, o, w),
+        resolveColor: (c) => (c === 'base' ? color : c),
+        inlayOpacity: inlayOpacity ?? 1.0,
+        wireframeInlay: !!wireframeInlay,
+    };
+
+    const processedIds = jobItems.map(j => j.id);
+    let cancelled = false;
+    const handle = geometryWorkerClient.submitInlay(inlayJob, (res) => {
+        if (cancelled) return;
+        const ig = group.getObjectByName('InlayGroup') as THREE.Group | null;
+        if (ig) applyInlayResult(ig, res, inlayCtx, processedIds);
+    });
+    return () => { cancelled = true; handle.cancel(); };
 
     // NOTE: wireframeInlay is intentionally NOT a dependency — material-only toggle
     // handled by the lightweight material effect below (no geometry rebuild).
@@ -810,6 +772,15 @@ const ImperativeModel = React.forwardRef((props: ImperativeModelProps, ref: Reac
     // Signal start of processing
     onProcessingChange?.(true);
 
+    // While the new grip is being computed (any trigger — inlay UI edits, not just drag),
+    // flatten existing masked regions to the standard pattern colour so the old
+    // recolouring doesn't linger at the previous inlay position until the worker returns.
+    group.children.forEach(child => {
+        if (child.name.startsWith('Pattern_Masked_') && child instanceof THREE.Mesh) {
+            const mat = child.material as THREE.MeshStandardMaterial;
+            if (mat && mat.color) { mat.color.set(patternColor); mat.needsUpdate = true; }
+        }
+    });
 
     // Build a fully-serializable job from the current settings, then generate the
     // pattern geometry in a Web Worker so heavy CSG never blocks the main thread.
@@ -873,7 +844,7 @@ const ImperativeModel = React.forwardRef((props: ImperativeModelProps, ref: Reac
     // Generate in the worker (non-blocking). Latest-wins cancellation drops stale
     // results, and the effect cleanup ignores a result that arrives after unmount/re-run.
     let cancelled = false;
-    const handle = patternWorkerClient.submit(job, (res) => {
+    const handle = geometryWorkerClient.submitPattern(job, (res) => {
         if (cancelled) return;
         applyPatternResult(group, res, applyCtx);
         onProcessingChange?.(false);
@@ -911,11 +882,21 @@ const ImperativeModel = React.forwardRef((props: ImperativeModelProps, ref: Reac
          }
      }
 
-     // Masked pattern parts (Pattern_Masked_*) keep their own colour but follow the wireframe toggle.
+     // Masked pattern parts (Pattern_Masked_*): follow the wireframe toggle, and while an
+     // inlay is being dragged recolour them to the standard pattern colour so the grip
+     // reads as one uniform colour. We deliberately do NOT restore the real mask colour
+     // here on drag-end: the release always commits an inlay change that regenerates the
+     // pattern, and those fresh masked meshes carry the correct colours at the new
+     // position. Leaving the old meshes at the standard colour until that swap avoids a
+     // flash of the old recoloured regions at the previous inlay location.
      group.children.forEach(child => {
          if (child.name.startsWith('Pattern_Masked_') && child instanceof THREE.Mesh) {
              const mat = child.material as THREE.MeshStandardMaterial;
-             if (mat) { mat.wireframe = !!wireframePattern; mat.needsUpdate = true; }
+             if (mat) {
+                 mat.wireframe = !!wireframePattern;
+                 if (isDragging && mat.color) mat.color.set(patternColor);
+                 mat.needsUpdate = true;
+             }
          }
      });
 
@@ -983,7 +964,7 @@ const ImperativeModel = React.forwardRef((props: ImperativeModelProps, ref: Reac
          }
      });
 
-  }, [debugShowPatternCutter, debugShowHoleCutter, debugShowInlayCutter, patternOpacity, baseOpacity, inlayOpacity, patternColor, wireframePattern, wireframeBase, wireframeInlay]);
+  }, [debugShowPatternCutter, debugShowHoleCutter, debugShowInlayCutter, patternOpacity, baseOpacity, inlayOpacity, patternColor, wireframePattern, wireframeBase, wireframeInlay, isDragging]);
 
   return <group ref={localGroupRef} />;
 });

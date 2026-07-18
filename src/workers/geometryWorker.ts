@@ -5,21 +5,40 @@ import {
   PatternJob,
   PatternResult,
 } from '../utils/geometry/patternPipeline';
+import {
+  generateInlay,
+  inlayResultTransferables,
+  InlayJob,
+  InlayResult,
+} from '../utils/geometry/inlayPipeline';
+import { getManifold } from '../utils/geometry/manifoldModule';
 
 /**
- * Geometry worker. Receives a serialized PatternJob, runs the pure pipeline
- * (extrude + tile + three-bvh-csg booleans) off the main thread, and posts the
- * result back with its geometry buffers transferred (zero-copy).
+ * Geometry worker. Runs the Manifold pipelines (pattern + inlay) off the main thread
+ * and posts results back with geometry buffers transferred (zero-copy). The wasm
+ * module is loaded once (cached) and awaited before the first job.
  */
-self.onmessage = (e: MessageEvent<PatternJob>) => {
-  const job = e.data;
+type WorkerRequest =
+  | { kind: 'pattern'; job: PatternJob }
+  | { kind: 'inlay'; job: InlayJob };
+
+self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
+  const req = e.data;
   try {
-    const result = generatePattern(job);
-    (self as unknown as Worker).postMessage(result, patternResultTransferables(result));
+    const wasm = await getManifold();
+    if (req.kind === 'pattern') {
+      const result = generatePattern(req.job, wasm);
+      (self as unknown as Worker).postMessage({ kind: 'pattern', result }, patternResultTransferables(result));
+    } else {
+      const result = generateInlay(req.job, wasm);
+      (self as unknown as Worker).postMessage({ kind: 'inlay', result }, inlayResultTransferables(result));
+    }
   } catch (err) {
-    const fallback: PatternResult = { jobId: job.jobId, parts: [], empty: true };
-    (self as unknown as Worker).postMessage(fallback);
-    // Surface in the worker console for debugging.
-    console.error('[geometryWorker] generation failed:', err);
+    const empty =
+      req.kind === 'pattern'
+        ? ({ jobId: req.job.jobId, parts: [], empty: true } as PatternResult)
+        : ({ jobId: req.job.jobId, parts: [] } as InlayResult);
+    (self as unknown as Worker).postMessage({ kind: req.kind, result: empty });
+    console.error(`[geometryWorker] ${req.kind} generation failed:`, err);
   }
 };
