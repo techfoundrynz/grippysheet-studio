@@ -579,7 +579,7 @@ const ImperativeModel = React.forwardRef((props: ImperativeModelProps, ref: Reac
                 
                 if (shapeColor === 'transparent') return;
     
-                const totalDepth = (item.depth || 0.6) + Number(item.extend || 0) + ((i + 1) * 0.001);
+                const totalDepth = (item.depth || 0.4) + Number(item.extend || 0) + ((i + 1) * 0.001);
                 const mat = createMaterial(
                     shapeColor === 'base' ? color : shapeColor, 
                     (inlayOpacity || 1.0) < 1.0, 
@@ -615,7 +615,7 @@ const ImperativeModel = React.forwardRef((props: ImperativeModelProps, ref: Reac
             // LIFT slightly primarily to avoid Z-fighting
             // Add slight Z-offset based on shape index to prevent z-fighting between stacked inlay shapes
             const shapeZOffset = shapeIdx * 0.002;
-            geo.translate(0, 0, thickness - (item.depth || 0.6)  + shapeZOffset);
+            geo.translate(0, 0, thickness - (item.depth || 0.4)  + shapeZOffset);
             
             geo.applyMatrix4(new THREE.Matrix4().makeScale(item.scale, item.scale, 1));
             
@@ -669,7 +669,7 @@ const ImperativeModel = React.forwardRef((props: ImperativeModelProps, ref: Reac
             id: item.id, itemIndex: i,
             scale: item.scale, rotation: item.rotation, mirror: !!item.mirror,
             x: item.x || 0, y: item.y || 0,
-            depth: item.depth || 0.6, extend: Number(item.extend || 0),
+            depth: item.depth || 0.4, extend: Number(item.extend || 0),
             positions, shapes,
         });
     });

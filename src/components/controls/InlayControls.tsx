@@ -72,7 +72,7 @@ const InlayControls: React.FC<InlayControlsProps> = ({
     if (!items || items.length === 0) return;
     const newMax = Math.max(0.1, parseFloat((baseThickness - 0.1).toFixed(2)));
     const clamped = items.map(item => {
-      const d = item.depth ?? 0.6;
+      const d = item.depth ?? 0.4;
       return d > newMax ? { ...item, depth: newMax } : item;
     });
     const anyChanged = clamped.some((item, i) => item !== items[i]);
@@ -100,7 +100,7 @@ const InlayControls: React.FC<InlayControlsProps> = ({
       mirror: false,
       x: 0,
       y: 0,
-      depth: 0.6,
+      depth: 0.4,
       extend: 0,
       positionPreset: 'center',
     };
@@ -138,7 +138,7 @@ const InlayControls: React.FC<InlayControlsProps> = ({
         mirror: false,
         x: 0,
         y: 0,
-        depth: 0.6,
+        depth: 0.4,
         extend: 0,
         positionPreset: 'center',
       };
@@ -638,7 +638,7 @@ const InlayControls: React.FC<InlayControlsProps> = ({
               >
                 <DebouncedInput
                   type="number"
-                  value={selectedItem.depth || 0.6}
+                  value={selectedItem.depth || 0.4}
                   onChange={(val) => updateItem(selectedItem.id, { depth: Math.min(maxDepth, Math.max(0.1, Number(val))) })}
                   step="0.1"
                   min="0.1"

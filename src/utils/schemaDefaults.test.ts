@@ -20,7 +20,7 @@ describe('schemaDefaults utility', () => {
 
   it('defaultBaseSettings contains correct defaults', () => {
     expect(defaultBaseSettings.size).toBe(300);
-    expect(defaultBaseSettings.thickness).toBe(3);
+    expect(defaultBaseSettings.thickness).toBe(0.6);
     expect(defaultBaseSettings.cutoutShapes).toBeNull();
     expect(defaultBaseSettings.baseOutlineRotation).toBe(0);
     expect(defaultBaseSettings.baseOutlineMirror).toBe(false);
@@ -37,7 +37,7 @@ describe('schemaDefaults utility', () => {
       mirror: false,
       x: 0,
       y: 0,
-      depth: 0.6,
+      depth: 0.4,
       extend: 0,
       positionPreset: 'center',
     });

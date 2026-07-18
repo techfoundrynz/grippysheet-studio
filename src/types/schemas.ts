@@ -9,7 +9,7 @@ const ThreeObjectsSchema = z.custom<any[]>((val) => Array.isArray(val), "Must be
 
 export const BaseSettingsSchema = z.object({
     size: z.number().default(300),
-    thickness: z.number().default(3),
+    thickness: z.number().default(0.6),
     color: z.string().default(DEFAULT_BASE_COLOR),
     cutoutShapes: ThreeShapeSchema.nullable().optional().default(null),
     baseOutlineRotation: z.number().default(0),
@@ -57,7 +57,7 @@ export const InlaySettingsSchema = z.object({
         mirror: false,
         x: 0,
         y: 0,
-        depth: 0.6,
+        depth: 0.4,
         extend: 0,
         positionPreset: 'center',
     }]),
