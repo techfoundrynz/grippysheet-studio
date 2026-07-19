@@ -9,12 +9,16 @@ interface ShapeUploaderProps {
   label: string;
   shapes: any[] | null;
   fileName: string | null;
-  onUpload: (shapes: any[], fileName: string, type: 'dxf' | 'svg' | 'stl', fileContent?: string | ArrayBuffer) => void;
+  onUpload?: (shapes: any[], fileName: string, type: 'dxf' | 'svg' | 'stl', fileContent?: string | ArrayBuffer) => void;
   onClear: () => void;
   className?: string;
-  allowedTypes?: ('dxf' | 'svg' | 'stl')[];
+  allowedTypes?: ('dxf' | 'svg' | 'stl' | 'image')[];
   extractColors?: boolean;
   adornment?: React.ReactNode;
+  // When 'image' is in allowedTypes, raster images are accepted; the mode is inferred
+  // from the dropped file type and the picture is previewed instead of a vector path.
+  imageUrl?: string | null;
+  onImageUpload?: (dataUrl: string, fileName: string, width: number, height: number) => void;
 }
 
 const ShapeUploader: React.FC<ShapeUploaderProps> = (props) => {
@@ -68,6 +72,22 @@ const ShapeUploader: React.FC<ShapeUploaderProps> = (props) => {
 
 
   const processFile = (file: File) => {
+    // Infer image vs vector from the file itself.
+    const isImage = file.type.startsWith('image/') || /\.(png|jpe?g|gif|webp|bmp)$/i.test(file.name);
+    if (isImage && !/\.svg$/i.test(file.name)) {
+      if (!allowedTypes.includes('image')) { alert('Images are not allowed for this input.'); return; }
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const url = e.target?.result as string;
+        if (!url) return;
+        const img = new Image();
+        img.onload = () => props.onImageUpload?.(url, file.name, img.naturalWidth, img.naturalHeight);
+        img.src = url;
+      };
+      reader.readAsDataURL(file);
+      return;
+    }
+
     const isSvg = file.name.toLowerCase().endsWith('.svg');
     const isDxf = file.name.toLowerCase().endsWith('.dxf');
     const isStl = file.name.toLowerCase().endsWith('.stl');
@@ -87,7 +107,7 @@ const ShapeUploader: React.FC<ShapeUploaderProps> = (props) => {
 
     // Helper to emit
     const emit = (loadedShapes: any[], type: 'dxf'|'svg'|'stl', content?: string | ArrayBuffer) => {
-        onUpload(loadedShapes, file.name, type, content);
+        onUpload?.(loadedShapes, file.name, type, content);
     };
 
     if (isStl) {
@@ -148,11 +168,11 @@ const ShapeUploader: React.FC<ShapeUploaderProps> = (props) => {
   };
 
   const inputId = `file-upload-${label.replace(/\s+/g, '-').toLowerCase()}`;
-  const acceptString = allowedTypes.map(t => `.${t}`).join(',');
-  const typeLabel = allowedTypes.map(t => t.toUpperCase()).join('/');
-  
-  const hasContent = shapes && shapes.length > 0;
-  const displayLabel = fileName || "Custom Drawing";
+  const acceptString = allowedTypes.map(t => t === 'image' ? 'image/*' : `.${t}`).join(',');
+  const typeLabel = allowedTypes.map(t => t === 'image' ? 'IMG' : t.toUpperCase()).join('/');
+
+  const hasContent = !!props.imageUrl || !!(shapes && shapes.length > 0);
+  const displayLabel = fileName || (props.imageUrl ? "Image" : "Custom Drawing");
 
   return (
       <ControlField label={label} action={adornment} className={className}>
@@ -164,7 +184,13 @@ const ShapeUploader: React.FC<ShapeUploaderProps> = (props) => {
                 onDrop={handleDrop}
             >
                 <div className="flex flex-col items-center justify-center pt-2 pb-2 w-full h-full relative">
-                    {previewPath && (
+                    {props.imageUrl && (
+                        <div className="h-[65px] w-full flex items-center justify-center mb-2 pointer-events-none">
+                            <img src={props.imageUrl} alt="preview" className="h-full w-auto object-contain rounded" />
+                        </div>
+                    )}
+
+                    {!props.imageUrl && previewPath && (
                         <div className="h-[65px] w-full flex items-center justify-center mb-2 pointer-events-none">
                             <svg viewBox={svgViewBox} className="h-full w-auto text-green-500 stroke-current fill-none" style={{ strokeWidth: '1px' }}>
                                 <path d={previewPath} vectorEffect="non-scaling-stroke" transform="scale(1, -1)" />
@@ -172,7 +198,7 @@ const ShapeUploader: React.FC<ShapeUploaderProps> = (props) => {
                         </div>
                     )}
 
-                    {!previewPath && hasContent && (
+                    {!props.imageUrl && !previewPath && hasContent && (
                          <div className="h-[65px] w-full flex items-center justify-center mb-2 pointer-events-none text-green-500">
                              <Box size={64} strokeWidth={1} />
                          </div>

@@ -22,6 +22,7 @@
     "clipper-lib": "^6.4.2",
     "clsx": "^2.1.0",
     "dxf-parser": "^1.1.2",
+    "imagetracerjs": "^1.2.6",
     "jszip": "^3.10.1",
     "lodash": "^4.17.21",
     "lucide-react": "^0.344.0",

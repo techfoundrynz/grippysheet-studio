@@ -122,6 +122,8 @@ const SVGPaintModal: React.FC<SVGPaintModalProps> = ({ isOpen, onClose, shapes, 
     const [vbParams, setVbParams] = useState({ x: 0, y: 0, w: 500, h: 500 });
     const [activeTool, setActiveTool] = useState<ActiveTool>('paint');
     const [currentPath, setCurrentPath] = useState<THREE.Vector2[]>([]);
+    // Eraser: when on (or Alt held), a click removes every shape sharing the clicked colour.
+    const [eraseMatchColor, setEraseMatchColor] = useState(false);
 
     // Selection state
     const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set());
@@ -322,7 +324,14 @@ const SVGPaintModal: React.FC<SVGPaintModalProps> = ({ isOpen, onClose, shapes, 
                 commitShapes(next);
             }
         } else if (activeTool === 'eraser') {
-            const next = localShapes.filter((_, i) => !selectedIndices.has(i) && i !== index);
+            let next: typeof localShapes;
+            if (eraseMatchColor || e.altKey) {
+                // Remove every shape sharing the clicked shape's colour.
+                const target = (localShapes[index]?.color || '').toLowerCase();
+                next = localShapes.filter((s) => (s.color || '').toLowerCase() !== target);
+            } else {
+                next = localShapes.filter((_, i) => !selectedIndices.has(i) && i !== index);
+            }
             commitShapes(next);
             setSelectedIndices(new Set());
         }
@@ -989,6 +998,24 @@ const SVGPaintModal: React.FC<SVGPaintModalProps> = ({ isOpen, onClose, shapes, 
                                     </button>
                                 </div>
                             </div>
+
+                            {/* ── Eraser Options ── */}
+                            {activeTool === 'eraser' && (
+                                <div className="bg-gray-800/60 border border-gray-700 rounded-lg p-3">
+                                    <label className="flex items-center justify-between cursor-pointer select-none">
+                                        <span className="text-xs font-medium text-gray-300">Erase all of the same colour</span>
+                                        <input
+                                            type="checkbox"
+                                            checked={eraseMatchColor}
+                                            onChange={(e) => setEraseMatchColor(e.target.checked)}
+                                            className="accent-red-500 w-4 h-4 cursor-pointer"
+                                        />
+                                    </label>
+                                    <p className="text-[11px] text-gray-500 mt-1.5 leading-snug">
+                                        Click a shape to remove every shape sharing its colour — or hold <kbd className="px-1 py-0.5 bg-gray-700 rounded text-gray-300">Alt</kbd> while erasing.
+                                    </p>
+                                </div>
+                            )}
 
                             {/* ── Font Settings (text tool) ── */}
                             {activeTool === ('text' as any) && (

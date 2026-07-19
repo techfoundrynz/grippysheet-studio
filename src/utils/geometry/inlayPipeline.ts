@@ -99,7 +99,9 @@ export function generateInlay(job: InlayJob, wasm: ManifoldToplevel): InlayResul
 
           // Bake transforms in the same order as the legacy ExtrudeGeometry path:
           // translate-Z, scale XY, rotate Z, translate XY.
-          const zTrans = job.thickness - item.depth + shapeIdx * 0.002;
+          // Capped per-shape z-stagger (see ImperativeModel): breaks z-fighting between a few
+          // overlapping shapes without letting a many-shape inlay creep above the surface.
+          const zTrans = job.thickness - item.depth + Math.min(shapeIdx, 20) * 0.002;
           const totalRotDeg = item.rotation + (pos.rot * 180) / Math.PI;
           solid = ops.track(solid.translate(0, 0, zTrans));
           solid = ops.track(solid.scale([item.scale, item.scale, 1]));

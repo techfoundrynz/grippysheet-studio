@@ -23,7 +23,11 @@ import SVGPaintModal from "../SVGPaintModal";
 import { useAlert } from "../../context/AlertContext";
 import { centerShapes, calculateInlayScale, calculateInlayOffset } from "../../utils/patternUtils";
 import { parseShapeFile } from "../../utils/shapeLoader";
+import ImageConversionModal from "../ImageConversionModal";
 import { v4 as uuidv4 } from "uuid";
+
+/** Shapes used for scale/position math. */
+const offsetShapesFor = (item: InlayItem): any[] => item.shapes || [];
 
 interface InlayControlsProps {
   settings: InlaySettings;
@@ -55,6 +59,7 @@ const InlayControls: React.FC<InlayControlsProps> = ({
 
   const [showPaintModal, setShowPaintModal] = useState(false);
   const [showInlayLibrary, setShowInlayLibrary] = useState(false);
+  const [imageConvert, setImageConvert] = useState<{ url: string; name: string | null } | null>(null);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
@@ -326,25 +331,35 @@ const InlayControls: React.FC<InlayControlsProps> = ({
         }}
       />
 
+      <ImageConversionModal
+        isOpen={!!imageConvert}
+        imageUrl={imageConvert?.url || null}
+        fileName={imageConvert?.name || null}
+        onClose={() => setImageConvert(null)}
+        onConfirm={(shapes, name) => { handleShapeUpload(shapes, name); setImageConvert(null); }}
+      />
+
       {selectedItem && (
         <>
           <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
             Selected Layer Properties
           </div>
 
+          {/* One uploader for all types — images open the conversion dialog, which traces them
+              into a flat multi-colour shape inlay before committing (like an SVG upload). */}
           <ShapeUploader
             label={"Inlay Pattern"}
             shapes={selectedItem?.shapes || null}
             fileName={selectedItem?.name || null}
-            onUpload={(shapes, name, type, content) => handleShapeUpload(shapes, name, type, content)}
-            onClear={() => {
-                if (selectedInlayId) {
-                    updateItem(selectedInlayId, { shapes: [], valid: false });
-                    if (onInlayAssetChanged) onInlayAssetChanged(selectedInlayId, null);
-                }
-            }}
-            allowedTypes={["svg", "dxf"]}
+            allowedTypes={["svg", "dxf", "image"]}
             extractColors={true}
+            onUpload={(shapes, name, type, content) => handleShapeUpload(shapes, name, type, content)}
+            onImageUpload={(url, name) => setImageConvert({ url, name: name || null })}
+            onClear={() => {
+                if (!selectedInlayId) return;
+                updateItem(selectedInlayId, { shapes: [], valid: false });
+                if (onInlayAssetChanged) onInlayAssetChanged(selectedInlayId, null);
+            }}
             adornment={
               <div className="flex items-center gap-1">
                 <button
@@ -364,6 +379,7 @@ const InlayControls: React.FC<InlayControlsProps> = ({
               </div>
             }
           />
+
           <ControlField
             label="Scale"
             tooltip="Resize the inlay pattern"
@@ -463,11 +479,12 @@ const InlayControls: React.FC<InlayControlsProps> = ({
               <select
                 value={selectedItem.positionPreset || 'manual'}
                 onChange={(e) => {
-                  const preset = e.target.value as any; 
-                  
-                  if (preset !== 'manual' && selectedItem.shapes && selectedItem.shapes.length > 0) {
+                  const preset = e.target.value as any;
+                  const offsetShapes = offsetShapesFor(selectedItem);
+
+                  if (preset !== 'manual' && offsetShapes.length > 0) {
                     const offset = calculateInlayOffset(
-                      selectedItem.shapes,
+                      offsetShapes,
                       cutoutShapes || null,
                       baseSize,
                       {
@@ -477,7 +494,7 @@ const InlayControls: React.FC<InlayControlsProps> = ({
                         inlayPosition: preset,
                       }
                     );
-                    updateItem(selectedItem.id, { 
+                    updateItem(selectedItem.id, {
                       positionPreset: preset,
                       x: offset.x,
                       y: offset.y

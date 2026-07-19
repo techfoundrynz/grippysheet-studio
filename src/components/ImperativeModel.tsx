@@ -614,7 +614,10 @@ const ImperativeModel = React.forwardRef((props: ImperativeModelProps, ref: Reac
             // 1. Bake transforms (Scale/Rotate)
             // LIFT slightly primarily to avoid Z-fighting
             // Add slight Z-offset based on shape index to prevent z-fighting between stacked inlay shapes
-            const shapeZOffset = shapeIdx * 0.002;
+            // Tiny per-shape z-stagger to break z-fighting between overlapping shapes. Capped
+            // so a many-shape inlay (e.g. a traced image) can't accumulate a visible lift that
+            // pushes later shapes above the surface / grip.
+            const shapeZOffset = Math.min(shapeIdx, 20) * 0.002;
             geo.translate(0, 0, thickness - (item.depth || 0.4)  + shapeZOffset);
             
             geo.applyMatrix4(new THREE.Matrix4().makeScale(item.scale, item.scale, 1));
