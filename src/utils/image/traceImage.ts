@@ -177,8 +177,12 @@ function buildPath<T extends THREE.Path>(
  * Trace a downsampled RGBA image into per-band vector shapes (used on dialog confirm).
  */
 export function traceImage(img: RGBAImage, colors: number, opts: TraceOpts = {}): TraceResult {
-  const widthMM = opts.widthMM ?? 50;
-  const { layers, palette, width: W, height: H } = traceLayers(img, colors, opts);
+  return shapesFromLayers(traceLayers(img, colors, opts), opts.widthMM);
+}
+
+/** Shared pixel-to-mm conversion for traced colour and exact dither geometry. */
+export function shapesFromLayers(data: TraceLayers, widthMM = 50): TraceResult {
+  const { layers, palette, width: W, height: H } = data;
 
   // Pixel → local mm (centred, Y flipped so image-down maps to world-up).
   const physW = widthMM;

@@ -130,6 +130,9 @@ const InlayControls: React.FC<InlayControlsProps> = ({
       updateItem(selectedInlayId, { shapes, scale, name: name || "Custom Pattern" });
       if (onInlayAssetChanged && name && content && type) {
           onInlayAssetChanged(selectedInlayId, { name, content, type });
+      } else if (onInlayAssetChanged) {
+          // Generated/painted replacement shapes must not retain a previous SVG asset.
+          onInlayAssetChanged(selectedInlayId, null);
       }
     } else {
       // Fallback: Create new
@@ -336,7 +339,10 @@ const InlayControls: React.FC<InlayControlsProps> = ({
         imageUrl={imageConvert?.url || null}
         fileName={imageConvert?.name || null}
         onClose={() => setImageConvert(null)}
-        onConfirm={(shapes, name) => { handleShapeUpload(shapes, name); setImageConvert(null); }}
+        onConfirm={(shapes, name, svg) => {
+          handleShapeUpload(shapes, svg ? `${name.replace(/\.[^.]+$/, '')}-dither.svg` : name, svg ? 'svg' : undefined, svg);
+          setImageConvert(null);
+        }}
       />
 
       {selectedItem && (

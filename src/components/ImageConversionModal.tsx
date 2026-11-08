@@ -1,20 +1,20 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { X, Check, Loader2 } from 'lucide-react';
 import { loadDownsampledImage } from '../utils/imageUtils';
-import { traceImage, traceLayers, TraceLayers, RGBAImage } from '../utils/image/traceImage';
+import { traceImage, traceLayers, shapesFromLayers, TraceLayers, RGBAImage } from '../utils/image/traceImage';
+import { ditherLayers, ditherSVG, DITHER_METHODS, MAX_DITHER_DETAIL, type DitherMethod } from '../utils/image/ditherImage';
+import { centerShapes } from '../utils/patternUtils';
 
 /**
- * Converts an uploaded image into a flat, multi-colour shape inlay. The user picks a colour
- * count, hue shift and quality (detail vs. simplification) and previews the *vectorized* result
- * live on a 2D canvas; on confirm the full-resolution image is traced into per-band
- * THREE.Shapes (with colour) and committed like an SVG upload.
+ * Converts an image to a colour or monochrome dither inlay with a live geometry preview.
+ * Colour mode traces the full image; dither mode commits the exact preview pixel grid.
  */
 interface ImageConversionModalProps {
   isOpen: boolean;
   imageUrl: string | null;
   fileName?: string | null;
   onClose: () => void;
-  onConfirm: (shapes: { shape: any; color: string }[], name: string) => void;
+  onConfirm: (shapes: { shape: any; color: string }[], name: string, svg?: string) => void;
 }
 
 const PREVIEW_DISPLAY = 460; // max on-screen canvas edge
@@ -54,23 +54,43 @@ const ImageConversionModal: React.FC<ImageConversionModalProps> = ({ isOpen, ima
   const [colors, setColors] = useState(4);
   const [hueShift, setHueShift] = useState(0);
   const [quality, setQuality] = useState(6);
+  const [mode, setMode] = useState<'colour' | 'dither'>('colour');
+  const [detail, setDetail] = useState(64);
+  const [ditherMethod, setDitherMethod] = useState<DitherMethod>('floyd-steinberg');
+  const [ditherColor, setDitherColor] = useState('#000000');
+  const [error, setError] = useState<string | null>(null);
   const [previewImg, setPreviewImg] = useState<RGBAImage | null>(null);
   const [loading, setLoading] = useState(false);
   const [computing, setComputing] = useState(false);
   const [tracing, setTracing] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const ditherCache = useRef<{ image: RGBAImage; detail: number; method: DitherMethod; layers: TraceLayers } | null>(null);
+
+  const getDither = useCallback(() => {
+    if (!previewImg) throw new Error('Image is not loaded');
+    let cached = ditherCache.current;
+    if (!cached || cached.image !== previewImg || cached.detail !== detail || cached.method !== ditherMethod) {
+      cached = { image: previewImg, detail, method: ditherMethod, layers: ditherLayers(previewImg, detail, ditherMethod) };
+      ditherCache.current = cached;
+    }
+    // Changing ink colour reuses the pixel geometry, including for the final commit.
+    return { ...cached.layers, palette: [ditherColor] };
+  }, [previewImg, detail, ditherMethod, ditherColor]);
 
   // Load a small preview image when the modal opens (kept for live tracing).
   useEffect(() => {
+    ditherCache.current = null;
     if (!isOpen || !imageUrl) { setPreviewImg(null); return; }
     let cancelled = false;
+    setPreviewImg(null);
+    setError(null);
     setLoading(true);
-    loadDownsampledImage(imageUrl, PREVIEW_TRACE)
+    loadDownsampledImage(imageUrl, mode === 'dither' ? MAX_DITHER_DETAIL : PREVIEW_TRACE)
       .then((r) => { if (!cancelled) setPreviewImg(r); })
-      .catch((e) => console.error('[ImageConversion] load failed:', e))
+      .catch(() => { if (!cancelled) setError('Could not load this image. Please try another file.'); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [isOpen, imageUrl]);
+  }, [isOpen, imageUrl, mode]);
 
   // Re-trace the live preview (debounced) as the sliders change.
   useEffect(() => {
@@ -79,7 +99,7 @@ const ImageConversionModal: React.FC<ImageConversionModalProps> = ({ isOpen, ima
     setComputing(true);
     const handle = setTimeout(() => {
       try {
-        renderLayers(canvas, traceLayers(previewImg, colors, { hueShift, quality }));
+        renderLayers(canvas, mode === 'dither' ? getDither() : traceLayers(previewImg, colors, { hueShift, quality }));
       } catch (e) {
         console.error('[ImageConversion] preview trace failed:', e);
       } finally {
@@ -87,21 +107,29 @@ const ImageConversionModal: React.FC<ImageConversionModalProps> = ({ isOpen, ima
       }
     }, 180);
     return () => clearTimeout(handle);
-  }, [previewImg, colors, hueShift, quality]);
+  }, [previewImg, colors, hueShift, quality, mode, getDither, loading]);
 
   const handleConfirm = useCallback(() => {
-    if (!imageUrl) return;
+    if (!imageUrl || !previewImg) return;
     setTracing(true);
-    // Trace the full-resolution image (not the small preview) for the committed shapes.
-    loadDownsampledImage(imageUrl, COMMIT_TRACE)
+    setError(null);
+    // Dithering uses the same input and grid as the preview, so dots never change on commit.
+    (mode === 'dither' ? Promise.resolve(previewImg) : loadDownsampledImage(imageUrl, COMMIT_TRACE))
       .then((full) => {
-        const { shapes } = traceImage(full, colors, { hueShift, quality, widthMM: 50 });
-        onConfirm(shapes.map((s) => ({ shape: s.shape, color: s.color })), fileName || 'Image Inlay');
+        const dither = mode === 'dither' ? getDither() : null;
+        const { shapes } = dither ? shapesFromLayers(dither) : traceImage(full, colors, { hueShift, quality, widthMM: 50 });
+        if (!shapes.length) throw new Error('No visible shapes');
+        if (dither) {
+          // SVG imports centre their visible bounds; match that placement for bundle reloads.
+          const centered = centerShapes(shapes.map(s => s.shape), false);
+          shapes.forEach((s, i) => { s.shape = centered[i]; });
+        }
+        onConfirm(shapes.map((s) => ({ shape: s.shape, color: s.color })), fileName || 'Image Inlay', dither ? ditherSVG(dither) : undefined);
         onClose();
       })
-      .catch((e) => console.error('[ImageConversion] trace failed:', e))
+      .catch(() => setError(mode === 'dither' ? 'No filled pixels could be added. Try another method or an image with darker areas.' : 'Could not convert this image. Check that it contains visible pixels and try again.'))
       .finally(() => setTracing(false));
-  }, [imageUrl, colors, hueShift, quality, fileName, onConfirm, onClose]);
+  }, [imageUrl, previewImg, colors, hueShift, quality, mode, getDither, fileName, onConfirm, onClose]);
 
   if (!isOpen) return null;
 
@@ -110,7 +138,7 @@ const ImageConversionModal: React.FC<ImageConversionModalProps> = ({ isOpen, ima
       <div className="bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-gray-700">
-          <h2 className="text-white font-semibold">Convert Image to Colour Inlay</h2>
+          <h2 className="text-white font-semibold">Convert Image to Inlay</h2>
           <button onClick={onClose} className="p-1.5 hover:bg-gray-700 rounded-lg text-gray-400 hover:text-white transition-colors">
             <X size={18} />
           </button>
@@ -121,7 +149,7 @@ const ImageConversionModal: React.FC<ImageConversionModalProps> = ({ isOpen, ima
           {loading ? (
             <div className="flex items-center gap-2 text-gray-400"><Loader2 className="animate-spin" size={18} /> Loading…</div>
           ) : (
-            <canvas ref={canvasRef} className="rounded-lg shadow-lg max-w-full h-auto" />
+            <canvas ref={canvasRef} className="rounded-lg shadow-lg max-w-full h-auto" style={mode === 'dither' ? { backgroundColor: '#d1d5db', backgroundImage: 'conic-gradient(#9ca3af 25%, transparent 0 50%, #9ca3af 0 75%, transparent 0)', backgroundSize: '16px 16px' } : undefined} />
           )}
           {computing && !loading && (
             <div className="absolute top-3 right-3 text-gray-400"><Loader2 className="animate-spin" size={16} /></div>
@@ -130,6 +158,36 @@ const ImageConversionModal: React.FC<ImageConversionModalProps> = ({ isOpen, ima
 
         {/* Controls */}
         <div className="px-5 py-4 border-t border-gray-700 space-y-4">
+          <label className="block text-sm text-gray-300">
+            Conversion
+            <select aria-label="Image conversion mode" value={mode} onChange={(e) => setMode(e.target.value as 'colour' | 'dither')} className="mt-1 block w-full rounded-lg border border-gray-700 bg-gray-800 p-2 text-white" disabled={tracing}>
+              <option value="colour">Colour inlay</option>
+              <option value="dither">Monochrome dither</option>
+            </select>
+          </label>
+          {mode === 'dither' ? (
+            <div className="space-y-3">
+              <label className="block text-sm text-gray-300">
+                Dithering method
+                <select aria-label="Dithering method" value={ditherMethod} onChange={(e) => setDitherMethod(e.target.value as DitherMethod)} disabled={tracing} className="mt-1 block w-full rounded-lg border border-gray-700 bg-gray-800 p-2 text-white">
+                  {DITHER_METHODS.map(method => <option key={method.value} value={method.value}>{method.label}</option>)}
+                </select>
+                <span className="block mt-1 text-xs text-gray-400">{DITHER_METHODS.find(method => method.value === ditherMethod)?.description}</span>
+              </label>
+              <label className="flex items-center justify-between text-sm text-gray-300">
+                Fill colour
+                <input aria-label="Dither fill colour" type="color" value={ditherColor} onChange={(e) => setDitherColor(e.target.value)} disabled={tracing} className="h-8 w-12 cursor-pointer rounded border border-gray-600 bg-gray-800" />
+              </label>
+              <div>
+              <label htmlFor="dither-detail" className="flex justify-between text-sm text-gray-300 mb-1">
+                <span>Pixel detail</span><span>{detail} pixels on longest edge</span>
+              </label>
+              <input id="dither-detail" type="range" min={16} max={MAX_DITHER_DETAIL} step={8} value={detail} onChange={(e) => setDetail(Number(e.target.value))} disabled={tracing} className="w-full accent-purple-500" />
+              </div>
+              <p className="text-xs text-gray-400">Dark pixels use the fill colour; light pixels and the background are transparent (shown as checks). Resolution is limited to the source image size.</p>
+              <p className="text-xs text-gray-400">Higher detail creates smaller dots and more geometry, which can take longer to generate and export. Check dot size after scaling for your printer.</p>
+            </div>
+          ) : (<>
           <div>
             <div className="flex justify-between text-sm text-gray-300 mb-1">
               <span>Colours</span><span className="text-gray-400">{colors}</span>
@@ -160,6 +218,8 @@ const ImageConversionModal: React.FC<ImageConversionModalProps> = ({ isOpen, ima
               className="w-full accent-purple-500 bg-gray-700 rounded-lg appearance-none h-2 cursor-pointer"
             />
           </div>
+          </>)}
+          {error && <p role="alert" className="text-sm text-red-400">{error}</p>}
         </div>
 
         {/* Footer */}
@@ -169,7 +229,7 @@ const ImageConversionModal: React.FC<ImageConversionModalProps> = ({ isOpen, ima
           </button>
           <button
             onClick={handleConfirm}
-            disabled={!previewImg || tracing}
+            disabled={loading || !previewImg || tracing}
             className="flex items-center gap-2 px-5 py-1.5 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-purple-900/20"
           >
             {tracing ? <Loader2 className="animate-spin" size={16} /> : <Check size={16} />}
